@@ -47,8 +47,8 @@ temp/
 uploads/
 public/uploads/
 
-# MongoDB
-data/
+# MongoDB data (root level only)
+/data/
 
 # Misc
 *.pid
