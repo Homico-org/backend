@@ -165,11 +165,7 @@ export class VerificationService {
     // Check if user exists
     const user = await this.userModel.findOne({ email: normalizedEmail });
     if (!user) {
-      // For security, don't reveal if email exists
-      return {
-        message: 'If an account exists with this email, you will receive a verification code',
-        expiresIn: 300,
-      };
+      throw new NotFoundException('No account found with this email address');
     }
 
     // Check rate limiting - max 3 password reset OTPs per email in 10 minutes

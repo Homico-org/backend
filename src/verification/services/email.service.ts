@@ -86,6 +86,8 @@ export class EmailService {
       return true;
     }
 
+    this.logger.log(`Attempting to send password reset email to ${email} from ${fromEmail}`);
+
     try {
       const msg = {
         to: email,
@@ -131,8 +133,8 @@ export class EmailService {
       await sgMail.send(msg);
       this.logger.log(`Password reset email sent successfully to ${email}`);
       return true;
-    } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${email}:`, error);
+    } catch (error: any) {
+      this.logger.error(`Failed to send password reset email to ${email}:`, error?.response?.body || error?.message || error);
       return false;
     }
   }
