@@ -12,7 +12,14 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      'http://localhost:3000',
+      'https://homico-frontend.onrender.com',
+      'https://app.homico.ge',
+      'https://homico.ge',
+      'https://www.homico.ge',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean),
     credentials: true,
   });
 
