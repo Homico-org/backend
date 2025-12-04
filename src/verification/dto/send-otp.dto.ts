@@ -46,3 +46,40 @@ export class VerifyOtpDto {
   @IsEnum(OtpType)
   type: OtpType;
 }
+
+export enum OtpPurpose {
+  VERIFICATION = 'verification',
+  PASSWORD_RESET = 'password_reset',
+}
+
+export class ForgotPasswordDto {
+  @ApiProperty({
+    description: 'Email address to send password reset OTP',
+    example: 'user@example.com',
+  })
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({
+    description: 'Email address that received the OTP',
+    example: 'user@example.com',
+  })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({
+    description: 'OTP code received',
+    example: '123456',
+  })
+  @IsString()
+  code: string;
+
+  @ApiProperty({
+    description: 'New password',
+    example: 'newSecurePassword123',
+  })
+  @IsString()
+  newPassword: string;
+}

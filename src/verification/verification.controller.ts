@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Request, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { VerificationService } from './verification.service';
-import { SendOtpDto, VerifyOtpDto, OtpType } from './dto/send-otp.dto';
+import { SendOtpDto, VerifyOtpDto, OtpType, ForgotPasswordDto, ResetPasswordDto } from './dto/send-otp.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 
@@ -69,5 +69,29 @@ export class VerificationController {
       message: `${body.type === OtpType.EMAIL ? 'Email' : 'Phone'} verified successfully`,
       verified: true,
     };
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset OTP sent if email exists' })
+  @ApiResponse({ status: 400, description: 'Rate limited or invalid request' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.verificationService.sendPasswordResetOtp(forgotPasswordDto);
+  }
+
+  @Post('verify-reset-code')
+  @ApiOperation({ summary: 'Verify password reset OTP code' })
+  @ApiResponse({ status: 200, description: 'OTP verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+  async verifyResetCode(@Body() body: { email: string; code: string }) {
+    return this.verificationService.verifyPasswordResetOtp(body.email, body.code);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password with verified OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.verificationService.resetPassword(resetPasswordDto);
   }
 }

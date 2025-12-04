@@ -46,7 +46,10 @@ export class SmsService {
       this.logger.log(`OTP SMS sent successfully to ${phoneNumber}, Status: ${verification.status}`);
       return true;
     } catch (error: any) {
-      this.logger.error(`Failed to send OTP SMS to ${phoneNumber}:`, error?.message || error);
+      this.logger.error(`Failed to send OTP SMS to ${phoneNumber}: ${error?.message || error}`);
+      if (error?.code) {
+        this.logger.error(`Twilio error code: ${error.code}, status: ${error.status}, moreInfo: ${error.moreInfo}`);
+      }
       return false;
     }
   }

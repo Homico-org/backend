@@ -6,6 +6,11 @@ export enum OtpType {
   PHONE = 'phone',
 }
 
+export enum OtpPurpose {
+  VERIFICATION = 'verification',
+  PASSWORD_RESET = 'password_reset',
+}
+
 @Schema({ timestamps: true })
 export class Otp extends Document {
   @Prop({ required: true })
@@ -20,6 +25,13 @@ export class Otp extends Document {
     required: true,
   })
   type: OtpType;
+
+  @Prop({
+    type: String,
+    enum: Object.values(OtpPurpose),
+    default: OtpPurpose.VERIFICATION,
+  })
+  purpose: OtpPurpose;
 
   @Prop({ required: true })
   expiresAt: Date;
