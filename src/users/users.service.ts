@@ -78,6 +78,12 @@ export class UsersService {
     }));
   }
 
+  async checkExists(field: 'email' | 'phone' | 'idNumber', value: string): Promise<{ exists: boolean }> {
+    const query = { [field]: field === 'email' ? value.toLowerCase() : value };
+    const user = await this.userModel.findOne(query).select('_id').exec();
+    return { exists: !!user };
+  }
+
   async upgradeToPro(userId: string, selectedCategories: string[]): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 

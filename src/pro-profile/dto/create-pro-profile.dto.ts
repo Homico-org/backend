@@ -42,6 +42,15 @@ export class CreateProProfileDto {
   @IsOptional()
   categories?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Selected subcategories/specializations',
+    example: ['interior', 'exterior', '3d-visualization'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  subcategories?: string[];
+
   @IsNumber()
   @Min(0)
   @IsOptional()

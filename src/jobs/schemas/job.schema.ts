@@ -54,9 +54,12 @@ export class Job extends Document {
   @Prop({
     type: String,
     enum: Object.values(JobPropertyType),
-    default: JobPropertyType.APARTMENT
+    required: true
   })
   propertyType: JobPropertyType;
+
+  @Prop({ type: String })
+  propertyTypeOther: string; // Custom property type when propertyType is 'other'
 
   // ====== ARCHITECTURE-SPECIFIC FIELDS ======
   @Prop({ type: String })

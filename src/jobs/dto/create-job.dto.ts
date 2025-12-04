@@ -45,15 +45,20 @@ export class CreateJobDto {
   @IsOptional()
   skills?: string[];
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsString()
-  @IsNotEmpty()
-  location: string;
-
-  @ApiPropertyOptional({ enum: JobPropertyType })
-  @IsEnum(JobPropertyType)
   @IsOptional()
-  propertyType?: JobPropertyType;
+  location?: string;
+
+  @ApiProperty({ enum: JobPropertyType })
+  @IsEnum(JobPropertyType)
+  @IsNotEmpty()
+  propertyType: JobPropertyType;
+
+  @ApiPropertyOptional({ description: 'Custom property type when propertyType is "other"' })
+  @IsString()
+  @IsOptional()
+  propertyTypeOther?: string;
 
   // Area/Size specifications
   @ApiProperty({ required: false })

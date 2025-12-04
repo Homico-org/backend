@@ -1,13 +1,19 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Otp, OtpType } from './schemas/otp.schema';
 import { SendOtpDto, VerifyOtpDto } from './dto/send-otp.dto';
+import { EmailService } from './services/email.service';
+import { SmsService } from './services/sms.service';
 
 @Injectable()
 export class VerificationService {
+  private readonly logger = new Logger(VerificationService.name);
+
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<Otp>,
+    private emailService: EmailService,
+    private smsService: SmsService,
   ) {}
 
   private generateOtp(): string {
@@ -28,6 +34,29 @@ export class VerificationService {
       throw new BadRequestException('Too many OTP requests. Please try again later.');
     }
 
+    // For phone verification with Twilio Verify, let Twilio handle the OTP
+    if (type === OtpType.PHONE) {
+      const sent = await this.smsService.sendOtp(identifier, '');
+      if (!sent) {
+        throw new BadRequestException('Failed to send verification code. Please try again.');
+      }
+
+      // Still track the request for rate limiting
+      const otp = new this.otpModel({
+        identifier,
+        code: 'TWILIO_VERIFY', // Placeholder - actual code is managed by Twilio
+        type,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes for Twilio
+      });
+      await otp.save();
+
+      return {
+        message: 'Verification code sent to your phone',
+        expiresIn: 600, // 10 minutes for Twilio Verify
+      };
+    }
+
+    // For email, use our own OTP generation
     // Invalidate any existing unused OTPs for this identifier
     await this.otpModel.updateMany(
       { identifier, type, isUsed: false },
@@ -46,22 +75,13 @@ export class VerificationService {
 
     await otp.save();
 
-    // In production, integrate with SMS/Email service
-    // For now, we'll log the OTP (development only)
-    if (type === OtpType.EMAIL) {
-      console.log(`[DEV] Email OTP for ${identifier}: ${code}`);
-      // TODO: Integrate with email service (SendGrid, AWS SES, etc.)
-      // await this.emailService.sendOtp(identifier, code);
-    } else if (type === OtpType.PHONE) {
-      console.log(`[DEV] SMS OTP for ${identifier}: ${code}`);
-      // TODO: Integrate with SMS service (Twilio, etc.)
-      // await this.smsService.sendOtp(identifier, code);
+    const sent = await this.emailService.sendOtp(identifier, code);
+    if (!sent) {
+      this.logger.warn(`Failed to send email OTP to ${identifier}, but OTP was created`);
     }
 
     return {
-      message: type === OtpType.EMAIL
-        ? 'Verification code sent to your email'
-        : 'Verification code sent to your phone',
+      message: 'Verification code sent to your email',
       expiresIn: 300, // 5 minutes in seconds
     };
   }
@@ -69,6 +89,36 @@ export class VerificationService {
   async verifyOtp(verifyOtpDto: VerifyOtpDto): Promise<{ verified: boolean }> {
     const { identifier, code, type } = verifyOtpDto;
 
+    // For phone verification, use Twilio Verify
+    if (type === OtpType.PHONE) {
+      const verified = await this.smsService.verifyOtp(identifier, code);
+      if (verified) {
+        // Mark our tracking record as used
+        await this.otpModel.updateMany(
+          { identifier, type, isUsed: false },
+          { isUsed: true },
+        );
+        return { verified: true };
+      }
+
+      // If Twilio is not configured, fall back to our stored OTP
+      const otp = await this.otpModel.findOne({
+        identifier,
+        type,
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
+        code: { $ne: 'TWILIO_VERIFY' }, // Only check non-Twilio records
+      }).sort({ createdAt: -1 });
+
+      if (otp && otp.code === code) {
+        await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+        return { verified: true };
+      }
+
+      throw new BadRequestException('Invalid verification code');
+    }
+
+    // For email, use our stored OTP
     const otp = await this.otpModel.findOne({
       identifier,
       type,

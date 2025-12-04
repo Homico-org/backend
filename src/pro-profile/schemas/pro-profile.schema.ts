@@ -39,6 +39,9 @@ export class ProProfile extends Document {
   @Prop({ type: [String], default: [] })
   categories: string[];
 
+  @Prop({ type: [String], default: [] })
+  subcategories: string[];
+
   @Prop({ default: 0 })
   yearsExperience: number;
 
@@ -143,6 +146,7 @@ export const ProProfileSchema = SchemaFactory.createForClass(ProProfile);
 
 ProProfileSchema.index({ userId: 1 });
 ProProfileSchema.index({ categories: 1 });
+ProProfileSchema.index({ subcategories: 1 });
 ProProfileSchema.index({ serviceAreas: 1 });
 ProProfileSchema.index({ avgRating: -1 });
 ProProfileSchema.index({ isAvailable: 1 });

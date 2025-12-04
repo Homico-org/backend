@@ -1,13 +1,17 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { UsersService } from '../users/users.service';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
@@ -30,5 +34,20 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Demo accounts retrieved' })
   async getDemoAccounts() {
     return this.authService.getDemoAccounts();
+  }
+
+  @Get('check-exists')
+  @ApiOperation({ summary: 'Check if email, phone, or ID number already exists' })
+  @ApiQuery({ name: 'field', enum: ['email', 'phone', 'idNumber'], description: 'Field to check' })
+  @ApiQuery({ name: 'value', description: 'Value to check' })
+  @ApiResponse({ status: 200, description: 'Returns whether the value exists' })
+  async checkExists(
+    @Query('field') field: 'email' | 'phone' | 'idNumber',
+    @Query('value') value: string,
+  ) {
+    if (!field || !value) {
+      return { exists: false };
+    }
+    return this.usersService.checkExists(field, value);
   }
 }

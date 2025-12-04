@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -15,7 +16,10 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
@@ -73,17 +77,28 @@ export class UsersController {
     @Body() body: { selectedCategories: string[] },
   ) {
     const updatedUser = await this.usersService.upgradeToPro(user.userId, body.selectedCategories);
-    return {
-      id: updatedUser._id,
-      name: updatedUser.name,
+
+    // Generate new JWT token with updated role
+    const payload = {
+      sub: updatedUser._id,
       email: updatedUser.email,
       role: updatedUser.role,
-      phone: updatedUser.phone,
-      city: updatedUser.city,
-      avatar: updatedUser.avatar,
-      accountType: updatedUser.accountType,
-      companyName: updatedUser.companyName,
-      selectedCategories: updatedUser.selectedCategories,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        phone: updatedUser.phone,
+        city: updatedUser.city,
+        avatar: updatedUser.avatar,
+        accountType: updatedUser.accountType,
+        companyName: updatedUser.companyName,
+        selectedCategories: updatedUser.selectedCategories,
+      },
       message: 'Account upgraded to professional successfully',
     };
   }

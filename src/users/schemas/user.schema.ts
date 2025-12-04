@@ -50,6 +50,9 @@ export class User extends Document {
   @Prop()
   companyName: string;
 
+  @Prop({ required: true, unique: true })
+  idNumber: string;
+
   @Prop({ default: true })
   isActive: boolean;
 
@@ -58,6 +61,9 @@ export class User extends Document {
 
   @Prop({ type: [String], default: [] })
   selectedCategories: string[];
+
+  @Prop({ type: [String], default: [] })
+  selectedSubcategories: string[];
 
   // Verification fields
   @Prop({ default: false })

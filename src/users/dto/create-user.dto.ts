@@ -17,6 +17,11 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
+  @ApiProperty({ example: '01234567890', description: 'Personal ID number (11 digits)' })
+  @IsString()
+  @IsNotEmpty()
+  idNumber: string;
+
   @ApiPropertyOptional({ enum: UserRole, example: UserRole.CLIENT, description: 'User role' })
   @IsEnum(UserRole)
   @IsOptional()
@@ -39,11 +44,19 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     description: 'Selected categories for professionals (what services they offer)',
-    example: ['Plumbing', 'Electrician'],
+    example: ['interior-design', 'architecture'],
     type: [String]
   })
   @IsOptional()
   selectedCategories?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Selected subcategories/specializations for professionals',
+    example: ['interior', 'exterior', '3d-visualization'],
+    type: [String]
+  })
+  @IsOptional()
+  selectedSubcategories?: string[];
 
   @ApiPropertyOptional({
     enum: AccountType,

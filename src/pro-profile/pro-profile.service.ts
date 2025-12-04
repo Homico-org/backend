@@ -132,13 +132,8 @@ export class ProProfileService {
     }
 
     if (filters?.subcategory) {
-      // Subcategory search - can be in categories array or as a tag
-      matchConditions.push({
-        $or: [
-          { categories: filters.subcategory },
-          { tags: filters.subcategory },
-        ],
-      });
+      // Subcategory search - search in subcategories array
+      matchConditions.push({ subcategories: filters.subcategory });
     }
 
     if (filters?.serviceArea) {
