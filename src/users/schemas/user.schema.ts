@@ -18,7 +18,7 @@ export class User extends Document {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true, unique: true, lowercase: true })
+  @Prop({ unique: true, sparse: true, lowercase: true })
   email: string;
 
   @Prop({ required: true })
@@ -81,5 +81,6 @@ export class User extends Document {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-UserSchema.index({ email: 1 });
+UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });
+UserSchema.index({ phone: 1 }, { unique: true, sparse: true });

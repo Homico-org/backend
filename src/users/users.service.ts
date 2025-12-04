@@ -12,10 +12,20 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const existingUser = await this.userModel.findOne({ email: createUserDto.email });
+    // Only check email uniqueness if email is provided
+    if (createUserDto.email) {
+      const existingUserByEmail = await this.userModel.findOne({ email: createUserDto.email });
+      if (existingUserByEmail) {
+        throw new ConflictException('User with this email already exists');
+      }
+    }
 
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+    // Check phone uniqueness (phone is now required)
+    if (createUserDto.phone) {
+      const existingUserByPhone = await this.userModel.findOne({ phone: createUserDto.phone });
+      if (existingUserByPhone) {
+        throw new ConflictException('User with this phone number already exists');
+      }
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
@@ -30,6 +40,16 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User | null> {
     return this.userModel.findOne({ email }).exec();
+  }
+
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.userModel.findOne({ phone }).exec();
+  }
+
+  async findByEmailOrPhone(identifier: string): Promise<User | null> {
+    return this.userModel.findOne({
+      $or: [{ email: identifier }, { phone: identifier }]
+    }).exec();
   }
 
   async findById(id: string): Promise<User> {
@@ -79,7 +99,27 @@ export class UsersService {
   }
 
   async checkExists(field: 'email' | 'phone' | 'idNumber', value: string): Promise<{ exists: boolean }> {
-    const query = { [field]: field === 'email' ? value.toLowerCase() : value };
+    let normalizedValue = value;
+    if (field === 'email') {
+      normalizedValue = value.toLowerCase();
+    } else if (field === 'phone') {
+      // Normalize phone: remove all spaces and dashes
+      normalizedValue = value.replace(/[\s\-]/g, '');
+    }
+
+    // For phone, search with normalized value (no spaces)
+    if (field === 'phone') {
+      // Find any user whose phone, when normalized, matches the input
+      const users = await this.userModel.find({}).select('phone').exec();
+      const exists = users.some(u => {
+        if (!u.phone) return false;
+        const storedNormalized = u.phone.replace(/[\s\-]/g, '');
+        return storedNormalized === normalizedValue;
+      });
+      return { exists };
+    }
+
+    const query = { [field]: normalizedValue };
     const user = await this.userModel.findOne(query).select('_id').exec();
     return { exists: !!user };
   }

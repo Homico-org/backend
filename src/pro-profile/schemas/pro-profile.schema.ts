@@ -7,6 +7,12 @@ export enum PricingModel {
   FROM = 'from',
 }
 
+export enum ProStatus {
+  ACTIVE = 'active',
+  BUSY = 'busy',
+  AWAY = 'away',
+}
+
 // Company subdocument schema
 export class Company {
   @Prop()
@@ -75,6 +81,19 @@ export class ProProfile extends Document {
 
   @Prop({ default: true })
   isAvailable: boolean;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ProStatus),
+    default: ProStatus.ACTIVE,
+  })
+  status: ProStatus;
+
+  @Prop()
+  statusUpdatedAt: Date;
+
+  @Prop({ default: false })
+  statusAutoSuggested: boolean;
 
   @Prop()
   coverImage: string;
@@ -152,3 +171,4 @@ ProProfileSchema.index({ avgRating: -1 });
 ProProfileSchema.index({ isAvailable: 1 });
 ProProfileSchema.index({ companyId: 1 });
 ProProfileSchema.index({ companyName: 1 });
+ProProfileSchema.index({ status: 1, avgRating: -1 }); // For sorting active pros first

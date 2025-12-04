@@ -35,7 +35,8 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    // Find user by email or phone
+    const user = await this.usersService.findByEmailOrPhone(loginDto.identifier);
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -64,6 +65,7 @@ export class AuthService {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
         selectedCategories: user.selectedCategories || [],
         accountType: user.accountType || 'individual',

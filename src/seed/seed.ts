@@ -87,6 +87,10 @@ async function seed() {
 
   const hashedPassword = await bcrypt.hash('demo123', 10);
 
+  // Helper to generate unique 11-digit ID numbers
+  let idCounter = 10000000001;
+  const generateIdNumber = () => String(idCounter++);
+
   // Demo client and admin users
   const demoUsers = [
     {
@@ -98,6 +102,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Demo Admin',
@@ -108,6 +113,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
   ];
 
@@ -122,6 +128,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcabd36?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Maka Lortkipanidze',
@@ -132,6 +139,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Vakhtang Mdivani',
@@ -142,6 +150,7 @@ async function seed() {
       city: 'Kutaisi',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Natia Beridze',
@@ -152,6 +161,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Giorgi Kvachadze',
@@ -162,6 +172,7 @@ async function seed() {
       city: 'Rustavi',
       avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Salome Kakabadze',
@@ -172,6 +183,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Tornike Basilashvili',
@@ -182,6 +194,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Eka Tabatadze',
@@ -192,6 +205,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
   ];
 
@@ -206,6 +220,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Nino Kvaratskhelia',
@@ -216,6 +231,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Davit Lomidze',
@@ -226,6 +242,7 @@ async function seed() {
       city: 'Kutaisi',
       avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Mariam Tsiklauri',
@@ -236,6 +253,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Luka Javakhishvili',
@@ -246,6 +264,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Ana Khachaturyan',
@@ -256,6 +275,7 @@ async function seed() {
       city: 'Rustavi',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Nikoloz Gelashvili',
@@ -266,6 +286,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Tamari Kiknadze',
@@ -276,6 +297,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Irakli Mghebrishvili',
@@ -286,6 +308,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Elene Nozadze',
@@ -296,6 +319,7 @@ async function seed() {
       city: 'Kutaisi',
       avatar: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Zura Papashvili',
@@ -306,6 +330,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1463453091185-61582044d556?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Ketevan Shengelia',
@@ -316,6 +341,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Giga Tevzadze',
@@ -326,6 +352,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Sophio Datunashvili',
@@ -336,6 +363,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Levan Mchedlishvili',
@@ -346,6 +374,7 @@ async function seed() {
       city: 'Rustavi',
       avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Nana Chikvaidze',
@@ -356,6 +385,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
   ];
 
@@ -1447,6 +1477,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Nino Gorgadze',
@@ -1457,6 +1488,7 @@ async function seed() {
       city: 'Batumi',
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
     {
       name: 'Davit Kapanadze',
@@ -1467,6 +1499,7 @@ async function seed() {
       city: 'Tbilisi',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
       isActive: true,
+      idNumber: generateIdNumber(),
     },
   ];
 
