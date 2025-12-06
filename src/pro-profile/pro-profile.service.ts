@@ -1,16 +1,14 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ProProfile } from './schemas/pro-profile.schema';
+import { LOCATIONS_DATA } from './data/locations.data';
 import { CreateProProfileDto } from './dto/create-pro-profile.dto';
 import { UpdateProProfileDto } from './dto/update-pro-profile.dto';
-import { LOCATIONS_DATA } from './data/locations.data';
+import { ProProfile } from './schemas/pro-profile.schema';
 
 @Injectable()
 export class ProProfileService {
   // Professional categories with specific requirements
-  // Interior Designer: requires Pinterest portfolio references
-  // Architect: requires cadastral ID verification from Public Service Hall
   private readonly categories = [
     'Interior Design',
     'Architecture',

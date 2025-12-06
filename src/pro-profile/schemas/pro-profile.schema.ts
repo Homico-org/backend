@@ -76,6 +76,9 @@ export class ProProfile extends Document {
   @Prop({ default: 0 })
   completedJobs: number;
 
+  @Prop({ default: 0 })
+  externalCompletedJobs: number;
+
   @Prop()
   responseTime: string;
 

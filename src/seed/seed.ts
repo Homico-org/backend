@@ -427,6 +427,7 @@ async function seed() {
         avgRating: 4.9,
         totalReviews: 127,
         completedJobs: 342,
+        externalCompletedJobs: 580,
         responseTime: '< 1 hour',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=1200&h=400&fit=crop',
@@ -434,6 +435,11 @@ async function seed() {
         languages: ['Georgian', 'English', 'Russian'],
         tagline: 'Safe and professional electrical solutions',
         companies: [{ name: 'ElectroTech Georgia', logo: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop', role: 'Founder' }],
+        portfolioProjects: [
+          { title: 'Smart Home Installation', description: 'Complete smart home system', location: 'Tbilisi', images: ['https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800', 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800', 'https://images.unsplash.com/photo-1558002038-1055907df827?w=800'], videos: [] },
+          { title: 'Office Electrical Upgrade', description: 'Full office rewiring', location: 'Saburtalo', images: ['https://images.unsplash.com/photo-1621905252472-943afaa20e20?w=800', 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800'], videos: [] },
+          { title: 'Panel Installation', description: 'New electrical panel', location: 'Vake', images: ['https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800'], videos: [] },
+        ],
       },
     },
     {
@@ -452,6 +458,7 @@ async function seed() {
         avgRating: 5.0,
         totalReviews: 89,
         completedJobs: 156,
+        externalCompletedJobs: 230,
         responseTime: '< 2 hours',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&h=400&fit=crop',
@@ -459,6 +466,11 @@ async function seed() {
         languages: ['Georgian', 'English', 'Turkish'],
         tagline: 'Transforming spaces, creating dreams',
         companies: [{ name: 'Nino Design Studio', logo: 'https://images.unsplash.com/photo-1572044162444-ad60f128bdea?w=100&h=100&fit=crop', role: 'Creative Director' }],
+        portfolioProjects: [
+          { title: 'Modern Apartment Design', description: 'Minimalist apartment in Batumi', location: 'Batumi', images: ['https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800', 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800', 'https://images.unsplash.com/photo-1615529328331-f8917597711f?w=800'], videos: [] },
+          { title: 'Boutique Hotel Lobby', description: 'Luxury hotel redesign', location: 'Batumi', images: ['https://images.unsplash.com/photo-1615529328331-f8917597711f?w=800', 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800'], videos: [] },
+          { title: 'Living Room Makeover', description: 'Contemporary living space', location: 'Kobuleti', images: ['https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800', 'https://images.unsplash.com/photo-1600210492493-0946911123ea?w=800'], videos: [] },
+        ],
       },
     },
     {
@@ -477,6 +489,7 @@ async function seed() {
         avgRating: 4.7,
         totalReviews: 203,
         completedJobs: 578,
+        externalCompletedJobs: 920,
         responseTime: '< 30 min',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=1200&h=400&fit=crop',
@@ -484,6 +497,10 @@ async function seed() {
         languages: ['Georgian', 'Russian'],
         tagline: '24/7 emergency plumbing service',
         companies: [{ name: 'Aqua Solutions', logo: '', role: 'Owner' }],
+        portfolioProjects: [
+          { title: 'Bathroom Renovation', description: 'Complete bathroom plumbing overhaul', location: 'Kutaisi', images: ['https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800', 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800'], videos: [] },
+          { title: 'Kitchen Sink Install', description: 'New sink and dishwasher connection', location: 'Tbilisi', images: ['https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800'], videos: [] },
+        ],
       },
     },
     {
@@ -502,6 +519,7 @@ async function seed() {
         avgRating: 4.8,
         totalReviews: 156,
         completedJobs: 234,
+        externalCompletedJobs: 450,
         responseTime: '< 3 hours',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=1200&h=400&fit=crop',
@@ -509,6 +527,11 @@ async function seed() {
         languages: ['Georgian', 'English', 'Russian'],
         tagline: 'Your complete renovation partner',
         companies: [{ name: 'ProBuild Georgia', logo: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=100&h=100&fit=crop', role: 'Project Manager' }],
+        portfolioProjects: [
+          { title: 'Full Apartment Renovation', description: '85sqm apartment makeover', location: 'Saburtalo', images: ['https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800', 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800'], videos: [] },
+          { title: 'Bedroom Renovation', description: 'Master bedroom redesign', location: 'Rustavi', images: ['https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=800', 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=800'], videos: [] },
+          { title: 'Wall Painting Project', description: '3-room interior painting', location: 'Mtskheta', images: ['https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=800'], videos: [] },
+        ],
       },
     },
     {
@@ -577,6 +600,7 @@ async function seed() {
         avgRating: 4.5,
         totalReviews: 112,
         completedJobs: 287,
+        externalCompletedJobs: 520,
         responseTime: '< 1 hour',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1632759145351-1d592919f522?w=1200&h=400&fit=crop',
@@ -584,6 +608,11 @@ async function seed() {
         languages: ['Georgian', 'Russian'],
         tagline: 'Protecting your home from above',
         companies: [{ name: 'Top Roof Georgia', logo: '', role: 'Founder' }],
+        portfolioProjects: [
+          { title: 'Roof Replacement', description: 'Full tile roof replacement', location: 'Tbilisi', images: ['https://images.unsplash.com/photo-1632759145351-1d592919f522?w=800', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800'], videos: [] },
+          { title: 'Metal Roof Install', description: 'Modern metal roofing', location: 'Mtskheta', images: ['https://images.unsplash.com/photo-1558036117-15d82a90b9b1?w=800', 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=800'], videos: [] },
+          { title: 'Leak Repair', description: 'Emergency roof repair', location: 'Rustavi', images: ['https://images.unsplash.com/photo-1632759145351-1d592919f522?w=800'], videos: [] },
+        ],
       },
     },
     {
@@ -802,6 +831,7 @@ async function seed() {
         avgRating: 4.4,
         totalReviews: 89,
         completedJobs: 234,
+        externalCompletedJobs: 380,
         responseTime: '< 1 hour',
         isAvailable: true,
         coverImage: 'https://images.unsplash.com/photo-1600518464441-9154a4dea21b?w=1200&h=400&fit=crop',
@@ -809,6 +839,10 @@ async function seed() {
         languages: ['Georgian', 'Russian'],
         tagline: 'Moving made simple',
         companies: [{ name: 'Easy Move', logo: '', role: 'Operations Manager' }],
+        portfolioProjects: [
+          { title: 'Office Relocation', description: 'Full office move with 50 workstations', location: 'Tbilisi', images: ['https://images.unsplash.com/photo-1600518464441-9154a4dea21b?w=800', 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800'], videos: [] },
+          { title: 'Long Distance Move', description: 'Tbilisi to Batumi family relocation', location: 'Batumi', images: ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800'], videos: [] },
+        ],
       },
     },
   ];
