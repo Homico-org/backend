@@ -35,6 +35,12 @@ export class User extends Document {
   phone: string;
 
   @Prop()
+  whatsapp: string;
+
+  @Prop()
+  telegram: string;
+
+  @Prop()
   city: string;
 
   @Prop()

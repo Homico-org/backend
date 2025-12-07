@@ -55,6 +55,54 @@ export class UploadController {
     return this.uploadService.getFileInfo(file);
   }
 
+  @Post('public')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload a single file (public - for registration)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  uploadFilePublic(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.uploadService.getFileInfo(file);
+  }
+
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload avatar image (public - for registration)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  uploadAvatar(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    // Validate it's an image
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('File must be an image');
+    }
+    return this.uploadService.getFileInfo(file);
+  }
+
   @Post('multiple')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')

@@ -12,6 +12,16 @@ export class UpdateProfileDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ description: 'WhatsApp number' })
+  @IsOptional()
+  @IsString()
+  whatsapp?: string;
+
+  @ApiPropertyOptional({ description: 'Telegram username (without @)' })
+  @IsOptional()
+  @IsString()
+  telegram?: string;
+
   @ApiPropertyOptional({ description: 'City' })
   @IsOptional()
   @IsString()

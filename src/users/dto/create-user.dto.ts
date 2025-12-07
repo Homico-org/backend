@@ -34,6 +34,16 @@ export class CreateUserDto {
   @IsOptional()
   phone?: string;
 
+  @ApiPropertyOptional({ example: '+1234567890', description: 'WhatsApp number' })
+  @IsString()
+  @IsOptional()
+  whatsapp?: string;
+
+  @ApiPropertyOptional({ example: 'username', description: 'Telegram username (without @)' })
+  @IsString()
+  @IsOptional()
+  telegram?: string;
+
   @ApiPropertyOptional({ example: 'New York', description: 'City' })
   @IsString()
   @IsOptional()
