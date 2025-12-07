@@ -15,8 +15,9 @@ export class JobsService {
 
   // Jobs CRUD
   async createJob(clientId: string, createJobDto: CreateJobDto): Promise<Job> {
+    const { Types } = require('mongoose');
     const job = new this.jobModel({
-      clientId,
+      clientId: new Types.ObjectId(clientId),
       ...createJobDto,
     });
     return job.save();

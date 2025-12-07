@@ -48,7 +48,7 @@ export class Job extends Document {
   @Prop({ type: [String], default: [] })
   skills: string[];
 
-  @Prop({ required: true })
+  @Prop({ type: String })
   location: string;
 
   @Prop({

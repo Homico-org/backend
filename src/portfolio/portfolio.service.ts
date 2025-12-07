@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { PortfolioItem } from './schemas/portfolio-item.schema';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
 
@@ -12,7 +12,7 @@ export class PortfolioService {
 
   async create(proId: string, createPortfolioItemDto: CreatePortfolioItemDto): Promise<PortfolioItem> {
     const item = new this.portfolioItemModel({
-      proId,
+      proId: new Types.ObjectId(proId),
       ...createPortfolioItemDto,
     });
     return item.save();
@@ -20,7 +20,7 @@ export class PortfolioService {
 
   async findByProId(proId: string): Promise<PortfolioItem[]> {
     return this.portfolioItemModel
-      .find({ proId })
+      .find({ proId: new Types.ObjectId(proId) })
       .sort({ displayOrder: 1, createdAt: -1 })
       .exec();
   }
