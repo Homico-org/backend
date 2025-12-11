@@ -1,0 +1,28 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    steps:
+      - name: Trigger Render Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_PROD }}"
+          echo "Triggered production backend deployment"
+
+  deploy-development:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    name: Deploy to Development
+    steps:
+      - name: Trigger Render Deploy
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_DEV }}"
+          echo "Triggered development backend deployment"
