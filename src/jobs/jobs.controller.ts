@@ -31,7 +31,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Job created successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   createJob(@CurrentUser() user: any, @Body() createJobDto: CreateJobDto) {
     return this.jobsService.createJob(user.userId, createJobDto);
   }
