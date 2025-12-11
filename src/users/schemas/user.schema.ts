@@ -15,6 +15,9 @@ export enum AccountType {
 
 @Schema({ timestamps: true })
 export class User extends Document {
+  @Prop({ unique: true, index: true })
+  uid: number;
+
   @Prop({ required: true })
   name: string;
 

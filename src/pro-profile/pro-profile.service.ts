@@ -1,10 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { LOCATIONS_DATA } from './data/locations.data';
 import { CreateProProfileDto } from './dto/create-pro-profile.dto';
 import { UpdateProProfileDto } from './dto/update-pro-profile.dto';
 import { ProProfile } from './schemas/pro-profile.schema';
+import { User } from '../users/schemas/user.schema';
 
 @Injectable()
 export class ProProfileService {
@@ -16,6 +17,7 @@ export class ProProfileService {
 
   constructor(
     @InjectModel(ProProfile.name) private proProfileModel: Model<ProProfile>,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   getCategories(): string[] {
@@ -248,10 +250,28 @@ export class ProProfileService {
   }
 
   async findOne(id: string): Promise<ProProfile> {
-    const profile = await this.proProfileModel
-      .findById(id)
-      .populate('userId', 'name email avatar phone city')
-      .exec();
+    // Check if id is a numeric UID (6-digit number starting with 1)
+    const numericId = parseInt(id, 10);
+    const isNumericUid = !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
+
+    let profile: ProProfile | null = null;
+
+    if (isNumericUid) {
+      // Find user by UID first
+      const user = await this.userModel.findOne({ uid: numericId }).exec();
+      if (user) {
+        profile = await this.proProfileModel
+          .findOne({ userId: user._id })
+          .populate('userId', 'name email avatar phone city uid')
+          .exec();
+      }
+    } else if (Types.ObjectId.isValid(id)) {
+      // Find by MongoDB ObjectId
+      profile = await this.proProfileModel
+        .findById(id)
+        .populate('userId', 'name email avatar phone city uid')
+        .exec();
+    }
 
     if (!profile) {
       throw new NotFoundException('Pro profile not found');

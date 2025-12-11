@@ -30,6 +30,7 @@ export class UsersController {
     const userData = await this.usersService.findById(user.userId);
     return {
       id: userData._id,
+      uid: userData.uid,
       name: userData.name,
       email: userData.email,
       role: userData.role,
@@ -54,6 +55,7 @@ export class UsersController {
     const updatedUser = await this.usersService.update(user.userId, updateProfileDto);
     return {
       id: updatedUser._id,
+      uid: updatedUser.uid,
       name: updatedUser.name,
       email: updatedUser.email,
       role: updatedUser.role,
@@ -89,6 +91,7 @@ export class UsersController {
       access_token: this.jwtService.sign(payload),
       user: {
         id: updatedUser._id,
+        uid: updatedUser.uid,
         name: updatedUser.name,
         email: updatedUser.email,
         role: updatedUser.role,
@@ -100,6 +103,17 @@ export class UsersController {
         selectedCategories: updatedUser.selectedCategories,
       },
       message: 'Account upgraded to professional successfully',
+    };
+  }
+
+  @Post('migrate-uids')
+  @ApiOperation({ summary: 'Assign UIDs to existing users without one (admin only)' })
+  @ApiResponse({ status: 200, description: 'UIDs assigned successfully' })
+  async migrateUids() {
+    const result = await this.usersService.assignUidsToExistingUsers();
+    return {
+      message: `Successfully assigned UIDs to ${result.updated} users`,
+      ...result,
     };
   }
 }

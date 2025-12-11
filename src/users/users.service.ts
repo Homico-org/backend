@@ -28,14 +28,24 @@ export class UsersService {
       }
     }
 
+    // Generate unique UID (auto-incrementing number starting from 100001)
+    const uid = await this.generateNextUid();
+
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     const user = new this.userModel({
       ...createUserDto,
+      uid,
       password: hashedPassword,
     });
 
     return user.save();
+  }
+
+  private async generateNextUid(): Promise<number> {
+    const lastUser = await this.userModel.findOne({ uid: { $exists: true } }).sort({ uid: -1 }).exec();
+    const startingUid = 100001;
+    return lastUser?.uid ? lastUser.uid + 1 : startingUid;
   }
 
   async findByEmail(email: string): Promise<User | null> {
@@ -149,5 +159,28 @@ export class UsersService {
     ).exec();
 
     return updatedUser;
+  }
+
+  async findByUid(uid: number): Promise<User | null> {
+    return this.userModel.findOne({ uid }).exec();
+  }
+
+  async assignUidsToExistingUsers(): Promise<{ updated: number }> {
+    const usersWithoutUid = await this.userModel.find({ uid: { $exists: false } }).sort({ createdAt: 1 }).exec();
+
+    if (usersWithoutUid.length === 0) {
+      return { updated: 0 };
+    }
+
+    let nextUid = await this.generateNextUid();
+    let updated = 0;
+
+    for (const user of usersWithoutUid) {
+      await this.userModel.findByIdAndUpdate(user._id, { uid: nextUid });
+      nextUid++;
+      updated++;
+    }
+
+    return { updated };
   }
 }
