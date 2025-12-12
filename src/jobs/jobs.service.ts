@@ -209,9 +209,19 @@ export class JobsService {
   }
 
   async findMyJobs(clientId: string): Promise<Job[]> {
+    const { Types } = require('mongoose');
     return this.jobModel
-      .find({ clientId })
+      .find({ clientId: new Types.ObjectId(clientId) })
       .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async findUserPublicJobs(userId: string): Promise<Job[]> {
+    return this.jobModel
+      .find({ clientId: userId, status: 'open' })
+      .populate('clientId', 'name avatar city accountType companyName')
+      .sort({ createdAt: -1 })
+      .limit(10)
       .exec();
   }
 
@@ -222,7 +232,12 @@ export class JobsService {
       throw new NotFoundException('Job not found');
     }
 
-    if (job.clientId.toString() !== clientId) {
+    const jobClientId = job.clientId.toString();
+    const requestClientId = clientId.toString();
+
+    console.log('Update job - Job clientId:', jobClientId, 'Request clientId:', requestClientId);
+
+    if (jobClientId !== requestClientId) {
       throw new ForbiddenException('You can only update your own jobs');
     }
 
@@ -236,7 +251,12 @@ export class JobsService {
       throw new NotFoundException('Job not found');
     }
 
-    if (job.clientId.toString() !== clientId) {
+    const jobClientId = job.clientId.toString();
+    const requestClientId = clientId.toString();
+
+    console.log('Delete job - Job clientId:', jobClientId, 'Request clientId:', requestClientId);
+
+    if (jobClientId !== requestClientId) {
       throw new ForbiddenException('You can only delete your own jobs');
     }
 

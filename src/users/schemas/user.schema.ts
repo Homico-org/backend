@@ -83,6 +83,36 @@ export class User extends Document {
 
   @Prop()
   phoneVerifiedAt: Date;
+
+  // Notification preferences
+  @Prop({
+    type: Object,
+    default: {
+      email: { enabled: true, newJobs: true, proposals: true, messages: true, marketing: false },
+      push: { enabled: true, newJobs: true, proposals: true, messages: true },
+      sms: { enabled: false, proposals: true, messages: true },
+    }
+  })
+  notificationPreferences: {
+    email: {
+      enabled: boolean;
+      newJobs: boolean;
+      proposals: boolean;
+      messages: boolean;
+      marketing: boolean;
+    };
+    push: {
+      enabled: boolean;
+      newJobs: boolean;
+      proposals: boolean;
+      messages: boolean;
+    };
+    sms: {
+      enabled: boolean;
+      proposals: boolean;
+      messages: boolean;
+    };
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

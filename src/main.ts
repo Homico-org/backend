@@ -14,6 +14,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:3000',
+      'http://localhost:3002',
       'https://homico-frontend.onrender.com',
       'https://app.homico.ge',
       'https://homico.ge',
