@@ -216,4 +216,72 @@ export class JobsController {
   acceptProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
+
+  @Post('proposals/:proposalId/reject')
+  @ApiOperation({ summary: 'Reject a proposal' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal rejected successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  rejectProposal(
+    @Param('proposalId') proposalId: string, 
+    @CurrentUser() user: any,
+    @Body('reason') reason?: string,
+  ) {
+    return this.jobsService.rejectProposal(proposalId, user.userId, reason);
+  }
+
+  @Post('proposals/:proposalId/withdraw')
+  @ApiOperation({ summary: 'Withdraw a proposal (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal withdrawn successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  withdrawProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.withdrawProposal(proposalId, user.userId);
+  }
+
+  @Post('proposals/:proposalId/start-chat')
+  @ApiOperation({ summary: 'Start a chat with a professional from their proposal' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Chat started successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  startProposalChat(
+    @Param('proposalId') proposalId: string,
+    @CurrentUser() user: any,
+    @Body('message') message: string,
+  ) {
+    return this.jobsService.startProposalChat(proposalId, user.userId, message);
+  }
+
+  @Get('my-proposals/detailed')
+  @ApiOperation({ summary: 'Get my proposals with full job details (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of proposals with job details' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  findMyProposalsDetailed(@CurrentUser() user: any) {
+    return this.jobsService.findMyProposalsWithDetails(user.userId);
+  }
+
+  @Get('my-active-jobs/pro')
+  @ApiOperation({ summary: 'Get active jobs for a pro (accepted proposals)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of active jobs' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  findProActiveJobs(@CurrentUser() user: any) {
+    return this.jobsService.findProActiveJobs(user.userId);
+  }
+
+  @Post(':jobId/complete')
+  @ApiOperation({ summary: 'Mark a job as completed' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job marked as completed' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  completeJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.completeJob(jobId, user.userId, user.role);
+  }
 }

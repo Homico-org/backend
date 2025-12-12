@@ -1,16 +1,20 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Job, JobStatus, JobPropertyType } from './schemas/job.schema';
-import { Proposal, ProposalStatus } from './schemas/proposal.schema';
+import { Model, Types } from 'mongoose';
+import { Conversation } from '../conversation/schemas/conversation.schema';
+import { Message } from '../message/schemas/message.schema';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
+import { Job, JobPropertyType, JobStatus } from './schemas/job.schema';
+import { Proposal, ProposalStatus } from './schemas/proposal.schema';
 
 @Injectable()
 export class JobsService {
   constructor(
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
+    @InjectModel(Conversation.name) private conversationModel: Model<Conversation>,
+    @InjectModel(Message.name) private messageModel: Model<Message>,
   ) {}
 
   // Jobs CRUD
@@ -305,8 +309,14 @@ export class JobsService {
 
     return this.proposalModel
       .find({ jobId })
-      .populate('proId', 'name email avatar')
-      .populate('proProfileId')
+      .populate('proId', 'name email avatar phone')
+      .populate({
+        path: 'proProfileId',
+        populate: {
+          path: 'userId',
+          select: 'name email avatar phone',
+        },
+      })
       .sort({ createdAt: -1 })
       .exec();
   }
@@ -367,13 +377,232 @@ export class JobsService {
     }
 
     proposal.status = ProposalStatus.ACCEPTED;
+    proposal.acceptedAt = new Date();
+    proposal.contactRevealed = true;
     await proposal.save();
 
     // Update job status
     await this.jobModel.findByIdAndUpdate(job._id, {
       status: JobStatus.IN_PROGRESS,
+      acceptedProId: proposal.proId,
+      acceptedProposalId: proposal._id,
     });
 
+    // Reject all other pending proposals for this job
+    await this.proposalModel.updateMany(
+      { 
+        jobId: job._id, 
+        _id: { $ne: proposal._id },
+        status: { $in: [ProposalStatus.PENDING, ProposalStatus.IN_DISCUSSION] }
+      },
+      { 
+        status: ProposalStatus.REJECTED,
+        rejectionNote: 'Another proposal was accepted'
+      }
+    );
+
     return proposal;
+  }
+
+  // Start a chat with a professional from their proposal
+  async startProposalChat(
+    proposalId: string, 
+    clientId: string, 
+    initialMessage: string
+  ): Promise<{ proposal: Proposal; conversation: any; message: any }> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate('jobId')
+      .populate({
+        path: 'proProfileId',
+        populate: { path: 'userId', select: 'name email avatar' }
+      })
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('You can only chat with proposals for your own jobs');
+    }
+
+    // Check if conversation already exists
+    let conversation = proposal.conversationId 
+      ? await this.conversationModel.findById(proposal.conversationId)
+      : null;
+
+    if (!conversation) {
+      // Create new conversation linked to this proposal/job
+      conversation = new this.conversationModel({
+        clientId: new Types.ObjectId(clientId),
+        proId: proposal.proProfileId,
+        jobId: job._id,
+        proposalId: proposal._id,
+      });
+      await conversation.save();
+
+      // Update proposal with conversation reference
+      proposal.conversationId = conversation._id as Types.ObjectId;
+      proposal.clientRespondedAt = new Date();
+      if (proposal.status === ProposalStatus.PENDING) {
+        proposal.status = ProposalStatus.IN_DISCUSSION;
+      }
+      await proposal.save();
+    }
+
+    // Create the message
+    const message = new this.messageModel({
+      conversationId: conversation._id,
+      senderId: clientId,
+      content: initialMessage,
+      isRead: false,
+    });
+    await message.save();
+
+    // Update conversation
+    await this.conversationModel.findByIdAndUpdate(conversation._id, {
+      lastMessageAt: new Date(),
+      lastMessagePreview: initialMessage.substring(0, 100),
+      lastMessageBy: clientId,
+      $inc: { unreadCountPro: 1 },
+    });
+
+    return { proposal, conversation, message };
+  }
+
+  // Reject a proposal
+  async rejectProposal(proposalId: string, clientId: string, reason?: string): Promise<Proposal> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate('jobId')
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('You can only reject proposals for your own jobs');
+    }
+
+    proposal.status = ProposalStatus.REJECTED;
+    proposal.rejectionNote = reason || '';
+    await proposal.save();
+
+    return proposal;
+  }
+
+  // Withdraw a proposal (for pros)
+  async withdrawProposal(proposalId: string, proId: string): Promise<Proposal> {
+    const proposal = await this.proposalModel.findById(proposalId);
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    if (proposal.proId.toString() !== proId) {
+      throw new ForbiddenException('You can only withdraw your own proposals');
+    }
+
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      throw new ForbiddenException('Cannot withdraw an accepted proposal');
+    }
+
+    proposal.status = ProposalStatus.WITHDRAWN;
+    await proposal.save();
+
+    // Decrement proposal count on job
+    await this.jobModel.findByIdAndUpdate(proposal.jobId, { $inc: { proposalCount: -1 } });
+
+    return proposal;
+  }
+
+  // Get proposals for a pro with full job details
+  async findMyProposalsWithDetails(proId: string): Promise<any[]> {
+    const proposals = await this.proposalModel
+      .find({ proId })
+      .populate({
+        path: 'jobId',
+        populate: {
+          path: 'clientId',
+          select: 'name email avatar city phone accountType companyName',
+        },
+      })
+      .populate('conversationId')
+      .sort({ createdAt: -1 })
+      .exec();
+
+    // Get unread message counts for each conversation
+    const proposalsWithStats = await Promise.all(
+      proposals.map(async (proposal) => {
+        const proposalObj = proposal.toObject() as any;
+        
+        if (proposal.conversationId) {
+          const unreadCount = await this.messageModel.countDocuments({
+            conversationId: proposal.conversationId,
+            senderId: { $ne: proId },
+            isRead: false,
+          });
+          proposalObj.unreadMessageCount = unreadCount;
+        }
+
+        return proposalObj;
+      })
+    );
+
+    return proposalsWithStats;
+  }
+
+  // Get active jobs for a pro (accepted proposals)
+  async findProActiveJobs(proId: string): Promise<any[]> {
+    const proposals = await this.proposalModel
+      .find({ 
+        proId, 
+        status: { $in: [ProposalStatus.ACCEPTED, ProposalStatus.COMPLETED] } 
+      })
+      .populate({
+        path: 'jobId',
+        populate: {
+          path: 'clientId',
+          select: 'name email avatar city phone accountType companyName',
+        },
+      })
+      .populate('conversationId')
+      .sort({ acceptedAt: -1 })
+      .exec();
+
+    return proposals;
+  }
+
+  // Mark job as completed
+  async completeJob(jobId: string, userId: string, role: 'client' | 'pro'): Promise<Job> {
+    const job = await this.jobModel.findById(jobId);
+    
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // Check if user is either the client or the accepted pro
+    const isClient = job.clientId.toString() === userId;
+    const isAcceptedPro = job.acceptedProId?.toString() === userId;
+
+    if (!isClient && !isAcceptedPro) {
+      throw new ForbiddenException('Only the client or accepted professional can mark this job as complete');
+    }
+
+    job.status = JobStatus.COMPLETED;
+    await job.save();
+
+    // Update the accepted proposal status
+    if (job.acceptedProposalId) {
+      await this.proposalModel.findByIdAndUpdate(job.acceptedProposalId, {
+        status: ProposalStatus.COMPLETED,
+      });
+    }
+
+    return job;
   }
 }

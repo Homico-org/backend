@@ -3,9 +3,11 @@ import { Document, Types } from 'mongoose';
 
 export enum ProposalStatus {
   PENDING = 'pending',
+  IN_DISCUSSION = 'in_discussion', // Client started a chat
   ACCEPTED = 'accepted',
   REJECTED = 'rejected',
   WITHDRAWN = 'withdrawn',
+  COMPLETED = 'completed',
 }
 
 @Schema({ timestamps: true })
@@ -43,6 +45,27 @@ export class Proposal extends Document {
 
   @Prop({ type: Date })
   revealedAt: Date;
+
+  // Link to conversation when client starts chatting
+  @Prop({ type: Types.ObjectId, ref: 'Conversation' })
+  conversationId: Types.ObjectId;
+
+  // Track when client first responded
+  @Prop({ type: Date })
+  clientRespondedAt: Date;
+
+  // Track when proposal was accepted
+  @Prop({ type: Date })
+  acceptedAt: Date;
+
+  // Client's note when rejecting
+  @Prop({ type: String })
+  rejectionNote: string;
 }
 
 export const ProposalSchema = SchemaFactory.createForClass(Proposal);
+
+// Indexes for efficient queries
+ProposalSchema.index({ jobId: 1, status: 1 });
+ProposalSchema.index({ proId: 1, status: 1 });
+ProposalSchema.index({ conversationId: 1 });

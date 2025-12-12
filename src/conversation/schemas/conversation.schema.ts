@@ -12,6 +12,13 @@ export class Conversation extends Document {
   @Prop({ type: Types.ObjectId, ref: 'ProjectRequest' })
   projectRequestId: Types.ObjectId;
 
+  // Link to job and proposal for proposal-based conversations
+  @Prop({ type: Types.ObjectId, ref: 'Job' })
+  jobId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Proposal' })
+  proposalId: Types.ObjectId;
+
   @Prop()
   lastMessageAt: Date;
 
@@ -33,4 +40,6 @@ export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.index({ clientId: 1 });
 ConversationSchema.index({ proId: 1 });
 ConversationSchema.index({ projectRequestId: 1 });
+ConversationSchema.index({ jobId: 1 });
+ConversationSchema.index({ proposalId: 1 });
 ConversationSchema.index({ lastMessageAt: -1 });

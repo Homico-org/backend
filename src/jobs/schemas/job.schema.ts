@@ -199,6 +199,21 @@ export class Job extends Document {
 
   @Prop({ type: Number, default: 0 })
   viewCount: number;
+
+  // Track accepted proposal and professional
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  acceptedProId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Proposal' })
+  acceptedProposalId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'ProProfile' })
+  acceptedProProfileId: Types.ObjectId;
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
+
+// Indexes
+JobSchema.index({ clientId: 1, status: 1 });
+JobSchema.index({ acceptedProId: 1, status: 1 });
+JobSchema.index({ category: 1, status: 1 });
