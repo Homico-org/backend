@@ -18,6 +18,8 @@ async function bootstrap() {
       'https://app.homico.ge',
       'https://homico.ge',
       'https://www.homico.ge',
+      'https://dev.homico.ge',
+      'https://app.dev.homico.ge',
       process.env.FRONTEND_URL,
     ].filter(Boolean),
     credentials: true,
