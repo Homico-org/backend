@@ -207,10 +207,16 @@ export class ProProfileService {
         $project: {
           _id: 1,
           userId: {
-            _id: '$user._id',
-            name: '$user.name',
-            email: '$user.email',
-            avatar: '$user.avatar',
+            $cond: {
+              if: { $ne: ['$user', null] },
+              then: {
+                _id: '$user._id',
+                name: '$user.name',
+                email: '$user.email',
+                avatar: '$user.avatar',
+              },
+              else: null,
+            },
           },
           companyId: 1,
           title: 1,
