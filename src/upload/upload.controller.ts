@@ -1,7 +1,6 @@
 import {
   Controller,
   Post,
-  Get,
   Delete,
   Param,
   UseInterceptors,
@@ -9,7 +8,6 @@ import {
   UploadedFiles,
   BadRequestException,
   NotFoundException,
-  Res,
   UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -20,9 +18,6 @@ import {
   ApiBody,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
-import { join } from 'path';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
@@ -134,8 +129,8 @@ export class UploadController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Delete a file' })
-  deleteFile(@Param('filename') filename: string) {
-    const deleted = this.uploadService.deleteFile(filename);
+  async deleteFile(@Param('filename') filename: string) {
+    const deleted = await this.uploadService.deleteFile(filename);
     if (!deleted) {
       throw new NotFoundException('File not found');
     }
