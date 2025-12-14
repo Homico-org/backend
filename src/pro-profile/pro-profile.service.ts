@@ -111,11 +111,23 @@ export class ProProfileService {
     const pipeline: any[] = [
       // Match only available profiles
       { $match: { isAvailable: true } },
+      // Convert userId string to ObjectId if needed
+      {
+        $addFields: {
+          userIdObject: {
+            $cond: {
+              if: { $eq: [{ $type: '$userId' }, 'objectId'] },
+              then: '$userId',
+              else: { $toObjectId: '$userId' },
+            },
+          },
+        },
+      },
       // Lookup user data
       {
         $lookup: {
           from: 'users',
-          localField: 'userId',
+          localField: 'userIdObject',
           foreignField: '_id',
           as: 'user',
         },
