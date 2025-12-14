@@ -40,6 +40,7 @@ export class UsersController {
       accountType: userData.accountType,
       companyName: userData.companyName,
       selectedCategories: userData.selectedCategories,
+      selectedSubcategories: userData.selectedSubcategories,
     };
   }
 
@@ -65,6 +66,7 @@ export class UsersController {
       accountType: updatedUser.accountType,
       companyName: updatedUser.companyName,
       selectedCategories: updatedUser.selectedCategories,
+      selectedSubcategories: updatedUser.selectedSubcategories,
     };
   }
 
@@ -101,6 +103,7 @@ export class UsersController {
         accountType: updatedUser.accountType,
         companyName: updatedUser.companyName,
         selectedCategories: updatedUser.selectedCategories,
+        selectedSubcategories: updatedUser.selectedSubcategories,
       },
       message: 'Account upgraded to professional successfully',
     };

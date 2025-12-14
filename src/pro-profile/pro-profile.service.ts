@@ -223,6 +223,7 @@ export class ProProfileService {
           companyName: 1,
           description: 1,
           categories: 1,
+          subcategories: 1,
           yearsExperience: 1,
           serviceAreas: 1,
           pricingModel: 1,
