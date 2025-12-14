@@ -356,4 +356,29 @@ export class JobsService {
 
     return proposal;
   }
+
+  async withdrawProposal(proposalId: string, proId: string): Promise<Proposal> {
+    const proposal = await this.proposalModel.findById(proposalId).exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    if (proposal.proId.toString() !== proId) {
+      throw new ForbiddenException('You can only withdraw your own proposals');
+    }
+
+    if (proposal.status === ProposalStatus.WITHDRAWN) {
+      throw new ForbiddenException('Proposal is already withdrawn');
+    }
+
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      throw new ForbiddenException('Cannot withdraw an accepted proposal');
+    }
+
+    proposal.status = ProposalStatus.WITHDRAWN;
+    await proposal.save();
+
+    return proposal;
+  }
 }

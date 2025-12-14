@@ -119,13 +119,26 @@ export class ProProfile extends Document {
   @Prop({ default: 'personal' })
   profileType: string; // 'personal' or 'company'
 
-  @Prop({ type: [{ title: String, description: String, location: String, images: [String], videos: [String] }], default: [] })
+  @Prop({
+    type: [{
+      id: String,
+      title: String,
+      description: String,
+      location: String,
+      images: [String],
+      videos: [String],
+      beforeAfterPairs: [{ id: String, beforeImage: String, afterImage: String }]
+    }],
+    default: []
+  })
   portfolioProjects: {
+    id?: string;
     title: string;
     description: string;
     location: string;
     images: string[];
     videos: string[];
+    beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
   }[];
 
   @Prop({ type: [{ name: String, logo: String, role: String }], default: [] })

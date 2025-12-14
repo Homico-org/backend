@@ -3,7 +3,23 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PricingModel } from '../schemas/pro-profile.schema';
 
+class BeforeAfterPairDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  beforeImage: string;
+
+  @IsString()
+  afterImage: string;
+}
+
 class PortfolioProjectDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
   @IsString()
   title: string;
 
@@ -22,6 +38,12 @@ class PortfolioProjectDto {
   @IsString({ each: true })
   @IsOptional()
   videos?: string[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BeforeAfterPairDto)
+  @IsOptional()
+  beforeAfterPairs?: BeforeAfterPairDto[];
 }
 
 export class CreateProProfileDto {

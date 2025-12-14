@@ -209,4 +209,14 @@ export class JobsController {
   acceptProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
+
+  @Post('proposals/:proposalId/withdraw')
+  @ApiOperation({ summary: 'Withdraw a proposal (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal withdrawn successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  withdrawProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.withdrawProposal(proposalId, user.userId);
+  }
 }
