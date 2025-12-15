@@ -228,6 +228,7 @@ export class ProProfileService {
           serviceAreas: 1,
           pricingModel: 1,
           basePrice: 1,
+          maxPrice: 1,
           currency: 1,
           avgRating: 1,
           totalReviews: 1,

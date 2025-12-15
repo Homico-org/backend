@@ -3,6 +3,8 @@ import { Document, Types } from 'mongoose';
 
 export enum PricingModel {
   HOURLY = 'hourly',
+  DAILY = 'daily',
+  SQM = 'sqm',
   PROJECT_BASED = 'project_based',
   FROM = 'from',
 }
@@ -63,6 +65,9 @@ export class ProProfile extends Document {
 
   @Prop()
   basePrice: number;
+
+  @Prop()
+  maxPrice: number;
 
   @Prop()
   currency: string;
