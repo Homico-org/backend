@@ -161,6 +161,9 @@ export class ProProfile extends Document {
   @Prop()
   designStyle: string; // e.g., "Modern", "Minimalist", "Classic", "Scandinavian"
 
+  @Prop({ type: [String], default: [] })
+  designStyles: string[]; // Multiple design styles array
+
   // Architect specific fields
   @Prop()
   cadastralId: string; // Cadastral ID from Public Service Hall (საკადასტრო კოდი)
@@ -180,6 +183,20 @@ export class ProProfile extends Document {
 
   @Prop()
   verificationNotes: string;
+
+  // Premium status
+  @Prop({ default: false })
+  isPremium: boolean;
+
+  @Prop()
+  premiumExpiresAt: Date;
+
+  @Prop({ default: 'none' })
+  premiumTier: string; // 'none', 'basic', 'pro', 'elite'
+
+  // Availability (for home-care services)
+  @Prop({ type: [String], default: [] })
+  availability: string[]; // e.g., ['weekdays', 'weekends', 'evenings']
 }
 
 export const ProProfileSchema = SchemaFactory.createForClass(ProProfile);
@@ -193,3 +210,4 @@ ProProfileSchema.index({ isAvailable: 1 });
 ProProfileSchema.index({ companyId: 1 });
 ProProfileSchema.index({ companyName: 1 });
 ProProfileSchema.index({ status: 1, avgRating: -1 }); // For sorting active pros first
+ProProfileSchema.index({ isPremium: -1, avgRating: -1 }); // For premium-first sorting

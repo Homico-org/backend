@@ -146,6 +146,15 @@ export class CreateProProfileDto {
   @IsOptional()
   designStyle?: string;
 
+  @ApiPropertyOptional({
+    description: 'Design styles array (Interior Designers)',
+    example: ['modern', 'minimalist', 'scandinavian'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  designStyles?: string[];
+
   // Architect specific fields
   @ApiPropertyOptional({
     description: 'Cadastral ID from Public Service Hall (Architects)',
@@ -169,4 +178,19 @@ export class CreateProProfileDto {
   @IsString({ each: true })
   @IsOptional()
   completedProjects?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Availability options (e.g., weekdays, weekends, evenings)',
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  availability?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Maximum price for price range',
+  })
+  @IsNumber()
+  @IsOptional()
+  maxPrice?: number;
 }

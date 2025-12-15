@@ -85,26 +85,26 @@ export class ProProfileService {
     const limit = filters?.limit || 6;
     const skip = (page - 1) * limit;
 
-    // Build sort object
+    // Build sort object - always sort premium first, then by selected criteria
     let sortObj: any = {};
     switch (filters?.sort) {
       case 'rating':
-        sortObj = { avgRating: -1 };
+        sortObj = { isPremium: -1, avgRating: -1 };
         break;
       case 'reviews':
-        sortObj = { totalReviews: -1 };
+        sortObj = { isPremium: -1, totalReviews: -1 };
         break;
       case 'price-low':
-        sortObj = { basePrice: 1 };
+        sortObj = { isPremium: -1, basePrice: 1 };
         break;
       case 'price-high':
-        sortObj = { basePrice: -1 };
+        sortObj = { isPremium: -1, basePrice: -1 };
         break;
       case 'newest':
-        sortObj = { createdAt: -1 };
+        sortObj = { isPremium: -1, createdAt: -1 };
         break;
       default: // 'recommended'
-        sortObj = { avgRating: -1, totalReviews: -1 };
+        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1 };
     }
 
     // Use aggregation pipeline for search that includes user name
@@ -172,19 +172,31 @@ export class ProProfileService {
       });
     }
 
-    // Search filter - now includes user name and categories
+    // Search filter - now includes user name, categories, and UID (#tag)
     if (filters?.search) {
-      const searchRegex = new RegExp(filters.search, 'i');
-      matchConditions.push({
-        $or: [
-          { title: searchRegex },
-          { tagline: searchRegex },
-          { description: searchRegex },
-          { categories: searchRegex },
-          { companyName: searchRegex },
-          { 'user.name': searchRegex },
-        ],
-      });
+      const searchTerm = filters.search.trim();
+
+      // Check if searching by UID (starts with #)
+      if (searchTerm.startsWith('#')) {
+        const uidSearch = searchTerm.substring(1); // Remove # prefix
+        const uidNumber = parseInt(uidSearch, 10);
+        if (!isNaN(uidNumber)) {
+          matchConditions.push({ 'user.uid': uidNumber });
+        }
+      } else {
+        const searchRegex = new RegExp(searchTerm, 'i');
+        matchConditions.push({
+          $or: [
+            { title: searchRegex },
+            { tagline: searchRegex },
+            { description: searchRegex },
+            { categories: searchRegex },
+            { subcategories: searchRegex },
+            { companyName: searchRegex },
+            { 'user.name': searchRegex },
+          ],
+        });
+      }
     }
 
     // Add match stage if there are conditions
@@ -247,6 +259,9 @@ export class ProProfileService {
           portfolioProjects: 1,
           portfolioImages: 1,
           verificationStatus: 1,
+          isPremium: 1,
+          premiumTier: 1,
+          premiumExpiresAt: 1,
           createdAt: 1,
           updatedAt: 1,
         },
