@@ -209,8 +209,9 @@ export class JobsService {
   }
 
   async findMyJobs(clientId: string): Promise<Job[]> {
+    const { Types } = require('mongoose');
     return this.jobModel
-      .find({ clientId })
+      .find({ clientId: new Types.ObjectId(clientId) })
       .sort({ createdAt: -1 })
       .exec();
   }
