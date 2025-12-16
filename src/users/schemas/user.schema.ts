@@ -13,6 +13,23 @@ export enum AccountType {
   ORGANIZATION = 'organization',
 }
 
+// Payment method embedded schema
+export class PaymentMethod {
+  id: string;
+  type: 'card' | 'bank';
+  // For cards: last 4 digits, brand (Visa, Mastercard), expiry
+  cardLast4?: string;
+  cardBrand?: string;
+  cardExpiry?: string;
+  cardholderName?: string;
+  // For bank: bank name, masked IBAN
+  bankName?: string;
+  maskedIban?: string;
+  // Common
+  isDefault: boolean;
+  createdAt: Date;
+}
+
 @Schema({ timestamps: true })
 export class User extends Document {
   @Prop({ unique: true, index: true })
@@ -86,6 +103,10 @@ export class User extends Document {
 
   @Prop()
   phoneVerifiedAt: Date;
+
+  // Payment methods
+  @Prop({ type: [Object], default: [] })
+  paymentMethods: PaymentMethod[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

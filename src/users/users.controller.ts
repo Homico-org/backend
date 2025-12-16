@@ -3,7 +3,9 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -12,6 +14,7 @@ import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { AddCardPaymentMethodDto, AddBankPaymentMethodDto, SetDefaultPaymentMethodDto } from './dto/payment-method.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -118,5 +121,75 @@ export class UsersController {
       message: `Successfully assigned UIDs to ${result.updated} users`,
       ...result,
     };
+  }
+
+  // Payment Methods Endpoints
+  @Get('payment-methods')
+  @ApiOperation({ summary: 'Get user payment methods' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of payment methods' })
+  @UseGuards(JwtAuthGuard)
+  async getPaymentMethods(@CurrentUser() user: any) {
+    return this.usersService.getPaymentMethods(user.userId);
+  }
+
+  @Post('payment-methods/card')
+  @ApiOperation({ summary: 'Add a card payment method' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Card added successfully' })
+  @UseGuards(JwtAuthGuard)
+  async addCardPaymentMethod(
+    @CurrentUser() user: any,
+    @Body() dto: AddCardPaymentMethodDto,
+  ) {
+    return this.usersService.addCardPaymentMethod(
+      user.userId,
+      dto.cardNumber,
+      dto.cardExpiry,
+      dto.cardholderName,
+      dto.setAsDefault,
+    );
+  }
+
+  @Post('payment-methods/bank')
+  @ApiOperation({ summary: 'Add a bank payment method' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Bank account added successfully' })
+  @UseGuards(JwtAuthGuard)
+  async addBankPaymentMethod(
+    @CurrentUser() user: any,
+    @Body() dto: AddBankPaymentMethodDto,
+  ) {
+    return this.usersService.addBankPaymentMethod(
+      user.userId,
+      dto.bankName,
+      dto.iban,
+      dto.setAsDefault,
+    );
+  }
+
+  @Delete('payment-methods/:id')
+  @ApiOperation({ summary: 'Delete a payment method' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Payment method deleted' })
+  @UseGuards(JwtAuthGuard)
+  async deletePaymentMethod(
+    @CurrentUser() user: any,
+    @Param('id') paymentMethodId: string,
+  ) {
+    await this.usersService.deletePaymentMethod(user.userId, paymentMethodId);
+    return { message: 'Payment method deleted successfully' };
+  }
+
+  @Patch('payment-methods/default')
+  @ApiOperation({ summary: 'Set default payment method' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Default payment method updated' })
+  @UseGuards(JwtAuthGuard)
+  async setDefaultPaymentMethod(
+    @CurrentUser() user: any,
+    @Body() dto: SetDefaultPaymentMethodDto,
+  ) {
+    return this.usersService.setDefaultPaymentMethod(user.userId, dto.paymentMethodId);
   }
 }

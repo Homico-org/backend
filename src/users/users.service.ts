@@ -1,9 +1,10 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User } from './schemas/user.schema';
+import { User, PaymentMethod } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UsersService {
@@ -182,5 +183,149 @@ export class UsersService {
     }
 
     return { updated };
+  }
+
+  // Payment Methods
+  async getPaymentMethods(userId: string): Promise<PaymentMethod[]> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.paymentMethods || [];
+  }
+
+  async addCardPaymentMethod(
+    userId: string,
+    cardNumber: string,
+    cardExpiry: string,
+    cardholderName: string,
+    setAsDefault: boolean = false,
+  ): Promise<PaymentMethod> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Detect card brand from number
+    const cardBrand = this.detectCardBrand(cardNumber);
+    const cardLast4 = cardNumber.slice(-4);
+
+    const newPaymentMethod: PaymentMethod = {
+      id: uuidv4(),
+      type: 'card',
+      cardLast4,
+      cardBrand,
+      cardExpiry,
+      cardholderName,
+      isDefault: setAsDefault || (user.paymentMethods?.length === 0),
+      createdAt: new Date(),
+    };
+
+    // If setting as default, unset other defaults
+    if (newPaymentMethod.isDefault && user.paymentMethods?.length > 0) {
+      user.paymentMethods = user.paymentMethods.map(pm => ({
+        ...pm,
+        isDefault: false,
+      }));
+    }
+
+    user.paymentMethods = [...(user.paymentMethods || []), newPaymentMethod];
+    await user.save();
+
+    return newPaymentMethod;
+  }
+
+  async addBankPaymentMethod(
+    userId: string,
+    bankName: string,
+    iban: string,
+    setAsDefault: boolean = false,
+  ): Promise<PaymentMethod> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Mask IBAN (show first 4 and last 4)
+    const maskedIban = iban.length > 8
+      ? `${iban.slice(0, 4)}****${iban.slice(-4)}`
+      : iban;
+
+    const newPaymentMethod: PaymentMethod = {
+      id: uuidv4(),
+      type: 'bank',
+      bankName,
+      maskedIban,
+      isDefault: setAsDefault || (user.paymentMethods?.length === 0),
+      createdAt: new Date(),
+    };
+
+    // If setting as default, unset other defaults
+    if (newPaymentMethod.isDefault && user.paymentMethods?.length > 0) {
+      user.paymentMethods = user.paymentMethods.map(pm => ({
+        ...pm,
+        isDefault: false,
+      }));
+    }
+
+    user.paymentMethods = [...(user.paymentMethods || []), newPaymentMethod];
+    await user.save();
+
+    return newPaymentMethod;
+  }
+
+  async deletePaymentMethod(userId: string, paymentMethodId: string): Promise<void> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const methodIndex = user.paymentMethods?.findIndex(pm => pm.id === paymentMethodId);
+    if (methodIndex === undefined || methodIndex === -1) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    const wasDefault = user.paymentMethods[methodIndex].isDefault;
+    user.paymentMethods.splice(methodIndex, 1);
+
+    // If deleted method was default and there are other methods, set first one as default
+    if (wasDefault && user.paymentMethods.length > 0) {
+      user.paymentMethods[0].isDefault = true;
+    }
+
+    await user.save();
+  }
+
+  async setDefaultPaymentMethod(userId: string, paymentMethodId: string): Promise<PaymentMethod> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const methodIndex = user.paymentMethods?.findIndex(pm => pm.id === paymentMethodId);
+    if (methodIndex === undefined || methodIndex === -1) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    // Unset all defaults and set the new one
+    user.paymentMethods = user.paymentMethods.map(pm => ({
+      ...pm,
+      isDefault: pm.id === paymentMethodId,
+    }));
+
+    await user.save();
+    return user.paymentMethods[methodIndex];
+  }
+
+  private detectCardBrand(cardNumber: string): string {
+    const cleanNumber = cardNumber.replace(/\s/g, '');
+
+    if (/^4/.test(cleanNumber)) return 'Visa';
+    if (/^5[1-5]/.test(cleanNumber) || /^2[2-7]/.test(cleanNumber)) return 'Mastercard';
+    if (/^3[47]/.test(cleanNumber)) return 'Amex';
+    if (/^6(?:011|5)/.test(cleanNumber)) return 'Discover';
+    if (/^(?:2131|1800|35)/.test(cleanNumber)) return 'JCB';
+
+    return 'Card';
   }
 }
