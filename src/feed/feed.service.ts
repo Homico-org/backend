@@ -30,6 +30,9 @@ export interface FeedItem {
   likeCount: number;
   isLiked: boolean;
   createdAt: Date;
+  // For embedded projects without their own ObjectId, we track what to like instead
+  likeTargetType?: 'portfolio_item' | 'pro_profile';
+  likeTargetId?: string;
 }
 
 export interface FeedResponse {
@@ -142,10 +145,11 @@ export class FeedService {
     });
 
     // Transform embedded portfolioProjects to feed items
-    const embeddedFeedItems: (FeedItem & { sortDate: Date })[] = [];
+    const embeddedFeedItems: (FeedItem & { sortDate: Date; likeTargetType?: string; likeTargetId?: string })[] = [];
     for (const proProfile of proProfilesWithProjects) {
       const proUser = proProfile.userId as any;
-      for (const project of proProfile.portfolioProjects || []) {
+      for (let i = 0; i < (proProfile.portfolioProjects || []).length; i++) {
+        const project = proProfile.portfolioProjects[i];
         // Check for before/after pairs
         const hasBeforeAfter = project.beforeAfterPairs && project.beforeAfterPairs.length > 0;
         const firstPair = hasBeforeAfter ? project.beforeAfterPairs[0] : null;
@@ -155,10 +159,21 @@ export class FeedService {
           type = 'before_after';
         }
 
-        const projectId = project.id || `${proProfile._id}-${project.title}`;
+        // Check if project has a valid MongoDB ObjectId
+        const hasValidObjectId = project._id && Types.ObjectId.isValid(project._id.toString());
+        const projectIdString = project._id?.toString() || project.id;
+
+        // For embedded projects without valid ObjectIds, we'll use the proProfile._id for liking
+        // This allows users to "like" the pro's work, which will like the pro profile
+        const projectId = hasValidObjectId
+          ? projectIdString
+          : `embedded-${proProfile._id.toString()}-${i}`;
 
         embeddedFeedItems.push({
           _id: projectId,
+          // For embedded projects, store the actual like target (the pro profile)
+          likeTargetType: hasValidObjectId ? 'portfolio_item' : 'pro_profile',
+          likeTargetId: hasValidObjectId ? projectIdString : proProfile._id.toString(),
           type,
           title: project.title || '',
           description: project.description,
@@ -190,34 +205,79 @@ export class FeedService {
     const paginatedItems = allFeedItems.slice(skip, skip + limit);
 
     // Get like counts and user liked status for paginated items
-    // Only include valid MongoDB ObjectIds for the likes service
-    const itemIds = paginatedItems.map((item) => item._id);
-    const validObjectIds = itemIds.filter((id) => Types.ObjectId.isValid(id) && id.length === 24);
+    // Separate items by their like target type
+    const portfolioItemIds: string[] = [];
+    const proProfileIds: string[] = [];
+    const itemToLikeTarget: Record<string, { type: LikeTargetType; id: string }> = {};
+
+    for (const item of paginatedItems) {
+      const likeTargetId = (item as any).likeTargetId || item._id;
+      const likeTargetType = (item as any).likeTargetType || 'portfolio_item';
+
+      if (Types.ObjectId.isValid(likeTargetId) && likeTargetId.length === 24) {
+        itemToLikeTarget[item._id] = {
+          type: likeTargetType === 'pro_profile' ? LikeTargetType.PRO_PROFILE : LikeTargetType.PORTFOLIO_ITEM,
+          id: likeTargetId,
+        };
+
+        if (likeTargetType === 'pro_profile') {
+          proProfileIds.push(likeTargetId);
+        } else {
+          portfolioItemIds.push(likeTargetId);
+        }
+      }
+    }
 
     let likeCounts: Record<string, number> = {};
     let userLiked: Record<string, boolean> = {};
 
-    if (validObjectIds.length > 0) {
-      likeCounts = await this.likesService.getLikeCountsBatch(
+    // Fetch like counts for portfolio items
+    if (portfolioItemIds.length > 0) {
+      const portfolioCounts = await this.likesService.getLikeCountsBatch(
         LikeTargetType.PORTFOLIO_ITEM,
-        validObjectIds,
+        portfolioItemIds,
       );
+      Object.assign(likeCounts, portfolioCounts);
 
       if (userId) {
-        userLiked = await this.likesService.isLikedByUserBatch(
+        const portfolioLiked = await this.likesService.isLikedByUserBatch(
           userId,
           LikeTargetType.PORTFOLIO_ITEM,
-          validObjectIds,
+          portfolioItemIds,
         );
+        Object.assign(userLiked, portfolioLiked);
       }
     }
 
-    // Apply like counts to items
-    const feedItems: FeedItem[] = paginatedItems.map(({ sortDate, ...item }) => ({
-      ...item,
-      likeCount: likeCounts[item._id] || 0,
-      isLiked: userLiked[item._id] || false,
-    }));
+    // Fetch like counts for pro profiles (embedded items)
+    if (proProfileIds.length > 0) {
+      const proCounts = await this.likesService.getLikeCountsBatch(
+        LikeTargetType.PRO_PROFILE,
+        proProfileIds,
+      );
+      Object.assign(likeCounts, proCounts);
+
+      if (userId) {
+        const proLiked = await this.likesService.isLikedByUserBatch(
+          userId,
+          LikeTargetType.PRO_PROFILE,
+          proProfileIds,
+        );
+        Object.assign(userLiked, proLiked);
+      }
+    }
+
+    // Apply like counts to items using their mapped like targets
+    const feedItems: FeedItem[] = paginatedItems.map(({ sortDate, ...item }) => {
+      const likeTarget = itemToLikeTarget[item._id];
+      const likeTargetId = likeTarget?.id || item._id;
+
+      return {
+        ...item,
+        likeCount: likeCounts[likeTargetId] || 0,
+        isLiked: userLiked[likeTargetId] || false,
+      };
+    });
 
     return {
       data: feedItems,
