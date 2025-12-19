@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Job, JobStatus, JobPropertyType } from './schemas/job.schema';
 import { Proposal, ProposalStatus } from './schemas/proposal.schema';
+import { SavedJob } from './schemas/saved-job.schema';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 
@@ -11,6 +12,7 @@ export class JobsService {
   constructor(
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
+    @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
   ) {}
 
   // Jobs CRUD
@@ -41,6 +43,8 @@ export class JobsService {
     createdBefore?: Date;
     clientType?: string;
     deadline?: string;
+    savedOnly?: boolean;
+    userId?: string;
   }): Promise<{
     data: Job[];
     pagination: {
@@ -137,6 +141,25 @@ export class JobsService {
         query.$or = query.$or || [];
         query.$or.push({ deadline: null }, { deadline: { $exists: false } });
       }
+    }
+
+    // Saved jobs filter - filter to only show user's saved jobs
+    if (filters?.savedOnly && filters?.userId) {
+      const savedJobIds = await this.getSavedJobIds(filters.userId);
+      if (savedJobIds.length === 0) {
+        // No saved jobs, return empty result
+        return {
+          data: [],
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+            hasMore: false,
+          },
+        };
+      }
+      query._id = { $in: savedJobIds.map((id) => new Types.ObjectId(id)) };
     }
 
     // Determine sort order
@@ -435,5 +458,69 @@ export class JobsService {
     await proposal.save();
 
     return proposal;
+  }
+
+  // Saved Jobs
+  async saveJob(userId: string, jobId: string): Promise<{ saved: boolean }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const jobObjectId = new Types.ObjectId(jobId);
+
+    // Check if job exists
+    const job = await this.jobModel.findById(jobObjectId);
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // Check if already saved
+    const existing = await this.savedJobModel.findOne({
+      userId: userObjectId,
+      jobId: jobObjectId,
+    });
+
+    if (existing) {
+      return { saved: true };
+    }
+
+    await this.savedJobModel.create({
+      userId: userObjectId,
+      jobId: jobObjectId,
+    });
+
+    return { saved: true };
+  }
+
+  async unsaveJob(userId: string, jobId: string): Promise<{ saved: boolean }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const jobObjectId = new Types.ObjectId(jobId);
+
+    await this.savedJobModel.deleteOne({
+      userId: userObjectId,
+      jobId: jobObjectId,
+    });
+
+    return { saved: false };
+  }
+
+  async getSavedJobIds(userId: string): Promise<string[]> {
+    const userObjectId = new Types.ObjectId(userId);
+    const savedJobs = await this.savedJobModel
+      .find({ userId: userObjectId })
+      .select('jobId')
+      .lean()
+      .exec();
+
+    return savedJobs.map((sj) => sj.jobId.toString());
+  }
+
+  async isJobSaved(userId: string, jobId: string): Promise<boolean> {
+    const userObjectId = new Types.ObjectId(userId);
+    const jobObjectId = new Types.ObjectId(jobId);
+
+    const existing = await this.savedJobModel.findOne({
+      userId: userObjectId,
+      jobId: jobObjectId,
+    });
+
+    return !!existing;
   }
 }

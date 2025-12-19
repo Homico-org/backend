@@ -8,12 +8,14 @@ import {
   Param,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -55,8 +57,11 @@ export class JobsController {
   @ApiQuery({ name: 'createdBefore', required: false, description: 'Jobs created before this date (ISO string)' })
   @ApiQuery({ name: 'clientType', required: false, description: 'Filter by client type: individual or organization' })
   @ApiQuery({ name: 'deadline', required: false, description: 'Deadline filter: urgent (< 7 days), week, month, flexible' })
+  @ApiQuery({ name: 'savedOnly', required: false, description: 'Filter to only show saved/favorite jobs (requires auth)' })
   @ApiResponse({ status: 200, description: 'List of jobs with pagination' })
+  @UseGuards(OptionalJwtAuthGuard)
   findAllJobs(
+    @CurrentUser() user: any,
     @Query('category') category?: string,
     @Query('categories') categories?: string,
     @Query('location') location?: string,
@@ -74,6 +79,7 @@ export class JobsController {
     @Query('createdBefore') createdBefore?: string,
     @Query('clientType') clientType?: string,
     @Query('deadline') deadline?: string,
+    @Query('savedOnly') savedOnly?: string,
   ) {
     return this.jobsService.findAllJobs({
       category,
@@ -93,6 +99,8 @@ export class JobsController {
       createdBefore: createdBefore ? new Date(createdBefore) : undefined,
       clientType,
       deadline,
+      savedOnly: savedOnly === 'true',
+      userId: user?.userId,
     });
   }
 
@@ -221,5 +229,33 @@ export class JobsController {
   @Roles(UserRole.PRO)
   withdrawProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.withdrawProposal(proposalId, user.userId);
+  }
+
+  // Saved Jobs endpoints
+  @Post(':jobId/save')
+  @ApiOperation({ summary: 'Save a job to favorites' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job saved successfully' })
+  @UseGuards(JwtAuthGuard)
+  saveJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.saveJob(user.userId, jobId);
+  }
+
+  @Delete(':jobId/save')
+  @ApiOperation({ summary: 'Remove a job from favorites' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job removed from favorites' })
+  @UseGuards(JwtAuthGuard)
+  unsaveJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.unsaveJob(user.userId, jobId);
+  }
+
+  @Get('saved/list')
+  @ApiOperation({ summary: 'Get list of saved job IDs' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of saved job IDs' })
+  @UseGuards(JwtAuthGuard)
+  getSavedJobIds(@CurrentUser() user: any) {
+    return this.jobsService.getSavedJobIds(user.userId);
   }
 }
