@@ -5,11 +5,13 @@ import { Message } from './schemas/message.schema';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { ConversationService } from '../conversation/conversation.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { ProProfile } from '../pro-profile/schemas/pro-profile.schema';
 
 @Injectable()
 export class MessageService {
   constructor(
     @InjectModel(Message.name) private messageModel: Model<Message>,
+    @InjectModel(ProProfile.name) private proProfileModel: Model<ProProfile>,
     private conversationService: ConversationService,
     private chatGateway: ChatGateway,
   ) {}
@@ -47,17 +49,34 @@ export class MessageService {
     // Get conversation to notify the recipient
     const conversation = await this.conversationService.findById(createMessageDto.conversationId);
     if (conversation) {
-      // Determine recipient ID based on sender
-      const recipientId = conversation.clientId.toString() === senderId
-        ? conversation.proId.toString()
-        : conversation.clientId.toString();
+      // Determine recipient user ID based on sender
+      // clientId is always a userId, proId is a proProfileId (need to look up the userId)
+      const clientUserId = conversation.clientId?.toString();
+      let proUserId: string | null = null;
 
-      // Emit conversation update to recipient
-      this.chatGateway.emitConversationUpdate(recipientId, {
-        conversationId: createMessageDto.conversationId,
-        lastMessage: createMessageDto.content.substring(0, 100),
-        lastMessageAt: new Date(),
-      });
+      // Look up the pro's userId from the proProfile
+      const proIdValue = conversation.proId;
+      const proIdStr = typeof proIdValue === 'string' ? proIdValue : proIdValue?.toString();
+      if (proIdStr) {
+        const proProfile = await this.proProfileModel.findById(proIdStr).select('userId').lean().exec();
+        if (proProfile) {
+          proUserId = typeof proProfile.userId === 'string'
+            ? proProfile.userId
+            : proProfile.userId?.toString();
+        }
+      }
+
+      // Determine recipient userId - if sender is client, recipient is pro's userId
+      const recipientUserId = clientUserId === senderId ? proUserId : clientUserId;
+
+      if (recipientUserId) {
+        // Emit conversation update to recipient
+        this.chatGateway.emitConversationUpdate(recipientUserId, {
+          conversationId: createMessageDto.conversationId,
+          lastMessage: createMessageDto.content.substring(0, 100),
+          lastMessageAt: new Date(),
+        });
+      }
     }
 
     return populatedMessage;
