@@ -39,19 +39,33 @@ export class ConversationService {
 
     if (role === 'pro') {
       // Look up the pro's profile ID
-      const proProfile = await this.proProfileModel.findOne({ userId }).exec();
+      // Handle userId stored as both ObjectId and string
+      const proProfile = await this.proProfileModel.findOne({
+        $or: [
+          { userId: new Types.ObjectId(userId) },
+          { userId: userId }
+        ]
+      }).exec();
       if (proProfile) {
         userProProfileId = proProfile._id.toString();
+        // Query for proId as both ObjectId and string (data may be stored inconsistently)
         query = {
           $or: [
             { clientId: userId }, // In case they were a client in some conversations
-            { proId: proProfile._id }
+            { proId: proProfile._id },
+            { proId: proProfile._id.toString() }
           ]
         };
       }
     } else {
       // Client can also have conversations where they're the client
-      query = { clientId: userId };
+      // Handle clientId stored as both ObjectId and string
+      query = {
+        $or: [
+          { clientId: new Types.ObjectId(userId) },
+          { clientId: userId }
+        ]
+      };
     }
 
     const conversations = await this.conversationModel
