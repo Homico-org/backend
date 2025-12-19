@@ -231,4 +231,51 @@ export class ConversationService {
 
     return this.findOrCreate(clientId, proId);
   }
+
+  async getTotalUnreadCount(userId: string, role: string): Promise<number> {
+    let query: any;
+
+    if (role === 'pro') {
+      // Look up the pro's profile ID
+      const proProfile = await this.proProfileModel.findOne({
+        $or: [
+          { userId: new Types.ObjectId(userId) },
+          { userId: userId }
+        ]
+      }).exec();
+
+      if (!proProfile) return 0;
+
+      query = {
+        $or: [
+          { proId: proProfile._id },
+          { proId: proProfile._id.toString() }
+        ]
+      };
+
+      // Aggregate unreadCountPro for pro users
+      const result = await this.conversationModel.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$unreadCountPro' } } }
+      ]).exec();
+
+      return result[0]?.total || 0;
+    } else {
+      // Client query
+      query = {
+        $or: [
+          { clientId: new Types.ObjectId(userId) },
+          { clientId: userId }
+        ]
+      };
+
+      // Aggregate unreadCountClient for client users
+      const result = await this.conversationModel.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: '$unreadCountClient' } } }
+      ]).exec();
+
+      return result[0]?.total || 0;
+    }
+  }
 }

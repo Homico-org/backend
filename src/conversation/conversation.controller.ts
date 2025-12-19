@@ -24,6 +24,12 @@ export class ConversationController {
     return this.conversationService.findByUser(user.userId, user.role);
   }
 
+  @Get('unread-count')
+  async getUnreadCount(@CurrentUser() user: any) {
+    const unreadCount = await this.conversationService.getTotalUnreadCount(user.userId, user.role);
+    return { unreadCount };
+  }
+
   @Get(':id')
   findById(@Param('id') id: string) {
     return this.conversationService.findById(id);
