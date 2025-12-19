@@ -86,4 +86,11 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   companyName?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Whether phone has been verified via OTP during registration'
+  })
+  @IsOptional()
+  isPhoneVerified?: boolean;
 }
