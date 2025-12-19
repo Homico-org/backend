@@ -286,8 +286,10 @@ export class ProProfileService {
 
   async findOne(id: string): Promise<ProProfile> {
     // Check if id is a numeric UID (6-digit number starting with 1)
+    // Must be ONLY digits to be a numeric UID (not a hex string like ObjectId)
+    const isOnlyDigits = /^\d+$/.test(id);
     const numericId = parseInt(id, 10);
-    const isNumericUid = !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
+    const isNumericUid = isOnlyDigits && !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
 
     let profile: any = null;
 
