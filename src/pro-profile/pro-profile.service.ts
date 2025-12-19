@@ -301,11 +301,19 @@ export class ProProfileService {
           .exec();
       }
     } else if (Types.ObjectId.isValid(id)) {
-      // Find by MongoDB ObjectId
+      // First try to find by ProProfile _id
       profile = await this.proProfileModel
         .findById(id)
         .populate('userId', 'name email avatar phone city uid')
         .exec();
+
+      // If not found, try to find by userId
+      if (!profile) {
+        profile = await this.proProfileModel
+          .findOne({ userId: new Types.ObjectId(id) })
+          .populate('userId', 'name email avatar phone city uid')
+          .exec();
+      }
     }
 
     if (!profile) {
