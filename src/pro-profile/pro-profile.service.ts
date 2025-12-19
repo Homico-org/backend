@@ -289,29 +289,29 @@ export class ProProfileService {
     const numericId = parseInt(id, 10);
     const isNumericUid = !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
 
-    let profile: ProProfile | null = null;
+    let profile: any = null;
 
     if (isNumericUid) {
       // Find user by UID first
       const user = await this.userModel.findOne({ uid: numericId }).exec();
       if (user) {
         profile = await this.proProfileModel
-          .findOne({ userId: user._id })
-          .populate('userId', 'name email avatar phone city uid')
+          .findOne({ $or: [{ userId: user._id }, { userId: user._id.toString() }] })
+          .lean()
           .exec();
       }
     } else if (Types.ObjectId.isValid(id)) {
       // First try to find by ProProfile _id
       profile = await this.proProfileModel
         .findById(id)
-        .populate('userId', 'name email avatar phone city uid')
+        .lean()
         .exec();
 
-      // If not found, try to find by userId
+      // If not found, try to find by userId (as ObjectId or string)
       if (!profile) {
         profile = await this.proProfileModel
-          .findOne({ userId: new Types.ObjectId(id) })
-          .populate('userId', 'name email avatar phone city uid')
+          .findOne({ $or: [{ userId: new Types.ObjectId(id) }, { userId: id }] })
+          .lean()
           .exec();
       }
     }
@@ -320,14 +320,51 @@ export class ProProfileService {
       throw new NotFoundException('Pro profile not found');
     }
 
+    // Manually populate userId since it might be stored as string
+    const userIdValue = profile.userId;
+    const userIdStr = typeof userIdValue === 'string' ? userIdValue : userIdValue?.toString();
+
+    if (userIdStr) {
+      const user = await this.userModel
+        .findById(userIdStr)
+        .select('name email avatar phone city uid')
+        .lean()
+        .exec();
+
+      if (user) {
+        profile.userId = user;
+      }
+    }
+
     return profile;
   }
 
   async findByUserId(userId: string): Promise<ProProfile | null> {
-    return this.proProfileModel
-      .findOne({ userId })
-      .populate('userId', 'name email avatar')
+    // Search by userId as both ObjectId and string
+    const profile: any = await this.proProfileModel
+      .findOne({ $or: [{ userId: new Types.ObjectId(userId) }, { userId: userId }] })
+      .lean()
       .exec();
+
+    if (profile) {
+      // Manually populate userId
+      const userIdValue = profile.userId;
+      const userIdStr = typeof userIdValue === 'string' ? userIdValue : userIdValue?.toString();
+
+      if (userIdStr) {
+        const user = await this.userModel
+          .findById(userIdStr)
+          .select('name email avatar')
+          .lean()
+          .exec();
+
+        if (user) {
+          profile.userId = user;
+        }
+      }
+    }
+
+    return profile;
   }
 
   async update(id: string, updateProProfileDto: UpdateProProfileDto): Promise<ProProfile> {
