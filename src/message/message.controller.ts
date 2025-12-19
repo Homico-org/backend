@@ -23,11 +23,12 @@ export class MessageController {
     @CurrentUser() user: any,
     @Body() createMessageDto: CreateMessageDto,
   ) {
-    return this.messageService.create(user.userId, createMessageDto);
+    return this.messageService.create(user.userId, user.role, createMessageDto);
   }
 
   @Get('conversation/:conversationId')
   findByConversation(
+    @CurrentUser() user: any,
     @Param('conversationId') conversationId: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
@@ -38,5 +39,13 @@ export class MessageController {
   @Patch(':id/read')
   markAsRead(@Param('id') id: string) {
     return this.messageService.markAsRead(id);
+  }
+
+  @Patch('conversation/:conversationId/read-all')
+  markAllAsRead(
+    @CurrentUser() user: any,
+    @Param('conversationId') conversationId: string,
+  ) {
+    return this.messageService.markAllAsRead(conversationId, user.userId);
   }
 }

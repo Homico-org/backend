@@ -11,6 +11,10 @@ export class FeedController {
     @Query('category') category?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '12',
+    @Query('location') location?: string,
+    @Query('minRating') minRating?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
     @Request() req?: any,
   ) {
     // Extract user ID if authenticated (optional)
@@ -21,6 +25,10 @@ export class FeedController {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
       userId,
+      location,
+      minRating: minRating ? parseFloat(minRating) : undefined,
+      search,
+      sort,
     });
   }
 

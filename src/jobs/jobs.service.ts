@@ -40,6 +40,7 @@ export class JobsService {
     createdAfter?: Date;
     createdBefore?: Date;
     clientType?: string;
+    deadline?: string;
   }): Promise<{
     data: Job[];
     pagination: {
@@ -113,6 +114,28 @@ export class JobsService {
       }
       if (filters?.createdBefore) {
         query.createdAt.$lte = filters.createdBefore;
+      }
+    }
+
+    // Deadline filter (urgent, week, month, flexible)
+    if (filters?.deadline && filters.deadline !== 'all') {
+      const now = new Date();
+      if (filters.deadline === 'urgent') {
+        // Jobs with deadline within 7 days
+        const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        query.deadline = { $gte: now, $lte: sevenDaysLater };
+      } else if (filters.deadline === 'week') {
+        // Jobs with deadline within this week (next 7 days)
+        const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        query.deadline = { $gte: now, $lte: weekLater };
+      } else if (filters.deadline === 'month') {
+        // Jobs with deadline within this month (next 30 days)
+        const monthLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        query.deadline = { $gte: now, $lte: monthLater };
+      } else if (filters.deadline === 'flexible') {
+        // Jobs with no deadline set or deadline is null
+        query.$or = query.$or || [];
+        query.$or.push({ deadline: null }, { deadline: { $exists: false } });
       }
     }
 
@@ -208,12 +231,43 @@ export class JobsService {
     return job;
   }
 
-  async findMyJobs(clientId: string): Promise<Job[]> {
+  async findMyJobs(clientId: string): Promise<any[]> {
     const { Types } = require('mongoose');
-    return this.jobModel
+    const jobs = await this.jobModel
       .find({ clientId: new Types.ObjectId(clientId) })
       .sort({ createdAt: -1 })
+      .lean()
       .exec();
+
+    // For in_progress jobs, find the accepted proposal and get hired pro info
+    const jobsWithHiredPro = await Promise.all(
+      jobs.map(async (job) => {
+        if (job.status === 'in_progress') {
+          const acceptedProposal = await this.proposalModel
+            .findOne({ jobId: job._id, status: 'accepted' })
+            .populate({
+              path: 'proProfileId',
+              select: '_id userId avatar title',
+              populate: {
+                path: 'userId',
+                select: 'name avatar',
+              },
+            })
+            .lean()
+            .exec();
+
+          if (acceptedProposal?.proProfileId) {
+            return {
+              ...job,
+              hiredPro: acceptedProposal.proProfileId,
+            };
+          }
+        }
+        return job;
+      })
+    );
+
+    return jobsWithHiredPro;
   }
 
   async updateJob(id: string, clientId: string, updateData: Partial<CreateJobDto>): Promise<Job> {

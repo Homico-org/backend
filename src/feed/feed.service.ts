@@ -59,14 +59,29 @@ export class FeedService {
     page?: number;
     limit?: number;
     userId?: string;
+    location?: string;
+    minRating?: number;
+    search?: string;
+    sort?: string;
   }): Promise<FeedResponse> {
-    const { category, page = 1, limit = 12, userId } = options;
+    const { category, page = 1, limit = 12, userId, location, minRating, search, sort } = options;
     const skip = (page - 1) * limit;
 
     // Build query for portfolio items from PortfolioItem collection
     const portfolioItemQuery: any = { status: 'completed' };
     if (category) {
       portfolioItemQuery.category = category;
+    }
+    if (location) {
+      portfolioItemQuery.location = new RegExp(location, 'i');
+    }
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      portfolioItemQuery.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        { tags: searchRegex },
+      ];
     }
 
     // Build query for pro profiles with portfolioProjects
@@ -75,6 +90,12 @@ export class FeedService {
     };
     if (category) {
       proProfileQuery.categories = category;
+    }
+    if (minRating) {
+      proProfileQuery.avgRating = { $gte: minRating };
+    }
+    if (location) {
+      proProfileQuery.city = new RegExp(location, 'i');
     }
 
     // Fetch both portfolio items and pro profile embedded projects
@@ -196,9 +217,25 @@ export class FeedService {
       }
     }
 
-    // Merge and sort all feed items by date
-    const allFeedItems = [...portfolioFeedItems, ...embeddedFeedItems]
-      .sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+    // Merge and sort all feed items
+    let allFeedItems = [...portfolioFeedItems, ...embeddedFeedItems];
+
+    // Apply sorting based on sort parameter
+    if (sort === 'rating') {
+      // Sort by pro rating (highest first)
+      allFeedItems.sort((a, b) => (b.pro.rating || 0) - (a.pro.rating || 0));
+    } else if (sort === 'oldest') {
+      // Sort by date (oldest first)
+      allFeedItems.sort((a, b) => a.sortDate.getTime() - b.sortDate.getTime());
+    } else {
+      // Default: newest first
+      allFeedItems.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
+    }
+
+    // Filter by minRating if specified (for portfolio items with linked pro)
+    if (minRating) {
+      allFeedItems = allFeedItems.filter(item => (item.pro.rating || 0) >= minRating);
+    }
 
     // Apply pagination
     const total = allFeedItems.length;

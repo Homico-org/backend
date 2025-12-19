@@ -54,6 +54,7 @@ export class JobsController {
   @ApiQuery({ name: 'createdAfter', required: false, description: 'Jobs created after this date (ISO string)' })
   @ApiQuery({ name: 'createdBefore', required: false, description: 'Jobs created before this date (ISO string)' })
   @ApiQuery({ name: 'clientType', required: false, description: 'Filter by client type: individual or organization' })
+  @ApiQuery({ name: 'deadline', required: false, description: 'Deadline filter: urgent (< 7 days), week, month, flexible' })
   @ApiResponse({ status: 200, description: 'List of jobs with pagination' })
   findAllJobs(
     @Query('category') category?: string,
@@ -72,6 +73,7 @@ export class JobsController {
     @Query('createdAfter') createdAfter?: string,
     @Query('createdBefore') createdBefore?: string,
     @Query('clientType') clientType?: string,
+    @Query('deadline') deadline?: string,
   ) {
     return this.jobsService.findAllJobs({
       category,
@@ -90,6 +92,7 @@ export class JobsController {
       createdAfter: createdAfter ? new Date(createdAfter) : undefined,
       createdBefore: createdBefore ? new Date(createdBefore) : undefined,
       clientType,
+      deadline,
     });
   }
 
