@@ -86,8 +86,8 @@ export class ConversationService {
           senderId: convObj.lastMessageBy,
         } : null,
         unreadCount: isClient ? convObj.unreadCountClient : convObj.unreadCountPro,
-        createdAt: convObj.createdAt,
-        updatedAt: convObj.updatedAt,
+        createdAt: (convObj as any).createdAt,
+        updatedAt: (convObj as any).updatedAt,
       };
     });
   }

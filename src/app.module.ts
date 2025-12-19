@@ -23,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { LikesModule } from './likes/likes.module';
 import { FeedModule } from './feed/feed.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { FeedModule } from './feed/feed.module';
     AdminModule,
     LikesModule,
     FeedModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
