@@ -31,11 +31,31 @@ export class ConversationService {
   }
 
   async findByUser(userId: string, role: string): Promise<any[]> {
-    // Find all conversations where user is either client or pro
+    // Build query based on role
+    // For clients: clientId matches userId
+    // For pros: proId matches their proProfileId (need to look it up first)
+    let query: any = { clientId: userId };
+    let userProProfileId: string | null = null;
+
+    if (role === 'pro') {
+      // Look up the pro's profile ID
+      const proProfile = await this.proProfileModel.findOne({ userId }).exec();
+      if (proProfile) {
+        userProProfileId = proProfile._id.toString();
+        query = {
+          $or: [
+            { clientId: userId }, // In case they were a client in some conversations
+            { proId: proProfile._id }
+          ]
+        };
+      }
+    } else {
+      // Client can also have conversations where they're the client
+      query = { clientId: userId };
+    }
+
     const conversations = await this.conversationModel
-      .find({
-        $or: [{ clientId: userId }, { proId: userId }]
-      })
+      .find(query)
       .populate('clientId', 'name avatar email role')
       .populate({
         path: 'proId',
@@ -50,11 +70,14 @@ export class ConversationService {
     // Transform to include participant info
     return conversations.map(conv => {
       const convObj = conv.toObject();
-      const isClient = convObj.clientId?._id?.toString() === userId;
+
+      // Determine if current user is the client in this conversation
+      // They are client if clientId matches their userId
+      const isClientInConv = convObj.clientId?._id?.toString() === userId;
 
       // Determine the other participant
       let participant;
-      if (isClient) {
+      if (isClientInConv) {
         // Current user is client, participant is the pro
         const pro = convObj.proId as any;
         participant = {
@@ -66,7 +89,7 @@ export class ConversationService {
           proProfileId: pro?._id,
         };
       } else {
-        // Current user is pro, participant is the client
+        // Current user is pro (or the proId matches their profile), participant is the client
         const client = convObj.clientId as any;
         participant = {
           _id: client?._id,
@@ -85,7 +108,7 @@ export class ConversationService {
           createdAt: convObj.lastMessageAt,
           senderId: convObj.lastMessageBy,
         } : null,
-        unreadCount: isClient ? convObj.unreadCountClient : convObj.unreadCountPro,
+        unreadCount: isClientInConv ? convObj.unreadCountClient : convObj.unreadCountPro,
         createdAt: (convObj as any).createdAt,
         updatedAt: (convObj as any).updatedAt,
       };
