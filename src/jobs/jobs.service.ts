@@ -385,12 +385,23 @@ export class JobsService {
       .exec();
   }
 
-  async findMyProposals(proId: string): Promise<Proposal[]> {
-    return this.proposalModel
+  async findMyProposals(proId: string): Promise<any[]> {
+    const proposals = await this.proposalModel
       .find({ proId })
-      .populate('jobId')
+      .populate({
+        path: 'jobId',
+        populate: {
+          path: 'clientId',
+          model: 'User',
+          select: '_id name email avatar city phone accountType companyName'
+        }
+      })
       .sort({ createdAt: -1 })
+      .lean()
       .exec();
+
+    // Filter out proposals where the job has been deleted
+    return proposals.filter(p => p.jobId !== null);
   }
 
   async findMyProposalForJob(jobId: string, proId: string): Promise<Proposal | null> {

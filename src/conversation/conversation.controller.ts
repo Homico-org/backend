@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Param, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Param, Patch, Delete } from '@nestjs/common';
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ConversationService } from './conversation.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -64,6 +64,15 @@ export class ConversationController {
     @Param('id') id: string,
   ) {
     await this.conversationService.resetUnreadCount(id, user.role);
+    return { success: true };
+  }
+
+  @Delete(':id')
+  async deleteConversation(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+  ) {
+    await this.conversationService.deleteConversation(id, user.userId);
     return { success: true };
   }
 }

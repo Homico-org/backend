@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Conversation } from './schemas/conversation.schema';
@@ -237,5 +237,27 @@ export class ConversationService {
 
       return result[0]?.total || 0;
     }
+  }
+
+  async deleteConversation(conversationId: string, userId: string): Promise<void> {
+    const conversation = await this.conversationModel.findById(conversationId).exec();
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    // Check if user is part of this conversation
+    const isClient = conversation.clientId?.toString() === userId;
+    const isPro = conversation.proId?.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this conversation');
+    }
+
+    // Delete all messages in this conversation
+    await this.messageModel.deleteMany({ conversationId: new Types.ObjectId(conversationId) }).exec();
+
+    // Delete the conversation
+    await this.conversationModel.findByIdAndDelete(conversationId).exec();
   }
 }
