@@ -50,7 +50,7 @@ export class ContactFormDto {
   type: string;
 
   @IsOptional()
-  @IsEnum(['email', 'phone', 'idNumber'])
+  @IsEnum(['email', 'phone'])
   field?: string;
 
   @IsOptional()

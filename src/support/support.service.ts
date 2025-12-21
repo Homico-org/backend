@@ -15,7 +15,6 @@ export class SupportService {
     const fieldLabels: Record<string, string> = {
       email: 'Email',
       phone: 'Phone Number',
-      idNumber: 'ID Number',
     };
 
     const subject = contactFormDto.type === 'account_issue'

@@ -73,8 +73,11 @@ export class User extends Document {
   @Prop({ unique: true, sparse: true, lowercase: true })
   email: string;
 
-  @Prop({ required: true })
+  @Prop()
   password: string;
+
+  @Prop({ unique: true, sparse: true })
+  googleId: string;
 
   @Prop({
     type: String,
@@ -107,9 +110,6 @@ export class User extends Document {
 
   @Prop()
   companyName: string;
-
-  @Prop({ required: true, unique: true })
-  idNumber: string;
 
   @Prop({ default: true })
   isActive: boolean;
@@ -298,6 +298,7 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });
 UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
+UserSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 UserSchema.index({ categories: 1 });
 UserSchema.index({ subcategories: 1 });
 UserSchema.index({ serviceAreas: 1 });

@@ -65,6 +65,65 @@ export class UsersService {
     }).exec();
   }
 
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    return this.userModel.findOne({ googleId }).exec();
+  }
+
+  async createGoogleUser(data: {
+    googleId: string;
+    email: string;
+    name: string;
+    phone: string;
+    avatar?: string;
+    role?: string;
+    city?: string;
+    selectedCategories?: string[];
+    selectedSubcategories?: string[];
+    isPhoneVerified?: boolean;
+  }): Promise<User> {
+    // Check if user with same email or phone already exists
+    if (data.email) {
+      const existingByEmail = await this.userModel.findOne({ email: data.email });
+      if (existingByEmail) {
+        throw new ConflictException('User with this email already exists');
+      }
+    }
+
+    if (data.phone) {
+      const existingByPhone = await this.userModel.findOne({ phone: data.phone });
+      if (existingByPhone) {
+        throw new ConflictException('User with this phone number already exists');
+      }
+    }
+
+    // Check if googleId already exists
+    const existingByGoogleId = await this.userModel.findOne({ googleId: data.googleId });
+    if (existingByGoogleId) {
+      throw new ConflictException('User with this Google account already exists');
+    }
+
+    const uid = await this.generateNextUid();
+
+    const user = new this.userModel({
+      uid,
+      googleId: data.googleId,
+      email: data.email,
+      name: data.name,
+      phone: data.phone,
+      avatar: data.avatar,
+      role: data.role || 'client',
+      city: data.city,
+      selectedCategories: data.selectedCategories || [],
+      selectedSubcategories: data.selectedSubcategories || [],
+      isPhoneVerified: data.isPhoneVerified || false,
+      phoneVerifiedAt: data.isPhoneVerified ? new Date() : undefined,
+      isEmailVerified: true, // Google emails are verified
+      emailVerifiedAt: new Date(),
+    });
+
+    return user.save();
+  }
+
   async findById(id: string): Promise<User> {
     const user = await this.userModel.findById(id).exec();
 
@@ -111,7 +170,7 @@ export class UsersService {
     }));
   }
 
-  async checkExists(field: 'email' | 'phone' | 'idNumber', value: string): Promise<{ exists: boolean }> {
+  async checkExists(field: 'email' | 'phone', value: string): Promise<{ exists: boolean }> {
     let normalizedValue = value;
     if (field === 'email') {
       normalizedValue = value.toLowerCase();

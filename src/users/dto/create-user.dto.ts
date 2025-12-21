@@ -19,11 +19,6 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: '01234567890', description: 'Personal ID number (11 digits)' })
-  @IsString()
-  @IsNotEmpty()
-  idNumber: string;
-
   @ApiPropertyOptional({ enum: UserRole, example: UserRole.CLIENT, description: 'User role' })
   @IsEnum(UserRole)
   @IsOptional()

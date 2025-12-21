@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { GoogleRegisterDto } from './dto/google-register.dto';
 
 @Injectable()
 export class AuthService {
@@ -89,5 +90,72 @@ export class AuthService {
 
   async getDemoAccounts() {
     return this.usersService.getDemoAccounts();
+  }
+
+  async googleRegister(googleRegisterDto: GoogleRegisterDto) {
+    // Check if user already exists with this Google ID
+    const existingGoogleUser = await this.usersService.findByGoogleId(googleRegisterDto.googleId);
+    if (existingGoogleUser) {
+      // User already exists, log them in
+      await this.usersService.updateLastLogin(existingGoogleUser._id.toString());
+
+      const payload = {
+        sub: existingGoogleUser._id,
+        email: existingGoogleUser.email,
+        role: existingGoogleUser.role,
+      };
+
+      return {
+        access_token: this.jwtService.sign(payload),
+        user: {
+          id: existingGoogleUser._id,
+          uid: existingGoogleUser.uid,
+          name: existingGoogleUser.name,
+          email: existingGoogleUser.email,
+          phone: existingGoogleUser.phone,
+          role: existingGoogleUser.role,
+          avatar: existingGoogleUser.avatar,
+          city: existingGoogleUser.city,
+          selectedCategories: existingGoogleUser.selectedCategories || [],
+          selectedSubcategories: existingGoogleUser.selectedSubcategories || [],
+        },
+      };
+    }
+
+    // Create new user with Google data
+    const user = await this.usersService.createGoogleUser({
+      googleId: googleRegisterDto.googleId,
+      email: googleRegisterDto.email,
+      name: googleRegisterDto.name,
+      phone: googleRegisterDto.phone,
+      avatar: googleRegisterDto.picture,
+      role: googleRegisterDto.role,
+      city: googleRegisterDto.city,
+      selectedCategories: googleRegisterDto.selectedCategories,
+      selectedSubcategories: googleRegisterDto.selectedSubcategories,
+      isPhoneVerified: googleRegisterDto.isPhoneVerified,
+    });
+
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      role: user.role,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user._id,
+        uid: user.uid,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: user.avatar,
+        city: user.city,
+        selectedCategories: user.selectedCategories || [],
+        selectedSubcategories: user.selectedSubcategories || [],
+      },
+    };
   }
 }
