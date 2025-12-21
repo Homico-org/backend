@@ -15,6 +15,7 @@ async function bootstrap() {
     origin: [
       'http://localhost:3000',
       'https://homico-frontend.onrender.com',
+      'https://homico-frontend-dev.onrender.com',
       'https://app.homico.ge',
       'https://homico.ge',
       'https://www.homico.ge',
