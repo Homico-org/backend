@@ -28,6 +28,7 @@ export class JobsService {
   async findAllJobs(filters?: {
     category?: string;
     categories?: string[];
+    subcategories?: string[];
     location?: string;
     budgetMin?: number;
     budgetMax?: number;
@@ -66,6 +67,11 @@ export class JobsService {
       query.category = { $in: filters.categories };
     } else if (filters?.category) {
       query.category = filters.category;
+    }
+
+    // Filter by subcategories/skills - jobs must have at least one matching skill
+    if (filters?.subcategories && filters.subcategories.length > 0) {
+      query.skills = { $in: filters.subcategories };
     }
 
     if (filters?.location) {

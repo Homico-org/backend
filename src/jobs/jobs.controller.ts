@@ -41,7 +41,8 @@ export class JobsController {
   @Get()
   @ApiOperation({ summary: 'Get all jobs with optional filters' })
   @ApiQuery({ name: 'category', required: false })
-  @ApiQuery({ name: 'categories', required: false, description: 'Comma-separated list of categories' })
+  @ApiQuery({ name: 'categories', required: false, description: 'Comma-separated list or multiple params for categories' })
+  @ApiQuery({ name: 'subcategories', required: false, description: 'Comma-separated list or multiple params for subcategories/skills' })
   @ApiQuery({ name: 'location', required: false })
   @ApiQuery({ name: 'budgetMin', required: false })
   @ApiQuery({ name: 'budgetMax', required: false })
@@ -63,7 +64,8 @@ export class JobsController {
   findAllJobs(
     @CurrentUser() user: any,
     @Query('category') category?: string,
-    @Query('categories') categories?: string,
+    @Query('categories') categories?: string | string[],
+    @Query('subcategories') subcategories?: string | string[],
     @Query('location') location?: string,
     @Query('budgetMin') budgetMin?: string,
     @Query('budgetMax') budgetMax?: string,
@@ -81,9 +83,30 @@ export class JobsController {
     @Query('deadline') deadline?: string,
     @Query('savedOnly') savedOnly?: string,
   ) {
+    // Handle categories - can be array of params or comma-separated string
+    let categoriesArray: string[] | undefined;
+    if (categories) {
+      if (Array.isArray(categories)) {
+        categoriesArray = categories;
+      } else {
+        categoriesArray = categories.split(',').map(c => c.trim());
+      }
+    }
+
+    // Handle subcategories - can be array of params or comma-separated string
+    let subcategoriesArray: string[] | undefined;
+    if (subcategories) {
+      if (Array.isArray(subcategories)) {
+        subcategoriesArray = subcategories;
+      } else {
+        subcategoriesArray = subcategories.split(',').map(s => s.trim());
+      }
+    }
+
     return this.jobsService.findAllJobs({
       category,
-      categories: categories ? categories.split(',').map(c => c.trim()) : undefined,
+      categories: categoriesArray,
+      subcategories: subcategoriesArray,
       location,
       budgetMin: budgetMin ? parseFloat(budgetMin) : undefined,
       budgetMax: budgetMax ? parseFloat(budgetMax) : undefined,
