@@ -107,11 +107,12 @@ export class JobsController {
   @Get('my-jobs')
   @ApiOperation({ summary: 'Get my job postings' })
   @ApiBearerAuth('JWT-auth')
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: open, in_progress, completed, cancelled' })
   @ApiResponse({ status: 200, description: 'List of my jobs' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.PRO)
-  findMyJobs(@CurrentUser() user: any) {
-    return this.jobsService.findMyJobs(user.userId);
+  findMyJobs(@CurrentUser() user: any, @Query('status') status?: string) {
+    return this.jobsService.findMyJobs(user.userId, status);
   }
 
   @Get(':id')
@@ -141,7 +142,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job deleted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   async deleteJob(@Param('id') id: string, @CurrentUser() user: any) {
     await this.jobsService.deleteJob(id, user.userId);
     return { message: 'Job deleted successfully' };

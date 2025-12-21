@@ -241,7 +241,7 @@ export class JobsService {
   async findJobById(id: string): Promise<Job> {
     const job = await this.jobModel
       .findById(id)
-      .populate('clientId', 'name email avatar city phone')
+      .populate('clientId', '_id name email avatar city phone accountType companyName')
       .exec();
 
     if (!job) {
@@ -254,10 +254,26 @@ export class JobsService {
     return job;
   }
 
-  async findMyJobs(clientId: string): Promise<any[]> {
+  async findMyJobs(clientId: string, status?: string): Promise<any[]> {
     const { Types } = require('mongoose');
+
+    // Build query with optional status filter
+    const query: any = { clientId: new Types.ObjectId(clientId) };
+
+    if (status) {
+      if (status === 'closed') {
+        // 'closed' maps to completed or cancelled
+        query.status = { $in: ['completed', 'cancelled'] };
+      } else if (status === 'hired') {
+        // 'hired' maps to in_progress
+        query.status = 'in_progress';
+      } else {
+        query.status = status;
+      }
+    }
+
     const jobs = await this.jobModel
-      .find({ clientId: new Types.ObjectId(clientId) })
+      .find(query)
       .sort({ createdAt: -1 })
       .lean()
       .exec();
