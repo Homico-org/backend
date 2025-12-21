@@ -13,7 +13,7 @@ export class ProjectRequest extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'ProProfile' })
+  @Prop({ type: Types.ObjectId, ref: 'User' })
   proId: Types.ObjectId;
 
   @Prop({ required: true })

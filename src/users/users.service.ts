@@ -330,4 +330,252 @@ export class UsersService {
 
     return 'Card';
   }
+
+  // ============== PRO-RELATED METHODS ==============
+
+  // Location data
+  private readonly LOCATIONS_DATA = {
+    'Georgia': {
+      nationwide: 'Countrywide',
+      regions: {
+        'Tbilisi': ['Tbilisi', 'Rustavi', 'Mtskheta'],
+        'Adjara': ['Batumi', 'Kobuleti', 'Khelvachauri', 'Shuakhevi'],
+        'Imereti': ['Kutaisi', 'Zestaponi', 'Chiatura', 'Khoni', 'Samtredia'],
+        'Kvemo Kartli': ['Rustavi', 'Bolnisi', 'Gardabani', 'Marneuli', 'Tetritskaro'],
+        'Kakheti': ['Telavi', 'Gurjaani', 'Sighnaghi', 'Sagarejo', 'Dedoplistskaro'],
+        'Samegrelo-Zemo Svaneti': ['Zugdidi', 'Poti', 'Mestia', 'Senaki'],
+        'Shida Kartli': ['Gori', 'Kaspi', 'Kareli', 'Khashuri'],
+        'Samtskhe-Javakheti': ['Akhaltsikhe', 'Borjomi', 'Akhalkalaki', 'Ninotsminda'],
+        'Mtskheta-Mtianeti': ['Mtskheta', 'Dusheti', 'Tianeti', 'Kazbegi'],
+        'Racha-Lechkhumi': ['Ambrolauri', 'Oni', 'Tsageri', 'Lentekhi'],
+        'Guria': ['Ozurgeti', 'Lanchkhuti', 'Chokhatauri'],
+      },
+      emoji: '🇬🇪',
+    },
+  };
+
+  getLocations(country?: string) {
+    const targetCountry = country || 'Georgia';
+    if (this.LOCATIONS_DATA[targetCountry]) {
+      return {
+        country: targetCountry,
+        ...this.LOCATIONS_DATA[targetCountry],
+      };
+    }
+    return {
+      country: 'Georgia',
+      ...this.LOCATIONS_DATA['Georgia'],
+    };
+  }
+
+  async findAllPros(filters?: {
+    category?: string;
+    subcategory?: string;
+    serviceArea?: string;
+    minRating?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    search?: string;
+    sort?: string;
+    page?: number;
+    limit?: number;
+    companyIds?: string[];
+  }): Promise<{
+    data: User[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasMore: boolean;
+    };
+  }> {
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 6;
+    const skip = (page - 1) * limit;
+
+    // Build sort object - always sort premium first
+    let sortObj: any = {};
+    switch (filters?.sort) {
+      case 'rating':
+        sortObj = { isPremium: -1, avgRating: -1 };
+        break;
+      case 'reviews':
+        sortObj = { isPremium: -1, totalReviews: -1 };
+        break;
+      case 'price-low':
+        sortObj = { isPremium: -1, basePrice: 1 };
+        break;
+      case 'price-high':
+        sortObj = { isPremium: -1, basePrice: -1 };
+        break;
+      case 'newest':
+        sortObj = { isPremium: -1, createdAt: -1 };
+        break;
+      default: // 'recommended'
+        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1 };
+    }
+
+    // Build query - only role=pro
+    // Include pros where isAvailable is true OR not set (for backwards compatibility)
+    const query: any = {
+      role: 'pro',
+      $or: [
+        { isAvailable: true },
+        { isAvailable: { $exists: false } },
+      ],
+    };
+
+    if (filters?.category) {
+      query.categories = filters.category;
+    }
+
+    if (filters?.subcategory) {
+      query.subcategories = filters.subcategory;
+    }
+
+    if (filters?.serviceArea) {
+      query.serviceAreas = filters.serviceArea;
+    }
+
+    if (filters?.minRating) {
+      query.avgRating = { $gte: filters.minRating };
+    }
+
+    if (filters?.minPrice !== undefined) {
+      query.basePrice = { ...query.basePrice, $gte: filters.minPrice };
+    }
+
+    if (filters?.maxPrice !== undefined) {
+      query.basePrice = { ...query.basePrice, $lte: filters.maxPrice };
+    }
+
+    if (filters?.companyIds && filters.companyIds.length > 0) {
+      const { Types } = require('mongoose');
+      query.companyId = { $in: filters.companyIds.map(id => new Types.ObjectId(id)) };
+    }
+
+    if (filters?.search) {
+      const searchTerm = filters.search.trim();
+
+      if (searchTerm.startsWith('#')) {
+        const uidSearch = searchTerm.substring(1);
+        const uidNumber = parseInt(uidSearch, 10);
+        if (!isNaN(uidNumber)) {
+          query.uid = uidNumber;
+        }
+      } else {
+        const searchRegex = new RegExp(searchTerm, 'i');
+        query.$or = [
+          { name: searchRegex },
+          { title: searchRegex },
+          { tagline: searchRegex },
+          { description: searchRegex },
+          { categories: searchRegex },
+          { subcategories: searchRegex },
+          { companyName: searchRegex },
+        ];
+      }
+    }
+
+    const total = await this.userModel.countDocuments(query).exec();
+    const data = await this.userModel
+      .find(query)
+      .select('-password')
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limit)
+      .exec();
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    };
+  }
+
+  async findProById(id: string): Promise<User> {
+    const { Types } = require('mongoose');
+
+    // Check if id is a numeric UID (6-digit number starting with 1)
+    const isOnlyDigits = /^\d+$/.test(id);
+    const numericId = parseInt(id, 10);
+    const isNumericUid = isOnlyDigits && !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
+
+    let user: User | null = null;
+
+    if (isNumericUid) {
+      user = await this.userModel.findOne({ uid: numericId, role: 'pro' }).select('-password').exec();
+    } else if (Types.ObjectId.isValid(id)) {
+      user = await this.userModel.findOne({ _id: id, role: 'pro' }).select('-password').exec();
+    }
+
+    if (!user) {
+      throw new NotFoundException('Pro profile not found');
+    }
+
+    return user;
+  }
+
+  async updateRating(userId: string, newRating: number): Promise<void> {
+    const user = await this.findById(userId);
+    const totalReviews = (user.totalReviews || 0) + 1;
+    const currentRating = user.avgRating || 0;
+    const avgRating = (currentRating * (user.totalReviews || 0) + newRating) / totalReviews;
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      avgRating,
+      totalReviews,
+    });
+  }
+
+  async updateProProfile(userId: string, proData: any): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (user.role !== 'pro') {
+      throw new BadRequestException('Only pro users can update their pro profile');
+    }
+
+    // Update the pro-specific fields on the user document
+    const updateData: any = {};
+
+    // Pro profile fields
+    if (proData.title !== undefined) updateData.title = proData.title;
+    if (proData.bio !== undefined) updateData.bio = proData.bio;
+    if (proData.description !== undefined) updateData.description = proData.description;
+    if (proData.categories !== undefined) updateData.categories = proData.categories;
+    if (proData.subcategories !== undefined) updateData.subcategories = proData.subcategories;
+    if (proData.yearsExperience !== undefined) updateData.yearsExperience = proData.yearsExperience;
+    if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
+    if (proData.pricingModel !== undefined) updateData.pricingModel = proData.pricingModel;
+    if (proData.basePrice !== undefined) updateData.basePrice = proData.basePrice;
+    if (proData.maxPrice !== undefined) updateData.maxPrice = proData.maxPrice;
+    if (proData.serviceAreas !== undefined) updateData.serviceAreas = proData.serviceAreas;
+    if (proData.portfolioProjects !== undefined) updateData.portfolioProjects = proData.portfolioProjects;
+    if (proData.pinterestLinks !== undefined) updateData.pinterestLinks = proData.pinterestLinks;
+    if (proData.architectLicenseNumber !== undefined) updateData.architectLicenseNumber = proData.architectLicenseNumber;
+    if (proData.cadastralId !== undefined) updateData.cadastralId = proData.cadastralId;
+    if (proData.availability !== undefined) updateData.availability = proData.availability;
+    if (proData.isAvailable !== undefined) updateData.isAvailable = proData.isAvailable;
+    if (proData.profileType !== undefined) updateData.profileType = proData.profileType;
+
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true },
+    ).select('-password').exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    return updatedUser;
+  }
 }

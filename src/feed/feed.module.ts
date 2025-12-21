@@ -7,17 +7,12 @@ import {
   PortfolioItem,
   PortfolioItemSchema,
 } from '../portfolio/schemas/portfolio-item.schema';
-import {
-  ProProfile,
-  ProProfileSchema,
-} from '../pro-profile/schemas/pro-profile.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: PortfolioItem.name, schema: PortfolioItemSchema },
-      { name: ProProfile.name, schema: ProProfileSchema },
       { name: User.name, schema: UserSchema },
     ]),
     LikesModule,

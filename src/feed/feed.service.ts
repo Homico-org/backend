@@ -49,7 +49,6 @@ export interface FeedResponse {
 export class FeedService {
   constructor(
     @InjectModel('PortfolioItem') private portfolioModel: Model<any>,
-    @InjectModel('ProProfile') private proProfileModel: Model<any>,
     @InjectModel('User') private userModel: Model<any>,
     private likesService: LikesService,
   ) {}
@@ -84,46 +83,41 @@ export class FeedService {
       ];
     }
 
-    // Build query for pro profiles with portfolioProjects
-    const proProfileQuery: any = {
+    // Build query for pro users with portfolioProjects
+    const proUserQuery: any = {
+      role: 'pro',
       'portfolioProjects.0': { $exists: true }, // Has at least one portfolio project
     };
     if (category) {
-      proProfileQuery.categories = category;
+      proUserQuery.categories = category;
     }
     if (minRating) {
-      proProfileQuery.avgRating = { $gte: minRating };
+      proUserQuery.avgRating = { $gte: minRating };
     }
     if (location) {
-      proProfileQuery.city = new RegExp(location, 'i');
+      proUserQuery.city = new RegExp(location, 'i');
     }
 
-    // Fetch both portfolio items and pro profile embedded projects
-    const [portfolioItems, proProfilesWithProjects, portfolioItemTotal] = await Promise.all([
+    // Fetch both portfolio items and pro user embedded projects
+    const [portfolioItems, proUsersWithProjects, portfolioItemTotal] = await Promise.all([
       this.portfolioModel
         .find(portfolioItemQuery)
         .sort({ createdAt: -1 })
         .populate({
           path: 'proId',
-          select: 'title avgRating avatar userId categories',
-          populate: {
-            path: 'userId',
-            select: 'name avatar',
-          },
+          select: 'name title avgRating avatar categories',
         })
         .lean(),
-      this.proProfileModel
-        .find(proProfileQuery)
-        .select('title avgRating avatar userId categories portfolioProjects updatedAt')
-        .populate('userId', 'name avatar')
+      this.userModel
+        .find(proUserQuery)
+        .select('name title avgRating avatar categories portfolioProjects updatedAt')
         .lean(),
       this.portfolioModel.countDocuments(portfolioItemQuery),
     ]);
 
     // Transform PortfolioItem items to feed items
     const portfolioFeedItems: (FeedItem & { sortDate: Date })[] = portfolioItems.map((item) => {
-      const proProfile = item.proId;
-      const proUser = proProfile?.userId;
+      const proUser = item.proId;
       const itemId = item._id.toString();
 
       let type: FeedItem['type'] = 'portfolio';
@@ -141,13 +135,13 @@ export class FeedService {
         images: item.images || (item.imageUrl ? [item.imageUrl] : []),
         beforeImage: item.beforeImage,
         afterImage: item.afterImage,
-        category: item.category || proProfile?.categories?.[0] || '',
+        category: item.category || proUser?.categories?.[0] || '',
         pro: {
-          _id: proProfile?._id?.toString() || '',
+          _id: proUser?._id?.toString() || '',
           name: proUser?.name || 'Professional',
-          avatar: proProfile?.avatar || proUser?.avatar,
-          rating: proProfile?.avgRating || 0,
-          title: proProfile?.title,
+          avatar: proUser?.avatar,
+          rating: proUser?.avgRating || 0,
+          title: proUser?.title,
         },
         client: item.clientName
           ? {
@@ -167,10 +161,9 @@ export class FeedService {
 
     // Transform embedded portfolioProjects to feed items
     const embeddedFeedItems: (FeedItem & { sortDate: Date; likeTargetType?: string; likeTargetId?: string })[] = [];
-    for (const proProfile of proProfilesWithProjects) {
-      const proUser = proProfile.userId as any;
-      for (let i = 0; i < (proProfile.portfolioProjects || []).length; i++) {
-        const project = proProfile.portfolioProjects[i];
+    for (const proUser of proUsersWithProjects) {
+      for (let i = 0; i < (proUser.portfolioProjects || []).length; i++) {
+        const project = proUser.portfolioProjects[i];
         // Check for before/after pairs
         const hasBeforeAfter = project.beforeAfterPairs && project.beforeAfterPairs.length > 0;
         const firstPair = hasBeforeAfter ? project.beforeAfterPairs[0] : null;
@@ -184,35 +177,34 @@ export class FeedService {
         const hasValidObjectId = project._id && Types.ObjectId.isValid(project._id.toString());
         const projectIdString = project._id?.toString() || project.id;
 
-        // For embedded projects without valid ObjectIds, we'll use the proProfile._id for liking
-        // This allows users to "like" the pro's work, which will like the pro profile
+        // For embedded projects without valid ObjectIds, we'll use the user._id for liking
         const projectId = hasValidObjectId
           ? projectIdString
-          : `embedded-${proProfile._id.toString()}-${i}`;
+          : `embedded-${proUser._id.toString()}-${i}`;
 
         embeddedFeedItems.push({
           _id: projectId,
-          // For embedded projects, store the actual like target (the pro profile)
+          // For embedded projects, store the actual like target (the pro user)
           likeTargetType: hasValidObjectId ? 'portfolio_item' : 'pro_profile',
-          likeTargetId: hasValidObjectId ? projectIdString : proProfile._id.toString(),
+          likeTargetId: hasValidObjectId ? projectIdString : proUser._id.toString(),
           type,
           title: project.title || '',
           description: project.description,
           images: project.images || [],
           beforeImage: firstPair?.beforeImage,
           afterImage: firstPair?.afterImage,
-          category: proProfile.categories?.[0] || '',
+          category: proUser.categories?.[0] || '',
           pro: {
-            _id: proProfile._id?.toString() || '',
-            name: proUser?.name || 'Professional',
-            avatar: proProfile.avatar || proUser?.avatar,
-            rating: proProfile.avgRating || 0,
-            title: proProfile.title,
+            _id: proUser._id?.toString() || '',
+            name: proUser.name || 'Professional',
+            avatar: proUser.avatar,
+            rating: proUser.avgRating || 0,
+            title: proUser.title,
           },
           likeCount: 0,
           isLiked: false,
-          createdAt: proProfile.updatedAt || new Date(),
-          sortDate: new Date(proProfile.updatedAt || new Date()),
+          createdAt: proUser.updatedAt || new Date(),
+          sortDate: new Date(proUser.updatedAt || new Date()),
         });
       }
     }
@@ -337,6 +329,7 @@ export class FeedService {
     const { category, limit = 5 } = options;
 
     const query: any = {
+      role: 'pro',
       verificationStatus: 'verified',
       status: 'active',
     };
@@ -344,11 +337,11 @@ export class FeedService {
       query.categories = category;
     }
 
-    const pros = await this.proProfileModel
+    const pros = await this.userModel
       .find(query)
       .sort({ avgRating: -1, totalReviews: -1 })
       .limit(limit)
-      .populate('userId', 'name avatar')
+      .select('name avatar title categories avgRating createdAt')
       .lean();
 
     return pros.map((pro) => ({
@@ -359,8 +352,8 @@ export class FeedService {
       category: pro.categories?.[0] || '',
       pro: {
         _id: pro._id.toString(),
-        name: (pro.userId as any)?.name || 'Professional',
-        avatar: pro.avatar || (pro.userId as any)?.avatar,
+        name: pro.name || 'Professional',
+        avatar: pro.avatar,
         rating: pro.avgRating || 0,
         title: pro.title,
       },

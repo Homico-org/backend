@@ -9,7 +9,7 @@ export class Review extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'ProProfile', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   proId: Types.ObjectId;
 
   @Prop({ required: true, min: 1, max: 5 })

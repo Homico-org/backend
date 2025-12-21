@@ -1,7 +1,53 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsEnum, IsOptional, Min, IsBoolean, ValidateNested } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { PricingModel, ProStatus } from '../schemas/user.schema';
+
+class BeforeAfterPairDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  beforeImage: string;
+
+  @IsString()
+  afterImage: string;
+}
+
+class PortfolioProjectDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  title: string;
+
+  @IsString()
+  description: string;
+
+  @IsString()
+  @IsOptional()
+  location?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  images: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  videos?: string[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BeforeAfterPairDto)
+  @IsOptional()
+  beforeAfterPairs?: BeforeAfterPairDto[];
+}
 
 export class UpdateProfileDto {
+  // ============== BASIC USER FIELDS ==============
   @ApiPropertyOptional({ description: 'User display name' })
   @IsOptional()
   @IsString()
@@ -31,4 +77,180 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+
+  // ============== PRO-SPECIFIC FIELDS ==============
+  @ApiPropertyOptional({ description: 'Professional title' })
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @ApiPropertyOptional({ description: 'Company name' })
+  @IsString()
+  @IsOptional()
+  companyName?: string;
+
+  @ApiPropertyOptional({ description: 'Professional description/bio' })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Categories the pro works in' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  categories?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Selected subcategories/specializations',
+    example: ['interior', 'exterior', '3d-visualization'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  subcategories?: string[];
+
+  @ApiPropertyOptional({ description: 'Years of experience' })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  yearsExperience?: number;
+
+  @ApiPropertyOptional({ description: 'Service areas/cities' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  serviceAreas?: string[];
+
+  @ApiPropertyOptional({ description: 'Pricing model', enum: PricingModel })
+  @IsEnum(PricingModel)
+  @IsOptional()
+  pricingModel?: PricingModel;
+
+  @ApiPropertyOptional({ description: 'Base/minimum price' })
+  @IsNumber()
+  @IsOptional()
+  basePrice?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum price for price range' })
+  @IsNumber()
+  @IsOptional()
+  maxPrice?: number;
+
+  @ApiPropertyOptional({ description: 'Currency code' })
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
+  @ApiPropertyOptional({ description: 'Is available for work' })
+  @IsBoolean()
+  @IsOptional()
+  isAvailable?: boolean;
+
+  @ApiPropertyOptional({ description: 'Pro status', enum: ProStatus })
+  @IsEnum(ProStatus)
+  @IsOptional()
+  status?: ProStatus;
+
+  @ApiPropertyOptional({ description: 'Cover image URL' })
+  @IsString()
+  @IsOptional()
+  coverImage?: string;
+
+  @ApiPropertyOptional({ description: 'Certifications' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  certifications?: string[];
+
+  @ApiPropertyOptional({ description: 'Languages spoken' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  languages?: string[];
+
+  @ApiPropertyOptional({ description: 'Short tagline' })
+  @IsString()
+  @IsOptional()
+  tagline?: string;
+
+  @ApiPropertyOptional({ description: 'Bio/about text' })
+  @IsString()
+  @IsOptional()
+  bio?: string;
+
+  @ApiPropertyOptional({ description: 'Profile type (personal or company)' })
+  @IsString()
+  @IsOptional()
+  profileType?: string;
+
+  @ApiPropertyOptional({ description: 'Portfolio projects' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PortfolioProjectDto)
+  @IsOptional()
+  portfolioProjects?: PortfolioProjectDto[];
+
+  // Interior Designer specific fields
+  @ApiPropertyOptional({
+    description: 'Pinterest board/pin URLs for portfolio (Interior Designers)',
+    example: ['https://pinterest.com/user/board1', 'https://pinterest.com/pin/123'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  pinterestLinks?: string[];
+
+  @ApiPropertyOptional({ description: 'Portfolio image URLs (Interior Designers)' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  portfolioImages?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Design style (Interior Designers)',
+    example: 'Modern',
+  })
+  @IsString()
+  @IsOptional()
+  designStyle?: string;
+
+  @ApiPropertyOptional({
+    description: 'Design styles array (Interior Designers)',
+    example: ['modern', 'minimalist', 'scandinavian'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  designStyles?: string[];
+
+  // Architect specific fields
+  @ApiPropertyOptional({
+    description: 'Cadastral ID from Public Service Hall (Architects)',
+    example: '01.18.01.004.001',
+  })
+  @IsString()
+  @IsOptional()
+  cadastralId?: string;
+
+  @ApiPropertyOptional({ description: 'Professional architect license number' })
+  @IsString()
+  @IsOptional()
+  architectLicenseNumber?: string;
+
+  @ApiPropertyOptional({ description: 'References to completed building projects (Architects)' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  completedProjects?: string[];
+
+  @ApiPropertyOptional({ description: 'Availability options (e.g., weekdays, weekends, evenings)' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  availability?: string[];
+
+  @ApiPropertyOptional({ description: 'External completed jobs count' })
+  @IsNumber()
+  @IsOptional()
+  externalCompletedJobs?: number;
 }

@@ -13,7 +13,7 @@ export class Offer extends Document {
   @Prop({ type: Types.ObjectId, ref: 'ProjectRequest', required: true })
   projectRequestId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'ProProfile', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   proId: Types.ObjectId;
 
   @Prop({ required: true })

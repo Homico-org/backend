@@ -14,7 +14,7 @@ export enum ProjectStatus {
 
 @Schema({ timestamps: true })
 export class PortfolioItem extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'ProProfile', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   proId: Types.ObjectId;
 
   @Prop({ required: true })

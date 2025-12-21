@@ -5,7 +5,6 @@ import { User } from '../users/schemas/user.schema';
 import { Job } from '../jobs/schemas/job.schema';
 import { Proposal } from '../jobs/schemas/proposal.schema';
 import { SupportTicket } from '../support/schemas/support-ticket.schema';
-import { ProProfile } from '../pro-profile/schemas/pro-profile.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
 
 @Injectable()
@@ -15,7 +14,6 @@ export class AdminService {
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
-    @InjectModel(ProProfile.name) private proProfileModel: Model<ProProfile>,
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
   ) {}
 
@@ -50,7 +48,7 @@ export class AdminService {
       this.userModel.countDocuments({ createdAt: { $gte: startOfWeek } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfMonth } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
-      this.proProfileModel.countDocuments({ isVerified: true }),
+      this.userModel.countDocuments({ role: 'pro', verificationStatus: 'verified' }),
     ]);
 
     // Job stats

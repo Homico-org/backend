@@ -16,7 +16,9 @@ export class Proposal extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   proId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'ProProfile' })
+  // proProfileId is now deprecated - proId already references the User
+  // Keeping for backwards compatibility during migration
+  @Prop({ type: Types.ObjectId, ref: 'User' })
   proProfileId: Types.ObjectId;
 
   @Prop({ required: true })

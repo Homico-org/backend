@@ -4,14 +4,14 @@ import { ConversationService } from './conversation.service';
 import { ConversationController } from './conversation.controller';
 import { Conversation, ConversationSchema } from './schemas/conversation.schema';
 import { Message, MessageSchema } from '../message/schemas/message.schema';
-import { ProProfile, ProProfileSchema } from '../pro-profile/schemas/pro-profile.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Conversation.name, schema: ConversationSchema },
       { name: Message.name, schema: MessageSchema },
-      { name: ProProfile.name, schema: ProProfileSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [ConversationController],

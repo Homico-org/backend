@@ -5,7 +5,6 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { ProProfileModule } from './pro-profile/pro-profile.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { ProjectRequestModule } from './project-request/project-request.module';
 import { ConversationModule } from './conversation/conversation.module';
@@ -43,7 +42,6 @@ import { ChatModule } from './chat/chat.module';
     }),
     AuthModule,
     UsersModule,
-    ProProfileModule,
     PortfolioModule,
     ProjectRequestModule,
     ConversationModule,

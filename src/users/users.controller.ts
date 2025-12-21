@@ -6,9 +6,10 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -191,5 +192,99 @@ export class UsersController {
     @Body() dto: SetDefaultPaymentMethodDto,
   ) {
     return this.usersService.setDefaultPaymentMethod(user.userId, dto.paymentMethodId);
+  }
+
+  // ============== PRO-RELATED ENDPOINTS ==============
+  // These replace the old /pro-profiles endpoints
+
+  @Get('me/pro-profile')
+  @ApiOperation({ summary: 'Get current user pro profile' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Pro profile' })
+  @UseGuards(JwtAuthGuard)
+  async getMyProProfile(@CurrentUser() user: any) {
+    return this.usersService.findProById(user.userId);
+  }
+
+  @Post('me/pro-profile')
+  @ApiOperation({ summary: 'Create or update pro profile for current user' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Pro profile created/updated' })
+  @UseGuards(JwtAuthGuard)
+  async createOrUpdateProProfile(
+    @CurrentUser() user: any,
+    @Body() body: any,
+  ) {
+    return this.usersService.updateProProfile(user.userId, body);
+  }
+
+  @Patch('me/pro-profile')
+  @ApiOperation({ summary: 'Update pro profile for current user' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Pro profile updated' })
+  @UseGuards(JwtAuthGuard)
+  async updateProProfile(
+    @CurrentUser() user: any,
+    @Body() body: any,
+  ) {
+    return this.usersService.updateProProfile(user.userId, body);
+  }
+
+  @Get('pros/locations')
+  @ApiOperation({ summary: 'Get location data by country' })
+  @ApiQuery({ name: 'country', required: false })
+  @ApiResponse({ status: 200, description: 'Location data for country' })
+  getLocations(@Query('country') country?: string) {
+    return this.usersService.getLocations(country);
+  }
+
+  @Get('pros')
+  @ApiOperation({ summary: 'Get all pro users with optional filters and pagination' })
+  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'subcategory', required: false })
+  @ApiQuery({ name: 'serviceArea', required: false })
+  @ApiQuery({ name: 'minRating', required: false })
+  @ApiQuery({ name: 'minPrice', required: false })
+  @ApiQuery({ name: 'maxPrice', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by name, category, title, or description' })
+  @ApiQuery({ name: 'sort', required: false })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (1-indexed)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
+  @ApiQuery({ name: 'companyIds', required: false, description: 'Comma-separated company IDs to filter by' })
+  @ApiResponse({ status: 200, description: 'Paginated list of pro users' })
+  findAllPros(
+    @Query('category') category?: string,
+    @Query('subcategory') subcategory?: string,
+    @Query('serviceArea') serviceArea?: string,
+    @Query('minRating') minRating?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('companyIds') companyIds?: string,
+  ) {
+    return this.usersService.findAllPros({
+      category,
+      subcategory,
+      serviceArea,
+      minRating: minRating ? parseFloat(minRating) : undefined,
+      minPrice: minPrice ? parseFloat(minPrice) : undefined,
+      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+      search,
+      sort,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      companyIds: companyIds ? companyIds.split(',').filter(id => id.trim()) : undefined,
+    });
+  }
+
+  @Get('pros/:id')
+  @ApiOperation({ summary: 'Get pro user by ID or UID' })
+  @ApiResponse({ status: 200, description: 'Pro user profile' })
+  @ApiResponse({ status: 404, description: 'Pro not found' })
+  findProById(@Param('id') id: string) {
+    return this.usersService.findProById(id);
   }
 }

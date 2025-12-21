@@ -6,7 +6,6 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Job, JobSchema } from '../jobs/schemas/job.schema';
 import { Proposal, ProposalSchema } from '../jobs/schemas/proposal.schema';
 import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-ticket.schema';
-import { ProProfile, ProProfileSchema } from '../pro-profile/schemas/pro-profile.schema';
 import { Notification, NotificationSchema } from '../notifications/schemas/notification.schema';
 
 @Module({
@@ -16,7 +15,6 @@ import { Notification, NotificationSchema } from '../notifications/schemas/notif
       { name: Job.name, schema: JobSchema },
       { name: Proposal.name, schema: ProposalSchema },
       { name: SupportTicket.name, schema: SupportTicketSchema },
-      { name: ProProfile.name, schema: ProProfileSchema },
       { name: Notification.name, schema: NotificationSchema },
     ]),
   ],

@@ -3,13 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Review } from './schemas/review.schema';
 import { CreateReviewDto } from './dto/create-review.dto';
-import { ProProfileService } from '../pro-profile/pro-profile.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ReviewService {
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<Review>,
-    private proProfileService: ProProfileService,
+    private usersService: UsersService,
   ) {}
 
   async create(clientId: string, createReviewDto: CreateReviewDto): Promise<Review> {
@@ -29,7 +29,7 @@ export class ReviewService {
 
     await review.save();
 
-    await this.proProfileService.updateRating(
+    await this.usersService.updateRating(
       createReviewDto.proId,
       createReviewDto.rating,
     );

@@ -3,14 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Conversation } from './schemas/conversation.schema';
 import { Message } from '../message/schemas/message.schema';
-import { ProProfile } from '../pro-profile/schemas/pro-profile.schema';
+import { User } from '../users/schemas/user.schema';
 
 @Injectable()
 export class ConversationService {
   constructor(
     @InjectModel(Conversation.name) private conversationModel: Model<Conversation>,
     @InjectModel(Message.name) private messageModel: Model<Message>,
-    @InjectModel(ProProfile.name) private proProfileModel: Model<ProProfile>,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   async findOrCreate(clientId: string, proId: string, projectRequestId?: string): Promise<Conversation> {
@@ -33,33 +33,21 @@ export class ConversationService {
   async findByUser(userId: string, role: string): Promise<any[]> {
     // Build query based on role
     // For clients: clientId matches userId
-    // For pros: proId matches their proProfileId (need to look it up first)
-    let query: any = { clientId: userId };
-    let userProProfileId: string | null = null;
+    // For pros: proId matches userId (now proId IS the userId directly)
+    let query: any;
 
     if (role === 'pro') {
-      // Look up the pro's profile ID
-      // Handle userId stored as both ObjectId and string
-      const proProfile = await this.proProfileModel.findOne({
+      // Query for conversations where user is either client or pro
+      query = {
         $or: [
-          { userId: new Types.ObjectId(userId) },
-          { userId: userId }
+          { clientId: new Types.ObjectId(userId) },
+          { clientId: userId },
+          { proId: new Types.ObjectId(userId) },
+          { proId: userId }
         ]
-      }).exec();
-      if (proProfile) {
-        userProProfileId = proProfile._id.toString();
-        // Query for proId as both ObjectId and string (data may be stored inconsistently)
-        query = {
-          $or: [
-            { clientId: userId }, // In case they were a client in some conversations
-            { proId: proProfile._id },
-            { proId: proProfile._id.toString() }
-          ]
-        };
-      }
+      };
     } else {
-      // Client can also have conversations where they're the client
-      // Handle clientId stored as both ObjectId and string
+      // Client query
       query = {
         $or: [
           { clientId: new Types.ObjectId(userId) },
@@ -71,13 +59,7 @@ export class ConversationService {
     const conversations = await this.conversationModel
       .find(query)
       .populate('clientId', 'name avatar email role')
-      .populate({
-        path: 'proId',
-        populate: {
-          path: 'userId',
-          select: 'name avatar email role'
-        }
-      })
+      .populate('proId', 'name avatar email role title categories')
       .sort({ lastMessageAt: -1 })
       .exec();
 
@@ -86,7 +68,6 @@ export class ConversationService {
       const convObj = conv.toObject();
 
       // Determine if current user is the client in this conversation
-      // They are client if clientId matches their userId
       const isClientInConv = convObj.clientId?._id?.toString() === userId;
 
       // Determine the other participant
@@ -95,15 +76,14 @@ export class ConversationService {
         // Current user is client, participant is the pro
         const pro = convObj.proId as any;
         participant = {
-          _id: pro?.userId?._id || pro?._id,
-          name: pro?.userId?.name || 'Unknown Pro',
-          avatar: pro?.userId?.avatar || pro?.avatar,
+          _id: pro?._id,
+          name: pro?.name || 'Unknown Pro',
+          avatar: pro?.avatar,
           role: 'pro',
-          title: pro?.title || pro?.primaryCategory || '',
-          proProfileId: pro?._id,
+          title: pro?.title || pro?.categories?.[0] || '',
         };
       } else {
-        // Current user is pro (or the proId matches their profile), participant is the client
+        // Current user is pro, participant is the client
         const client = convObj.clientId as any;
         participant = {
           _id: client?._id,
@@ -133,13 +113,7 @@ export class ConversationService {
     return this.conversationModel
       .findById(conversationId)
       .populate('clientId', 'name avatar email role')
-      .populate({
-        path: 'proId',
-        populate: {
-          path: 'userId',
-          select: 'name avatar email role'
-        }
-      })
+      .populate('proId', 'name avatar email role title categories')
       .exec();
   }
 
@@ -173,20 +147,17 @@ export class ConversationService {
 
   async startConversation(senderId: string, recipientId: string, messageContent: string, senderRole: string): Promise<{ conversation: Conversation; message: Message }> {
     // Determine client and pro based on roles
-    // If sender is client, recipient should be pro (proProfileId)
-    // If sender is pro, recipient is the client (userId)
+    // Now both clientId and proId are direct user IDs
     let clientId: string;
     let proId: string;
 
     if (senderRole === 'client') {
       clientId = senderId;
-      proId = recipientId; // This should be proProfileId
+      proId = recipientId; // This is now the pro's userId directly
     } else {
       // Sender is pro - recipientId is client userId
       clientId = recipientId;
-      // Look up the sender's proProfileId
-      const proProfile = await this.proProfileModel.findOne({ userId: senderId }).exec();
-      proId = proProfile?._id?.toString() || senderId;
+      proId = senderId; // Pro's userId directly
     }
 
     // Find or create conversation
@@ -221,12 +192,10 @@ export class ConversationService {
 
     if (userRole === 'client') {
       clientId = userId;
-      proId = recipientId; // proProfileId
+      proId = recipientId; // Now directly the pro's userId
     } else {
       clientId = recipientId; // client userId
-      // Look up the sender's proProfileId
-      const proProfile = await this.proProfileModel.findOne({ userId: userId }).exec();
-      proId = proProfile?._id?.toString() || userId;
+      proId = userId; // Pro's userId directly
     }
 
     return this.findOrCreate(clientId, proId);
@@ -236,20 +205,11 @@ export class ConversationService {
     let query: any;
 
     if (role === 'pro') {
-      // Look up the pro's profile ID
-      const proProfile = await this.proProfileModel.findOne({
-        $or: [
-          { userId: new Types.ObjectId(userId) },
-          { userId: userId }
-        ]
-      }).exec();
-
-      if (!proProfile) return 0;
-
+      // For pro, count unread in conversations where they are the pro
       query = {
         $or: [
-          { proId: proProfile._id },
-          { proId: proProfile._id.toString() }
+          { proId: new Types.ObjectId(userId) },
+          { proId: userId }
         ]
       };
 

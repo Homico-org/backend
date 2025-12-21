@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export enum UserRole {
   CLIENT = 'client',
@@ -11,6 +11,20 @@ export enum UserRole {
 export enum AccountType {
   INDIVIDUAL = 'individual',
   ORGANIZATION = 'organization',
+}
+
+export enum PricingModel {
+  HOURLY = 'hourly',
+  DAILY = 'daily',
+  SQM = 'sqm',
+  PROJECT_BASED = 'project_based',
+  FROM = 'from',
+}
+
+export enum ProStatus {
+  ACTIVE = 'active',
+  BUSY = 'busy',
+  AWAY = 'away',
 }
 
 // Payment method embedded schema
@@ -28,6 +42,24 @@ export class PaymentMethod {
   // Common
   isDefault: boolean;
   createdAt: Date;
+}
+
+// Company subdocument schema for pro users
+export class Company {
+  name: string;
+  logo?: string;
+  role?: string;
+}
+
+// Portfolio project subdocument
+export class PortfolioProject {
+  id?: string;
+  title: string;
+  description: string;
+  location?: string;
+  images: string[];
+  videos?: string[];
+  beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
 }
 
 @Schema({ timestamps: true })
@@ -107,6 +139,158 @@ export class User extends Document {
   // Payment methods
   @Prop({ type: [Object], default: [] })
   paymentMethods: PaymentMethod[];
+
+  // ============== PRO-SPECIFIC FIELDS ==============
+  // These fields are populated when a user with role=pro updates their profile
+
+  @Prop({ type: Types.ObjectId, ref: 'Company' })
+  companyId: Types.ObjectId;
+
+  @Prop()
+  title: string;
+
+  @Prop()
+  description: string;
+
+  @Prop({ type: [String], default: [] })
+  categories: string[];
+
+  @Prop({ type: [String], default: [] })
+  subcategories: string[];
+
+  @Prop({ default: 0 })
+  yearsExperience: number;
+
+  @Prop({ type: [String], default: [] })
+  serviceAreas: string[];
+
+  @Prop({
+    type: String,
+    enum: Object.values(PricingModel),
+  })
+  pricingModel: PricingModel;
+
+  @Prop()
+  basePrice: number;
+
+  @Prop()
+  maxPrice: number;
+
+  @Prop()
+  currency: string;
+
+  @Prop({ default: 0 })
+  avgRating: number;
+
+  @Prop({ default: 0 })
+  totalReviews: number;
+
+  @Prop({ default: 0 })
+  completedJobs: number;
+
+  @Prop({ default: 0 })
+  externalCompletedJobs: number;
+
+  @Prop()
+  responseTime: string;
+
+  @Prop({ default: true })
+  isAvailable: boolean;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ProStatus),
+    default: ProStatus.ACTIVE,
+  })
+  status: ProStatus;
+
+  @Prop()
+  statusUpdatedAt: Date;
+
+  @Prop({ default: false })
+  statusAutoSuggested: boolean;
+
+  @Prop()
+  coverImage: string;
+
+  @Prop({ type: [String], default: [] })
+  certifications: string[];
+
+  @Prop({ type: [String], default: [] })
+  languages: string[];
+
+  @Prop()
+  tagline: string;
+
+  @Prop()
+  bio: string;
+
+  @Prop({ default: 'personal' })
+  profileType: string; // 'personal' or 'company'
+
+  @Prop({
+    type: [{
+      id: String,
+      title: String,
+      description: String,
+      location: String,
+      images: [String],
+      videos: [String],
+      beforeAfterPairs: [{ id: String, beforeImage: String, afterImage: String }]
+    }],
+    default: []
+  })
+  portfolioProjects: PortfolioProject[];
+
+  @Prop({ type: [{ name: String, logo: String, role: String }], default: [] })
+  companies: Company[];
+
+  // Interior Designer specific fields
+  @Prop({ type: [String], default: [] })
+  pinterestLinks: string[];
+
+  @Prop({ type: [String], default: [] })
+  portfolioImages: string[];
+
+  @Prop()
+  designStyle: string;
+
+  @Prop({ type: [String], default: [] })
+  designStyles: string[];
+
+  // Architect specific fields
+  @Prop()
+  cadastralId: string;
+
+  @Prop({ default: false })
+  cadastralVerified: boolean;
+
+  @Prop()
+  architectLicenseNumber: string;
+
+  @Prop({ type: [String], default: [] })
+  completedProjects: string[];
+
+  // Verification status
+  @Prop({ default: 'pending' })
+  verificationStatus: string;
+
+  @Prop()
+  verificationNotes: string;
+
+  // Premium status
+  @Prop({ default: false })
+  isPremium: boolean;
+
+  @Prop()
+  premiumExpiresAt: Date;
+
+  @Prop({ default: 'none' })
+  premiumTier: string;
+
+  // Availability (for home-care services)
+  @Prop({ type: [String], default: [] })
+  availability: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -114,3 +298,12 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });
 UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
+UserSchema.index({ categories: 1 });
+UserSchema.index({ subcategories: 1 });
+UserSchema.index({ serviceAreas: 1 });
+UserSchema.index({ avgRating: -1 });
+UserSchema.index({ isAvailable: 1 });
+UserSchema.index({ companyId: 1 });
+UserSchema.index({ companyName: 1 });
+UserSchema.index({ status: 1, avgRating: -1 });
+UserSchema.index({ isPremium: -1, avgRating: -1 });
