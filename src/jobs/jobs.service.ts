@@ -62,6 +62,11 @@ export class JobsService {
 
     const query: any = { status: filters?.status || JobStatus.OPEN };
 
+    // Exclude current user's own jobs (pros shouldn't see their own jobs)
+    if (filters?.userId) {
+      query.clientId = { $ne: new Types.ObjectId(filters.userId) };
+    }
+
     // Support filtering by multiple categories (for pro users with selected categories)
     if (filters?.categories && filters.categories.length > 0) {
       query.category = { $in: filters.categories };
@@ -351,6 +356,17 @@ export class JobsService {
     proProfileId: string,
     createProposalDto: CreateProposalDto,
   ): Promise<Proposal> {
+    // Check if job exists
+    const job = await this.jobModel.findById(jobId);
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // Prevent submitting proposal to own job
+    if (job.clientId.toString() === proId) {
+      throw new ForbiddenException('You cannot submit a proposal to your own job');
+    }
+
     // Check if already proposed
     const existingProposal = await this.proposalModel.findOne({ jobId, proId });
     if (existingProposal) {
