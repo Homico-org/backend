@@ -9,6 +9,8 @@ import {
   BadRequestException,
   NotFoundException,
   UseGuards,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -24,6 +26,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 @ApiTags('upload')
 @Controller('upload')
 export class UploadController {
+  private readonly logger = new Logger(UploadController.name);
+
   constructor(private readonly uploadService: UploadService) {}
 
   @Post()
@@ -47,7 +51,12 @@ export class UploadController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.uploadService.getFileInfo(file);
+    try {
+      return this.uploadService.getFileInfo(file);
+    } catch (error) {
+      this.logger.error('Upload failed:', error);
+      throw new InternalServerErrorException('Failed to process uploaded file');
+    }
   }
 
   @Post('public')

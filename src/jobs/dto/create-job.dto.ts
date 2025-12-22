@@ -117,15 +117,21 @@ export class CreateJobDto {
   @IsOptional()
   cadastralId?: string;
 
-  @ApiPropertyOptional({ description: 'Land plot size' })
-  @IsString()
+  @ApiPropertyOptional({ description: 'Land plot size in square meters' })
+  @IsNumber()
   @IsOptional()
-  landArea?: string;
+  landArea?: number;
 
   @ApiPropertyOptional({ description: 'Number of floors' })
   @IsNumber()
   @IsOptional()
   floorCount?: number;
+
+  // ====== WORK-SPECIFIC FIELDS ======
+  @ApiPropertyOptional({ description: 'Number of electrical/plumbing/lighting points' })
+  @IsNumber()
+  @IsOptional()
+  pointsCount?: number;
 
   @ApiPropertyOptional({ description: 'Project phase: concept, schematic, detailed, construction' })
   @IsString()

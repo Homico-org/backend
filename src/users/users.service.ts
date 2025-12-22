@@ -439,6 +439,7 @@ export class UsersService {
     page?: number;
     limit?: number;
     companyIds?: string[];
+    excludeUserId?: string;
   }): Promise<{
     data: User[];
     pagination: {
@@ -484,6 +485,12 @@ export class UsersService {
         { isAvailable: { $exists: false } },
       ],
     };
+
+    // Exclude current user from results
+    if (filters?.excludeUserId) {
+      const { Types } = require('mongoose');
+      query._id = { $ne: new Types.ObjectId(filters.excludeUserId) };
+    }
 
     if (filters?.category) {
       query.categories = filters.category;
@@ -636,5 +643,16 @@ export class UsersService {
     }
 
     return updatedUser;
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Delete the user document
+    await this.userModel.findByIdAndDelete(userId).exec();
   }
 }

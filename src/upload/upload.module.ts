@@ -5,6 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { mkdirSync, existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { UploadController } from './upload.controller';
 import { UploadService } from './upload.service';
@@ -65,9 +66,16 @@ import { UploadService } from './upload.service';
         }
 
         // Fallback to local disk storage for development
+        const uploadsDir = join(process.cwd(), 'uploads');
+
+        // Ensure uploads directory exists
+        if (!existsSync(uploadsDir)) {
+          mkdirSync(uploadsDir, { recursive: true });
+        }
+
         return {
           storage: diskStorage({
-            destination: join(process.cwd(), 'uploads'),
+            destination: uploadsDir,
             filename: (req, file, callback) => {
               const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
               callback(null, uniqueName);

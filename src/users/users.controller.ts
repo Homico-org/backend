@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AddCardPaymentMethodDto, AddBankPaymentMethodDto, SetDefaultPaymentMethodDto } from './dto/payment-method.dto';
@@ -252,7 +253,9 @@ export class UsersController {
   @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
   @ApiQuery({ name: 'companyIds', required: false, description: 'Comma-separated company IDs to filter by' })
   @ApiResponse({ status: 200, description: 'Paginated list of pro users' })
+  @UseGuards(OptionalJwtAuthGuard)
   findAllPros(
+    @CurrentUser() user: any,
     @Query('category') category?: string,
     @Query('subcategory') subcategory?: string,
     @Query('serviceArea') serviceArea?: string,
@@ -277,6 +280,7 @@ export class UsersController {
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       companyIds: companyIds ? companyIds.split(',').filter(id => id.trim()) : undefined,
+      excludeUserId: user?.userId,
     });
   }
 
@@ -286,5 +290,16 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'Pro not found' })
   findProById(@Param('id') id: string) {
     return this.usersService.findProById(id);
+  }
+
+  @Delete('me')
+  @ApiOperation({ summary: 'Delete current user account' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Account deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@CurrentUser() user: any) {
+    await this.usersService.deleteAccount(user.userId);
+    return { message: 'Account deleted successfully' };
   }
 }

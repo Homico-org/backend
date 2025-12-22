@@ -65,11 +65,15 @@ export class Job extends Document {
   @Prop({ type: String })
   cadastralId: string; // Cadastral registry ID
 
-  @Prop({ type: String })
-  landArea: string; // Land plot size
+  @Prop({ type: Number })
+  landArea: number; // Land plot size in square meters
 
   @Prop({ type: Number })
   floorCount: number; // Number of floors
+
+  // ====== WORK-SPECIFIC FIELDS ======
+  @Prop({ type: Number })
+  pointsCount: number; // Number of electrical/plumbing/lighting points
 
   @Prop({ type: String })
   projectPhase: string; // concept, schematic, detailed, construction
