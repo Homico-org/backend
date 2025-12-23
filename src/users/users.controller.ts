@@ -302,4 +302,56 @@ export class UsersController {
     await this.usersService.deleteAccount(user.userId);
     return { message: 'Account deleted successfully' };
   }
+
+  // ============== PRO PROFILE DEACTIVATION ==============
+
+  @Post('me/deactivate')
+  @ApiOperation({ summary: 'Temporarily deactivate pro profile' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Profile deactivated successfully' })
+  @ApiResponse({ status: 400, description: 'Only pro users can deactivate their profile' })
+  @ApiResponse({ status: 409, description: 'Profile is already deactivated' })
+  @UseGuards(JwtAuthGuard)
+  async deactivateProfile(
+    @CurrentUser() user: any,
+    @Body() body: { deactivateUntil?: string; reason?: string },
+  ) {
+    const deactivateUntil = body.deactivateUntil ? new Date(body.deactivateUntil) : undefined;
+    const updatedUser = await this.usersService.deactivateProProfile(
+      user.userId,
+      deactivateUntil,
+      body.reason,
+    );
+    return {
+      message: 'Profile deactivated successfully',
+      isProfileDeactivated: updatedUser.isProfileDeactivated,
+      deactivatedAt: updatedUser.deactivatedAt,
+      deactivatedUntil: updatedUser.deactivatedUntil,
+      deactivationReason: updatedUser.deactivationReason,
+    };
+  }
+
+  @Post('me/reactivate')
+  @ApiOperation({ summary: 'Reactivate pro profile' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Profile reactivated successfully' })
+  @ApiResponse({ status: 400, description: 'Only pro users can reactivate their profile' })
+  @ApiResponse({ status: 409, description: 'Profile is not deactivated' })
+  @UseGuards(JwtAuthGuard)
+  async reactivateProfile(@CurrentUser() user: any) {
+    const updatedUser = await this.usersService.reactivateProProfile(user.userId);
+    return {
+      message: 'Profile reactivated successfully',
+      isProfileDeactivated: updatedUser.isProfileDeactivated,
+    };
+  }
+
+  @Get('me/deactivation-status')
+  @ApiOperation({ summary: 'Get pro profile deactivation status' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Deactivation status' })
+  @UseGuards(JwtAuthGuard)
+  async getDeactivationStatus(@CurrentUser() user: any) {
+    return this.usersService.getDeactivationStatus(user.userId);
+  }
 }

@@ -474,6 +474,7 @@ export class JobsService {
     }
 
     proposal.status = ProposalStatus.ACCEPTED;
+    proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
     await proposal.save();
 
     // Update job status
@@ -571,5 +572,72 @@ export class JobsService {
     });
 
     return !!existing;
+  }
+
+  // Counter methods for header badges
+
+  // Get count of unviewed proposals for a client's jobs
+  async getUnviewedProposalsCount(clientId: string): Promise<number> {
+    const clientObjectId = new Types.ObjectId(clientId);
+
+    // First get all job IDs belonging to this client
+    const jobs = await this.jobModel
+      .find({ clientId: clientObjectId })
+      .select('_id')
+      .lean()
+      .exec();
+
+    const jobIds = jobs.map(j => j._id);
+
+    if (jobIds.length === 0) return 0;
+
+    // Count unviewed proposals for these jobs
+    const count = await this.proposalModel.countDocuments({
+      jobId: { $in: jobIds },
+      viewedByClient: false,
+      status: ProposalStatus.PENDING,
+    });
+
+    return count;
+  }
+
+  // Get count of proposals with status updates not yet viewed by pro
+  async getUnviewedProposalUpdatesCount(proId: string): Promise<number> {
+    const proObjectId = new Types.ObjectId(proId);
+
+    // Count proposals where status changed and pro hasn't viewed
+    const count = await this.proposalModel.countDocuments({
+      proId: proObjectId,
+      viewedByPro: false,
+      status: { $in: [ProposalStatus.ACCEPTED, ProposalStatus.REJECTED] },
+    });
+
+    return count;
+  }
+
+  // Mark proposals as viewed by client (when they view job proposals)
+  async markProposalsAsViewedByClient(jobId: string, clientId: string): Promise<void> {
+    const job = await this.jobModel.findById(jobId);
+
+    if (!job || job.clientId.toString() !== clientId) {
+      return; // Silently return if not authorized
+    }
+
+    await this.proposalModel.updateMany(
+      { jobId: new Types.ObjectId(jobId), viewedByClient: false },
+      { viewedByClient: true }
+    );
+  }
+
+  // Mark proposal updates as viewed by pro (when they view their proposals)
+  async markProposalUpdatesAsViewedByPro(proId: string): Promise<void> {
+    await this.proposalModel.updateMany(
+      {
+        proId: new Types.ObjectId(proId),
+        viewedByPro: false,
+        status: { $in: [ProposalStatus.ACCEPTED, ProposalStatus.REJECTED] }
+      },
+      { viewedByPro: true }
+    );
   }
 }

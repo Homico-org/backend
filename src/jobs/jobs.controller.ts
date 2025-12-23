@@ -282,4 +282,47 @@ export class JobsController {
   getSavedJobIds(@CurrentUser() user: any) {
     return this.jobsService.getSavedJobIds(user.userId);
   }
+
+  // Header counter endpoints
+  @Get('counters/unviewed-proposals')
+  @ApiOperation({ summary: 'Get count of unviewed proposals on my jobs (for clients)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Count of unviewed proposals' })
+  @UseGuards(JwtAuthGuard)
+  async getUnviewedProposalsCount(@CurrentUser() user: any) {
+    const count = await this.jobsService.getUnviewedProposalsCount(user.userId);
+    return { count };
+  }
+
+  @Get('counters/proposal-updates')
+  @ApiOperation({ summary: 'Get count of proposal status updates not viewed by pro' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Count of proposal updates' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async getProposalUpdatesCount(@CurrentUser() user: any) {
+    const count = await this.jobsService.getUnviewedProposalUpdatesCount(user.userId);
+    return { count };
+  }
+
+  @Post('counters/mark-proposals-viewed/:jobId')
+  @ApiOperation({ summary: 'Mark proposals as viewed by client for a specific job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposals marked as viewed' })
+  @UseGuards(JwtAuthGuard)
+  async markProposalsAsViewed(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    await this.jobsService.markProposalsAsViewedByClient(jobId, user.userId);
+    return { success: true };
+  }
+
+  @Post('counters/mark-proposal-updates-viewed')
+  @ApiOperation({ summary: 'Mark all proposal updates as viewed by pro' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal updates marked as viewed' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async markProposalUpdatesAsViewed(@CurrentUser() user: any) {
+    await this.jobsService.markProposalUpdatesAsViewedByPro(user.userId);
+    return { success: true };
+  }
 }

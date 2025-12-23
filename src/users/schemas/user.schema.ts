@@ -291,6 +291,23 @@ export class User extends Document {
   // Availability (for home-care services)
   @Prop({ type: [String], default: [] })
   availability: string[];
+
+  // Pro profile completion status (set to true when pro completes profile setup)
+  @Prop({ default: false })
+  isProfileCompleted: boolean;
+
+  // Pro Profile Deactivation (temporary pause)
+  @Prop({ default: false })
+  isProfileDeactivated: boolean;
+
+  @Prop()
+  deactivatedAt: Date;
+
+  @Prop()
+  deactivatedUntil: Date;
+
+  @Prop()
+  deactivationReason: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

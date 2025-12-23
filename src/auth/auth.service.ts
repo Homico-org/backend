@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
@@ -118,8 +118,15 @@ export class AuthService {
           city: existingGoogleUser.city,
           selectedCategories: existingGoogleUser.selectedCategories || [],
           selectedSubcategories: existingGoogleUser.selectedSubcategories || [],
+          accountType: existingGoogleUser.accountType || 'individual',
+          companyName: existingGoogleUser.companyName,
         },
       };
+    }
+
+    // For new registrations, phone is required
+    if (!googleRegisterDto.phone) {
+      throw new BadRequestException('Phone number is required for new registrations. Please register first.');
     }
 
     // Create new user with Google data

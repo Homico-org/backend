@@ -23,10 +23,10 @@ export class GoogleRegisterDto {
   @IsOptional()
   picture?: string;
 
-  @ApiProperty({ example: '+995555123456', description: 'Phone number (verified via OTP)' })
+  @ApiPropertyOptional({ example: '+995555123456', description: 'Phone number (verified via OTP) - required only for new registrations' })
   @IsString()
-  @IsNotEmpty()
-  phone: string;
+  @IsOptional()
+  phone?: string;
 
   @ApiPropertyOptional({ enum: UserRole, example: UserRole.CLIENT, description: 'User role' })
   @IsEnum(UserRole)

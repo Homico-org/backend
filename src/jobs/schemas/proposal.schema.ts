@@ -45,6 +45,14 @@ export class Proposal extends Document {
 
   @Prop({ type: Date })
   revealedAt: Date;
+
+  // Track if the client has seen this proposal
+  @Prop({ type: Boolean, default: false })
+  viewedByClient: boolean;
+
+  // Track if the pro has seen the status update (when accepted/rejected)
+  @Prop({ type: Boolean, default: true })
+  viewedByPro: boolean;
 }
 
 export const ProposalSchema = SchemaFactory.createForClass(Proposal);

@@ -478,11 +478,36 @@ export class UsersService {
 
     // Build query - only role=pro
     // Include pros where isAvailable is true OR not set (for backwards compatibility)
+    // Exclude deactivated profiles
+    // Only show pros with completed profiles
     const query: any = {
       role: 'pro',
-      $or: [
-        { isAvailable: true },
-        { isAvailable: { $exists: false } },
+      $and: [
+        {
+          $or: [
+            { isAvailable: true },
+            { isAvailable: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { isProfileDeactivated: false },
+            { isProfileDeactivated: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { isProfileCompleted: true },
+            // For backwards compatibility: consider profiles without this field as complete if they have basic data
+            {
+              $and: [
+                { isProfileCompleted: { $exists: false } },
+                { categories: { $exists: true, $ne: [] } },
+                { $or: [{ bio: { $exists: true, $ne: '' } }, { description: { $exists: true, $ne: '' } }] },
+              ],
+            },
+          ],
+        },
       ],
     };
 
@@ -632,6 +657,17 @@ export class UsersService {
     if (proData.isAvailable !== undefined) updateData.isAvailable = proData.isAvailable;
     if (proData.profileType !== undefined) updateData.profileType = proData.profileType;
 
+    // Check if profile has required fields to be considered complete
+    // Required: bio/description, categories, serviceAreas
+    const hasRequiredFields =
+      (proData.bio || proData.description || user.bio || user.description) &&
+      ((proData.categories && proData.categories.length > 0) || (user.categories && user.categories.length > 0)) &&
+      ((proData.serviceAreas && proData.serviceAreas.length > 0) || (user.serviceAreas && user.serviceAreas.length > 0));
+
+    if (hasRequiredFields) {
+      updateData.isProfileCompleted = true;
+    }
+
     const updatedUser = await this.userModel.findByIdAndUpdate(
       userId,
       { $set: updateData },
@@ -654,5 +690,103 @@ export class UsersService {
 
     // Delete the user document
     await this.userModel.findByIdAndDelete(userId).exec();
+  }
+
+  // ============== PRO PROFILE DEACTIVATION ==============
+
+  async deactivateProProfile(
+    userId: string,
+    deactivateUntil?: Date,
+    reason?: string,
+  ): Promise<User> {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'pro') {
+      throw new BadRequestException('Only pro users can deactivate their profile');
+    }
+
+    if (user.isProfileDeactivated) {
+      throw new ConflictException('Profile is already deactivated');
+    }
+
+    const updateData: any = {
+      isProfileDeactivated: true,
+      deactivatedAt: new Date(),
+      isAvailable: false,
+    };
+
+    if (deactivateUntil) {
+      updateData.deactivatedUntil = deactivateUntil;
+    }
+
+    if (reason) {
+      updateData.deactivationReason = reason;
+    }
+
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true },
+    ).select('-password').exec();
+
+    return updatedUser;
+  }
+
+  async reactivateProProfile(userId: string): Promise<User> {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role !== 'pro') {
+      throw new BadRequestException('Only pro users can reactivate their profile');
+    }
+
+    if (!user.isProfileDeactivated) {
+      throw new ConflictException('Profile is not deactivated');
+    }
+
+    const updatedUser = await this.userModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          isProfileDeactivated: false,
+          isAvailable: true,
+        },
+        $unset: {
+          deactivatedAt: 1,
+          deactivatedUntil: 1,
+          deactivationReason: 1,
+        },
+      },
+      { new: true },
+    ).select('-password').exec();
+
+    return updatedUser;
+  }
+
+  async getDeactivationStatus(userId: string): Promise<{
+    isDeactivated: boolean;
+    deactivatedAt?: Date;
+    deactivatedUntil?: Date;
+    reason?: string;
+  }> {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      isDeactivated: user.isProfileDeactivated || false,
+      deactivatedAt: user.deactivatedAt,
+      deactivatedUntil: user.deactivatedUntil,
+      reason: user.deactivationReason,
+    };
   }
 }
