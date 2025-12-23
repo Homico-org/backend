@@ -22,8 +22,8 @@ const targetEnv = args[0] || 'prod';
 
 // Database URIs
 const DB_URIS: Record<string, string> = {
-  prod: process.env.MONGODB_URI || '',
-  dev: process.env.MONGODB_URI?.replace('/homi?', '/homi-dev?') || ''
+  prod: process.env.MONGODB_URI?.replace('/homi?', '/homi_prod?') || '',  // Production uses homi_prod
+  dev: process.env.MONGODB_URI?.replace('/homi?', '/homi_dev?') || ''     // Dev uses homi_dev
 };
 
 const MONGODB_URI = DB_URIS[targetEnv] || DB_URIS.prod;
