@@ -48,4 +48,12 @@ export class MessageController {
   ) {
     return this.messageService.markAllAsRead(conversationId, user.userId);
   }
+
+  @Patch('conversation/:conversationId/delivered')
+  markAsDelivered(
+    @CurrentUser() user: any,
+    @Param('conversationId') conversationId: string,
+  ) {
+    return this.messageService.markAsDelivered(conversationId, user.userId);
+  }
 }

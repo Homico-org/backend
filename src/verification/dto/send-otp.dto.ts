@@ -54,20 +54,36 @@ export enum OtpPurpose {
 
 export class ForgotPasswordDto {
   @ApiProperty({
-    description: 'Email address to send password reset OTP',
-    example: 'user@example.com',
+    description: 'Phone number to send password reset OTP',
+    example: '+995555123456',
   })
-  @IsEmail()
-  email: string;
+  @IsString()
+  phone: string;
+}
+
+export class VerifyResetCodeDto {
+  @ApiProperty({
+    description: 'Phone number that received the OTP',
+    example: '+995555123456',
+  })
+  @IsString()
+  phone: string;
+
+  @ApiProperty({
+    description: 'OTP code received',
+    example: '123456',
+  })
+  @IsString()
+  code: string;
 }
 
 export class ResetPasswordDto {
   @ApiProperty({
-    description: 'Email address that received the OTP',
-    example: 'user@example.com',
+    description: 'Phone number that received the OTP',
+    example: '+995555123456',
   })
-  @IsEmail()
-  email: string;
+  @IsString()
+  phone: string;
 
   @ApiProperty({
     description: 'OTP code received',

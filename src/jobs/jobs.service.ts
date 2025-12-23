@@ -1,11 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Job, JobStatus, JobPropertyType } from './schemas/job.schema';
-import { Proposal, ProposalStatus } from './schemas/proposal.schema';
-import { SavedJob } from './schemas/saved-job.schema';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
+import { Job, JobPropertyType, JobStatus } from './schemas/job.schema';
+import { Proposal, ProposalStatus } from './schemas/proposal.schema';
+import { SavedJob } from './schemas/saved-job.schema';
 
 @Injectable()
 export class JobsService {
@@ -256,7 +256,7 @@ export class JobsService {
       .exec();
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
     // Increment view count
@@ -324,11 +324,11 @@ export class JobsService {
     const job = await this.jobModel.findById(id);
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
     if (job.clientId.toString() !== clientId) {
-      throw new ForbiddenException('You can only update your own jobs');
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების განახლება');
     }
 
     return this.jobModel.findByIdAndUpdate(id, updateData, { new: true }).exec();
@@ -338,11 +338,11 @@ export class JobsService {
     const job = await this.jobModel.findById(id);
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
     if (job.clientId.toString() !== clientId) {
-      throw new ForbiddenException('You can only delete your own jobs');
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების წაშლა');
     }
 
     await this.jobModel.findByIdAndDelete(id);
@@ -359,18 +359,18 @@ export class JobsService {
     // Check if job exists
     const job = await this.jobModel.findById(jobId);
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
     // Prevent submitting proposal to own job
     if (job.clientId.toString() === proId) {
-      throw new ForbiddenException('You cannot submit a proposal to your own job');
+      throw new ForbiddenException('საკუთარ თავს ვერ გაუგზავნით წინადადებას');
     }
 
     // Check if already proposed
     const existingProposal = await this.proposalModel.findOne({ jobId, proId });
     if (existingProposal) {
-      throw new ForbiddenException('You have already submitted a proposal for this job');
+      throw new ForbiddenException('წინადადება უკვე გაგზავნილია ამ სამუშაოზე');
     }
 
     const proposal = new this.proposalModel({
@@ -396,7 +396,7 @@ export class JobsService {
     }
 
     if (job.clientId.toString() !== clientId) {
-      throw new ForbiddenException('You can only view proposals for your own jobs');
+      throw new ForbiddenException('თქვენ შეგიძლიათ გაეცნოთ მხოლოდ თქვენი სამუშაოების წინადადებებს');
     }
 
     return this.proposalModel
@@ -444,7 +444,7 @@ export class JobsService {
 
     const job = proposal.jobId as any;
     if (job.clientId.toString() !== clientId) {
-      throw new ForbiddenException('You can only reveal contact for your own jobs');
+      throw new ForbiddenException('თქვენ შეგიძლიათ გაეცნოთ მხოლოდ თქვენი სამუშაოების წინადადებებს');
     }
 
     proposal.contactRevealed = true;
@@ -470,7 +470,7 @@ export class JobsService {
 
     const job = proposal.jobId as any;
     if (job.clientId.toString() !== clientId) {
-      throw new ForbiddenException('You can only accept proposals for your own jobs');
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების წინადადებებს მიღებოთ');
     }
 
     proposal.status = ProposalStatus.ACCEPTED;
@@ -493,15 +493,15 @@ export class JobsService {
     }
 
     if (proposal.proId.toString() !== proId) {
-      throw new ForbiddenException('You can only withdraw your own proposals');
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი წინადადებების გაუქმებას გაეცნოთ');
     }
 
     if (proposal.status === ProposalStatus.WITHDRAWN) {
-      throw new ForbiddenException('Proposal is already withdrawn');
+      throw new ForbiddenException('წინადადება უკვე გაუქმდა');
     }
 
     if (proposal.status === ProposalStatus.ACCEPTED) {
-      throw new ForbiddenException('Cannot withdraw an accepted proposal');
+      throw new ForbiddenException('წინადადება უკვე მიღებულია');
     }
 
     proposal.status = ProposalStatus.WITHDRAWN;
@@ -518,7 +518,7 @@ export class JobsService {
     // Check if job exists
     const job = await this.jobModel.findById(jobObjectId);
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
     // Check if already saved

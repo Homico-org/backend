@@ -260,4 +260,16 @@ export class ConversationService {
     // Delete the conversation
     await this.conversationModel.findByIdAndDelete(conversationId).exec();
   }
+
+  // Find all conversations for a user (used for marking messages as delivered)
+  async findByUserId(userId: string): Promise<Conversation[]> {
+    return this.conversationModel.find({
+      $or: [
+        { clientId: new Types.ObjectId(userId) },
+        { clientId: userId },
+        { proId: new Types.ObjectId(userId) },
+        { proId: userId },
+      ],
+    }).exec();
+  }
 }

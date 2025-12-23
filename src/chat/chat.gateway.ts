@@ -127,4 +127,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   isUserOnline(userId: string): boolean {
     return this.connectedUsers.has(userId);
   }
+
+  // Method to emit message status update to conversation participants
+  emitMessageStatusUpdate(conversationId: string, messageIds: string[], status: string) {
+    this.server.to(`conversation:${conversationId}`).emit('messageStatusUpdate', {
+      conversationId,
+      messageIds,
+      status,
+    });
+  }
 }

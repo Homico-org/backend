@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Message } from './schemas/message.schema';
+import { Model, Types } from 'mongoose';
+import { Message, MessageStatus } from './schemas/message.schema';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { ConversationService } from '../conversation/conversation.service';
 import { ChatGateway } from '../chat/chat.gateway';
@@ -87,16 +87,100 @@ export class MessageService {
   }
 
   async markAllAsRead(conversationId: string, userId: string): Promise<void> {
+    const now = new Date();
+
+    // Find messages that need status update (to emit socket events)
+    const messagesToUpdate = await this.messageModel.find({
+      conversationId: new Types.ObjectId(conversationId),
+      senderId: { $ne: new Types.ObjectId(userId) },
+      status: { $ne: MessageStatus.READ },
+    }).select('_id senderId').lean();
+
+    // Update messages to read status
     await this.messageModel.updateMany(
       {
-        conversationId,
-        senderId: { $ne: userId },
+        conversationId: new Types.ObjectId(conversationId),
+        senderId: { $ne: new Types.ObjectId(userId) },
         isRead: false,
       },
       {
         isRead: true,
-        readAt: new Date(),
+        readAt: now,
+        status: MessageStatus.READ,
       }
     );
+
+    // Emit status update events to the original senders
+    if (messagesToUpdate.length > 0) {
+      const messageIds = messagesToUpdate.map(m => m._id.toString());
+      // Get unique sender IDs
+      const senderIds = [...new Set(messagesToUpdate.map(m => m.senderId.toString()))];
+
+      // Emit to conversation room for real-time update
+      this.chatGateway.emitMessageStatusUpdate(conversationId, messageIds, MessageStatus.READ);
+
+      // Also emit to each sender directly
+      senderIds.forEach(senderId => {
+        this.chatGateway.emitToUser(senderId, 'messageStatusUpdate', {
+          conversationId,
+          messageIds,
+          status: MessageStatus.READ,
+        });
+      });
+    }
+  }
+
+  // Mark messages as delivered when recipient connects or opens conversation
+  async markAsDelivered(conversationId: string, recipientId: string): Promise<void> {
+    const now = new Date();
+
+    // Find messages that need to be marked as delivered
+    const messagesToUpdate = await this.messageModel.find({
+      conversationId: new Types.ObjectId(conversationId),
+      senderId: { $ne: new Types.ObjectId(recipientId) },
+      status: MessageStatus.SENT,
+    }).select('_id senderId').lean();
+
+    if (messagesToUpdate.length === 0) return;
+
+    // Update messages to delivered status
+    await this.messageModel.updateMany(
+      {
+        conversationId: new Types.ObjectId(conversationId),
+        senderId: { $ne: new Types.ObjectId(recipientId) },
+        status: MessageStatus.SENT,
+      },
+      {
+        status: MessageStatus.DELIVERED,
+        deliveredAt: now,
+      }
+    );
+
+    const messageIds = messagesToUpdate.map(m => m._id.toString());
+    const senderIds = [...new Set(messagesToUpdate.map(m => m.senderId.toString()))];
+
+    // Emit status update to conversation room
+    this.chatGateway.emitMessageStatusUpdate(conversationId, messageIds, MessageStatus.DELIVERED);
+
+    // Also emit to each sender directly
+    senderIds.forEach(senderId => {
+      this.chatGateway.emitToUser(senderId, 'messageStatusUpdate', {
+        conversationId,
+        messageIds,
+        status: MessageStatus.DELIVERED,
+      });
+    });
+  }
+
+  // Mark all pending messages as delivered for a user (when they come online)
+  async markAllUserMessagesAsDelivered(userId: string): Promise<void> {
+    const now = new Date();
+
+    // Get all conversations for this user
+    const conversations = await this.conversationService.findByUserId(userId);
+
+    for (const conversation of conversations) {
+      await this.markAsDelivered(conversation._id.toString(), userId);
+    }
   }
 }

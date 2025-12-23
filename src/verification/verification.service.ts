@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Otp, OtpType, OtpPurpose } from './schemas/otp.schema';
-import { SendOtpDto, VerifyOtpDto, ForgotPasswordDto, ResetPasswordDto } from './dto/send-otp.dto';
+import { SendOtpDto, VerifyOtpDto, ForgotPasswordDto, ResetPasswordDto, VerifyResetCodeDto } from './dto/send-otp.dto';
 import { EmailService } from './services/email.service';
 import { SmsService } from './services/sms.service';
 import { User } from '../users/schemas/user.schema';
@@ -157,20 +157,19 @@ export class VerificationService {
     });
   }
 
-  // Password reset methods
+  // Password reset methods (phone-based)
   async sendPasswordResetOtp(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string; expiresIn: number }> {
-    const { email } = forgotPasswordDto;
-    const normalizedEmail = email.toLowerCase();
+    const { phone } = forgotPasswordDto;
 
-    // Check if user exists
-    const user = await this.userModel.findOne({ email: normalizedEmail });
+    // Check if user exists with this phone
+    const user = await this.userModel.findOne({ phone });
     if (!user) {
-      throw new NotFoundException('No account found with this email address');
+      throw new NotFoundException('No account found with this phone number');
     }
 
-    // Check rate limiting - max 3 password reset OTPs per email in 10 minutes
+    // Check rate limiting - max 3 password reset OTPs per phone in 10 minutes
     const recentOtps = await this.otpModel.countDocuments({
-      identifier: normalizedEmail,
+      identifier: phone,
       purpose: OtpPurpose.PASSWORD_RESET,
       createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) },
     });
@@ -179,85 +178,88 @@ export class VerificationService {
       throw new BadRequestException('Too many password reset requests. Please try again later.');
     }
 
-    // Invalidate any existing unused password reset OTPs for this email
+    // Invalidate any existing unused password reset OTPs for this phone
     await this.otpModel.updateMany(
-      { identifier: normalizedEmail, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
+      { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
       { isUsed: true },
     );
 
-    const code = this.generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-    const otp = new this.otpModel({
-      identifier: normalizedEmail,
-      code,
-      type: OtpType.EMAIL,
-      purpose: OtpPurpose.PASSWORD_RESET,
-      expiresAt,
-    });
-
-    await otp.save();
-
-    const sent = await this.emailService.sendPasswordResetOtp(normalizedEmail, code, user.name);
+    // Use Twilio Verify for SMS
+    const sent = await this.smsService.sendOtp(phone, '');
     if (!sent) {
-      this.logger.warn(`Failed to send password reset email to ${normalizedEmail}, but OTP was created`);
+      throw new BadRequestException('Failed to send verification code. Please try again.');
     }
 
+    // Track the request for rate limiting
+    const otp = new this.otpModel({
+      identifier: phone,
+      code: 'TWILIO_VERIFY', // Placeholder - actual code is managed by Twilio
+      type: OtpType.PHONE,
+      purpose: OtpPurpose.PASSWORD_RESET,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes for Twilio
+    });
+    await otp.save();
+
     return {
-      message: 'Verification code sent to your email',
-      expiresIn: 300,
+      message: 'Verification code sent to your phone',
+      expiresIn: 600, // 10 minutes
     };
   }
 
-  async verifyPasswordResetOtp(email: string, code: string): Promise<{ verified: boolean; resetToken?: string }> {
-    const normalizedEmail = email.toLowerCase();
+  async verifyPasswordResetOtp(verifyResetCodeDto: VerifyResetCodeDto): Promise<{ verified: boolean }> {
+    const { phone, code } = verifyResetCodeDto;
 
-    const otp = await this.otpModel.findOne({
-      identifier: normalizedEmail,
-      purpose: OtpPurpose.PASSWORD_RESET,
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    }).sort({ createdAt: -1 });
-
-    if (!otp) {
-      throw new BadRequestException('Invalid or expired verification code');
+    // Check if user exists with this phone
+    const user = await this.userModel.findOne({ phone });
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
     }
 
-    // Check max attempts
-    if (otp.attempts >= 5) {
-      await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
-      throw new BadRequestException('Too many failed attempts. Please request a new code.');
-    }
-
-    if (otp.code !== code) {
-      await this.otpModel.updateOne({ _id: otp._id }, { $inc: { attempts: 1 } });
+    // Verify with Twilio
+    const verified = await this.smsService.verifyOtp(phone, code);
+    if (!verified) {
       throw new BadRequestException('Invalid verification code');
     }
 
-    // Don't mark as used yet - we'll mark it when password is actually reset
-    // Generate a temporary reset token (the OTP itself serves this purpose)
+    // Mark our tracking record as used for this verification step
+    // But create a new verified record to allow password reset
+    await this.otpModel.updateMany(
+      { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
+      { isUsed: true },
+    );
+
+    // Create a verified record that allows password reset within next 5 minutes
+    const verifiedOtp = new this.otpModel({
+      identifier: phone,
+      code: 'VERIFIED',
+      type: OtpType.PHONE,
+      purpose: OtpPurpose.PASSWORD_RESET,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes to reset password
+      isUsed: false,
+    });
+    await verifiedOtp.save();
+
     return { verified: true };
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
-    const { email, code, newPassword } = resetPasswordDto;
-    const normalizedEmail = email.toLowerCase();
+    const { phone, newPassword } = resetPasswordDto;
 
-    // Verify the OTP one more time
-    const otp = await this.otpModel.findOne({
-      identifier: normalizedEmail,
+    // Check for verified OTP record
+    const verifiedOtp = await this.otpModel.findOne({
+      identifier: phone,
       purpose: OtpPurpose.PASSWORD_RESET,
-      code,
+      code: 'VERIFIED',
       isUsed: false,
       expiresAt: { $gt: new Date() },
     }).sort({ createdAt: -1 });
 
-    if (!otp) {
-      throw new BadRequestException('Invalid or expired verification code');
+    if (!verifiedOtp) {
+      throw new BadRequestException('Password reset session expired. Please verify your phone again.');
     }
 
     // Find the user
-    const user = await this.userModel.findOne({ email: normalizedEmail });
+    const user = await this.userModel.findOne({ phone });
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -276,8 +278,8 @@ export class VerificationService {
       { password: hashedPassword },
     );
 
-    // Mark OTP as used
-    await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+    // Mark verified OTP as used
+    await this.otpModel.updateOne({ _id: verifiedOtp._id }, { isUsed: true });
 
     return { message: 'Password has been reset successfully' };
   }

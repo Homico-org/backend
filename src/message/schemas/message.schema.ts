@@ -1,6 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
+export enum MessageStatus {
+  SENT = 'sent',
+  DELIVERED = 'delivered',
+  READ = 'read',
+}
+
 @Schema({ timestamps: true })
 export class Message extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true })
@@ -20,6 +26,17 @@ export class Message extends Document {
 
   @Prop({ type: [String], default: [] })
   attachments: string[];
+
+  // Message delivery status: sent → delivered → read
+  @Prop({
+    type: String,
+    enum: Object.values(MessageStatus),
+    default: MessageStatus.SENT,
+  })
+  status: MessageStatus;
+
+  @Prop()
+  deliveredAt: Date;
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);
