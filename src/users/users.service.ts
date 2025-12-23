@@ -5,11 +5,35 @@ import * as bcrypt from 'bcrypt';
 import { User, PaymentMethod } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { Job } from '../jobs/schemas/job.schema';
+import { Proposal } from '../jobs/schemas/proposal.schema';
+import { SavedJob } from '../jobs/schemas/saved-job.schema';
+import { Conversation } from '../conversation/schemas/conversation.schema';
+import { Message } from '../message/schemas/message.schema';
+import { Notification } from '../notifications/schemas/notification.schema';
+import { Review } from '../review/schemas/review.schema';
+import { Like } from '../likes/schemas/like.schema';
+import { PortfolioItem } from '../portfolio/schemas/portfolio-item.schema';
+import { ProjectRequest } from '../project-request/schemas/project-request.schema';
+import { Offer } from '../offer/schemas/offer.schema';
+import { SupportTicket } from '../support/schemas/support-ticket.schema';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(Job.name) private jobModel: Model<Job>,
+    @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
+    @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
+    @InjectModel(Conversation.name) private conversationModel: Model<Conversation>,
+    @InjectModel(Message.name) private messageModel: Model<Message>,
+    @InjectModel(Notification.name) private notificationModel: Model<Notification>,
+    @InjectModel(Review.name) private reviewModel: Model<Review>,
+    @InjectModel(Like.name) private likeModel: Model<Like>,
+    @InjectModel(PortfolioItem.name) private portfolioItemModel: Model<PortfolioItem>,
+    @InjectModel(ProjectRequest.name) private projectRequestModel: Model<ProjectRequest>,
+    @InjectModel(Offer.name) private offerModel: Model<Offer>,
+    @InjectModel(SupportTicket.name) private supportTicketModel: Model<SupportTicket>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -688,7 +712,52 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    // Delete the user document
+    // Delete all related data in parallel for better performance
+    await Promise.all([
+      // Delete jobs created by this user (as client)
+      this.jobModel.deleteMany({ clientId: userId }).exec(),
+
+      // Delete proposals made by this user (as pro)
+      this.proposalModel.deleteMany({ proId: userId }).exec(),
+
+      // Delete saved jobs
+      this.savedJobModel.deleteMany({ userId: userId }).exec(),
+
+      // Delete conversations where user is participant (as client or pro)
+      this.conversationModel.deleteMany({
+        $or: [{ clientId: userId }, { proId: userId }]
+      }).exec(),
+
+      // Delete messages sent by this user
+      this.messageModel.deleteMany({ senderId: userId }).exec(),
+
+      // Delete all notifications for this user
+      this.notificationModel.deleteMany({ userId: userId }).exec(),
+
+      // Delete reviews (both given and received)
+      this.reviewModel.deleteMany({
+        $or: [{ clientId: userId }, { proId: userId }]
+      }).exec(),
+
+      // Delete likes by this user
+      this.likeModel.deleteMany({ userId: userId }).exec(),
+
+      // Delete portfolio items (for pro users)
+      this.portfolioItemModel.deleteMany({ proId: userId }).exec(),
+
+      // Delete project requests (as client or assigned pro)
+      this.projectRequestModel.deleteMany({
+        $or: [{ clientId: userId }, { proId: userId }]
+      }).exec(),
+
+      // Delete offers made by this user (as pro)
+      this.offerModel.deleteMany({ proId: userId }).exec(),
+
+      // Delete support tickets
+      this.supportTicketModel.deleteMany({ userId: userId }).exec(),
+    ]);
+
+    // Finally, delete the user document
     await this.userModel.findByIdAndDelete(userId).exec();
   }
 
