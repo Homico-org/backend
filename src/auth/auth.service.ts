@@ -36,6 +36,7 @@ export class AuthService {
         selectedSubcategories: user.selectedSubcategories || [],
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
+        isProfileCompleted: user.isProfileCompleted ?? false,
       },
     };
   }
@@ -80,6 +81,7 @@ export class AuthService {
         selectedSubcategories: user.selectedSubcategories || [],
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
+        isProfileCompleted: user.isProfileCompleted ?? false,
       },
     };
   }
@@ -120,6 +122,7 @@ export class AuthService {
           selectedSubcategories: existingGoogleUser.selectedSubcategories || [],
           accountType: existingGoogleUser.accountType || 'individual',
           companyName: existingGoogleUser.companyName,
+          isProfileCompleted: existingGoogleUser.isProfileCompleted ?? false,
         },
       };
     }
@@ -162,6 +165,9 @@ export class AuthService {
         city: user.city,
         selectedCategories: user.selectedCategories || [],
         selectedSubcategories: user.selectedSubcategories || [],
+        accountType: user.accountType || 'individual',
+        companyName: user.companyName,
+        isProfileCompleted: user.isProfileCompleted ?? false,
       },
     };
   }
