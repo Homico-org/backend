@@ -171,6 +171,25 @@ export class JobsController {
     return { message: 'Job deleted successfully' };
   }
 
+  @Post(':id/complete')
+  @ApiOperation({ summary: 'Mark job as completed and add to pro portfolio' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job completed successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  async completeJob(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() completionData?: {
+      completionImages?: string[];
+      completionNote?: string;
+      beforeImages?: string[];
+      afterImages?: string[];
+    },
+  ) {
+    return this.jobsService.completeJob(id, user.userId, completionData);
+  }
+
   // Proposal endpoints
   @Post(':jobId/proposals')
   @ApiOperation({ summary: 'Submit proposal for a job' })

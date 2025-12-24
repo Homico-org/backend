@@ -6,6 +6,7 @@ import { CreateProposalDto } from './dto/create-proposal.dto';
 import { Job, JobPropertyType, JobStatus } from './schemas/job.schema';
 import { Proposal, ProposalStatus } from './schemas/proposal.schema';
 import { SavedJob } from './schemas/saved-job.schema';
+import { User } from '../users/schemas/user.schema';
 
 @Injectable()
 export class JobsService {
@@ -13,6 +14,7 @@ export class JobsService {
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   // Jobs CRUD
@@ -708,5 +710,93 @@ export class JobsService {
       },
       { viewedByPro: true }
     );
+  }
+
+  // Complete a job and add it to the pro's portfolio
+  async completeJob(
+    jobId: string,
+    clientId: string,
+    completionData?: {
+      completionImages?: string[];
+      completionNote?: string;
+      beforeImages?: string[];
+      afterImages?: string[];
+    }
+  ): Promise<Job> {
+    const job = await this.jobModel.findById(jobId);
+
+    if (!job) {
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
+    }
+
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების დასრულება');
+    }
+
+    if (job.status === JobStatus.COMPLETED) {
+      throw new ForbiddenException('სამუშაო უკვე დასრულებულია');
+    }
+
+    // Find the accepted proposal to get the pro's ID
+    const acceptedProposal = await this.proposalModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+      status: ProposalStatus.ACCEPTED,
+    });
+
+    if (!acceptedProposal) {
+      throw new ForbiddenException('ვერ მოიძებნა მიღებული წინადადება');
+    }
+
+    // Update job status to completed
+    await this.jobModel.findByIdAndUpdate(jobId, { status: JobStatus.COMPLETED });
+
+    // Add job to pro's portfolio as a Homico-verified project
+    const proId = acceptedProposal.proId;
+
+    // Combine all images: original job images + completion images
+    const allImages = [
+      ...(job.images || []),
+      ...(completionData?.completionImages || []),
+      ...(completionData?.afterImages || []),
+    ];
+
+    // Create before/after pairs if provided
+    const beforeAfterPairs = [];
+    if (completionData?.beforeImages && completionData?.afterImages) {
+      const minLength = Math.min(
+        completionData.beforeImages.length,
+        completionData.afterImages.length
+      );
+      for (let i = 0; i < minLength; i++) {
+        beforeAfterPairs.push({
+          id: `pair-${Date.now()}-${i}`,
+          beforeImage: completionData.beforeImages[i],
+          afterImage: completionData.afterImages[i],
+        });
+      }
+    }
+
+    // Create new portfolio project with Homico source
+    const portfolioProject = {
+      id: `homico-${jobId}`,
+      title: job.title,
+      description: completionData?.completionNote || job.description,
+      location: job.location,
+      images: allImages.length > 0 ? allImages : job.images || [],
+      beforeAfterPairs,
+      source: 'homico' as const,
+      jobId: jobId,
+    };
+
+    // Add to pro's portfolioProjects
+    await this.userModel.findByIdAndUpdate(
+      proId,
+      {
+        $push: { portfolioProjects: portfolioProject },
+        $inc: { completedJobs: 1 },
+      }
+    );
+
+    return this.jobModel.findById(jobId).exec();
   }
 }

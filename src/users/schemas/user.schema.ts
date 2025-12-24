@@ -60,6 +60,8 @@ export class PortfolioProject {
   images: string[];
   videos?: string[];
   beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
+  source?: 'external' | 'homico'; // 'external' = work done outside Homico, 'homico' = completed via platform
+  jobId?: string; // Reference to original job if done through Homico
 }
 
 @Schema({ timestamps: true })
@@ -236,7 +238,9 @@ export class User extends Document {
       location: String,
       images: [String],
       videos: [String],
-      beforeAfterPairs: [{ id: String, beforeImage: String, afterImage: String }]
+      beforeAfterPairs: [{ id: String, beforeImage: String, afterImage: String }],
+      source: { type: String, enum: ['external', 'homico'], default: 'external' },
+      jobId: String
     }],
     default: []
   })

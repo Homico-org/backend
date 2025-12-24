@@ -12,6 +12,11 @@ export enum ProjectStatus {
   IN_PROGRESS = 'in_progress',
 }
 
+export enum ProjectSource {
+  EXTERNAL = 'external',  // Work done outside Homico (added during registration/profile setup)
+  HOMICO = 'homico',      // Work done through Homico platform (completed jobs)
+}
+
 @Schema({ timestamps: true })
 export class PortfolioItem extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
@@ -91,6 +96,18 @@ export class PortfolioItem extends Document {
 
   @Prop()
   afterImage: string;
+
+  // Source of the project (external work or done through Homico)
+  @Prop({
+    type: String,
+    enum: Object.values(ProjectSource),
+    default: ProjectSource.EXTERNAL
+  })
+  source: ProjectSource;
+
+  // Reference to the original job if done through Homico
+  @Prop({ type: Types.ObjectId, ref: 'Job' })
+  jobId: Types.ObjectId;
 }
 
 export const PortfolioItemSchema = SchemaFactory.createForClass(PortfolioItem);

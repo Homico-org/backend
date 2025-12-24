@@ -33,6 +33,9 @@ export interface FeedItem {
   // For embedded projects without their own ObjectId, we track what to like instead
   likeTargetType?: 'portfolio_item' | 'pro_profile';
   likeTargetId?: string;
+  // Source tracking - whether work was done through Homico or externally
+  isVerified?: boolean; // true = done through Homico platform
+  jobId?: string; // Reference to original job if done on Homico
 }
 
 export interface FeedResponse {
@@ -127,6 +130,9 @@ export class FeedService {
         type = 'completion';
       }
 
+      // Check if this is a Homico-verified project
+      const isVerified = item.source === 'homico' || !!item.jobId;
+
       return {
         _id: itemId,
         type,
@@ -156,6 +162,8 @@ export class FeedService {
         isLiked: false,
         createdAt: item.createdAt,
         sortDate: new Date(item.createdAt),
+        isVerified,
+        jobId: item.jobId?.toString(),
       };
     });
 
@@ -182,6 +190,9 @@ export class FeedService {
           ? projectIdString
           : `embedded-${proUser._id.toString()}-${i}`;
 
+        // Check if this is a Homico-verified project
+        const isVerified = project.source === 'homico' || !!project.jobId;
+
         embeddedFeedItems.push({
           _id: projectId,
           // For embedded projects, store the actual like target (the pro user)
@@ -205,6 +216,8 @@ export class FeedService {
           isLiked: false,
           createdAt: proUser.updatedAt || new Date(),
           sortDate: new Date(proUser.updatedAt || new Date()),
+          isVerified,
+          jobId: project.jobId,
         });
       }
     }
