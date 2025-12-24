@@ -235,6 +235,20 @@ export class JobsController {
     return this.jobsService.revealContact(proposalId, user.userId);
   }
 
+  @Post('proposals/:proposalId/shortlist')
+  @ApiOperation({ summary: 'Shortlist a proposal and choose hiring method' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal shortlisted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  shortlistProposal(
+    @Param('proposalId') proposalId: string,
+    @Body('hiringChoice') hiringChoice: 'homico' | 'direct',
+    @CurrentUser() user: any,
+  ) {
+    return this.jobsService.shortlistProposal(proposalId, user.userId, hiringChoice);
+  }
+
   @Post('proposals/:proposalId/accept')
   @ApiOperation({ summary: 'Accept a proposal' })
   @ApiBearerAuth('JWT-auth')
@@ -243,6 +257,16 @@ export class JobsController {
   @Roles(UserRole.CLIENT, UserRole.COMPANY)
   acceptProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.acceptProposal(proposalId, user.userId);
+  }
+
+  @Post('proposals/:proposalId/reject')
+  @ApiOperation({ summary: 'Reject a proposal' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal rejected successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  rejectProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.rejectProposal(proposalId, user.userId);
   }
 
   @Post('proposals/:proposalId/withdraw')

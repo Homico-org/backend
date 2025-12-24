@@ -3,9 +3,15 @@ import { Document, Types } from 'mongoose';
 
 export enum ProposalStatus {
   PENDING = 'pending',
+  SHORTLISTED = 'shortlisted',
   ACCEPTED = 'accepted',
   REJECTED = 'rejected',
   WITHDRAWN = 'withdrawn',
+}
+
+export enum HiringChoice {
+  HOMICO = 'homico', // Hire through Homico platform
+  DIRECT = 'direct', // Contact pro directly (phone revealed)
 }
 
 @Schema({ timestamps: true })
@@ -45,6 +51,13 @@ export class Proposal extends Document {
 
   @Prop({ type: Date })
   revealedAt: Date;
+
+  // Hiring choice - how the client chose to proceed with this pro
+  @Prop({
+    type: String,
+    enum: Object.values(HiringChoice),
+  })
+  hiringChoice: HiringChoice;
 
   // Track if the client has seen this proposal
   @Prop({ type: Boolean, default: false })

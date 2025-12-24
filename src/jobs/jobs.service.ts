@@ -458,6 +458,45 @@ export class JobsService {
       .exec();
   }
 
+  async shortlistProposal(
+    proposalId: string,
+    clientId: string,
+    hiringChoice: 'homico' | 'direct',
+  ): Promise<Proposal> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate('jobId')
+      .populate('proId', 'name email avatar phone')
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების წინადადებებს მართოთ');
+    }
+
+    if (proposal.status !== ProposalStatus.PENDING) {
+      throw new ForbiddenException('მხოლოდ მოლოდინში მყოფი წინადადებების შორტლისტში დამატება შეიძლება');
+    }
+
+    proposal.status = ProposalStatus.SHORTLISTED;
+    proposal.hiringChoice = hiringChoice as any;
+    proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
+
+    // If direct contact, reveal phone
+    if (hiringChoice === 'direct') {
+      proposal.contactRevealed = true;
+      proposal.revealedAt = new Date();
+    }
+
+    await proposal.save();
+
+    return proposal;
+  }
+
   async acceptProposal(proposalId: string, clientId: string): Promise<Proposal> {
     const proposal = await this.proposalModel
       .findById(proposalId)
@@ -481,6 +520,36 @@ export class JobsService {
     await this.jobModel.findByIdAndUpdate(job._id, {
       status: JobStatus.IN_PROGRESS,
     });
+
+    return proposal;
+  }
+
+  async rejectProposal(proposalId: string, clientId: string): Promise<Proposal> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate('jobId')
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების წინადადებებს უარყოფა');
+    }
+
+    if (proposal.status === ProposalStatus.REJECTED) {
+      throw new ForbiddenException('წინადადება უკვე უარყოფილია');
+    }
+
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      throw new ForbiddenException('მიღებული წინადადების უარყოფა შეუძლებელია');
+    }
+
+    proposal.status = ProposalStatus.REJECTED;
+    proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
+    await proposal.save();
 
     return proposal;
   }
