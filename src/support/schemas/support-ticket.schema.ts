@@ -3,9 +3,13 @@ import { Document, Types } from 'mongoose';
 
 export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type SupportMessageStatus = 'sent' | 'delivered' | 'read';
 
 @Schema({ timestamps: true })
 export class SupportMessage {
+  @Prop({ type: Types.ObjectId, auto: true })
+  _id: Types.ObjectId;
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   senderId: Types.ObjectId;
 
@@ -17,6 +21,15 @@ export class SupportMessage {
 
   @Prop({ type: [String], default: [] })
   attachments: string[];
+
+  @Prop({ type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' })
+  status: SupportMessageStatus;
+
+  @Prop()
+  deliveredAt: Date;
+
+  @Prop()
+  readAt: Date;
 
   @Prop({ default: Date.now })
   createdAt: Date;

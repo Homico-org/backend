@@ -119,7 +119,10 @@ export class FeedService {
     ]);
 
     // Transform PortfolioItem items to feed items
-    const portfolioFeedItems: (FeedItem & { sortDate: Date })[] = portfolioItems.map((item) => {
+    // Filter out items where proUser is null or doesn't have a valid _id
+    const portfolioFeedItems: (FeedItem & { sortDate: Date })[] = portfolioItems
+      .filter((item) => item.proId && item.proId._id)
+      .map((item) => {
       const proUser = item.proId;
       const itemId = item._id.toString();
 

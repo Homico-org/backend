@@ -74,6 +74,16 @@ export class SupportController {
     return this.supportService.markAsRead(id, user.userId, isAdmin);
   }
 
+  @Patch('tickets/:id/delivered')
+  @UseGuards(JwtAuthGuard)
+  markAsDelivered(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    const isAdmin = user.role === 'admin';
+    return this.supportService.markAsDelivered(id, user.userId, isAdmin);
+  }
+
   // Admin endpoints
   @Get('admin/tickets')
   @UseGuards(JwtAuthGuard, RolesGuard)

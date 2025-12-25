@@ -1,5 +1,5 @@
 import { Controller, Get, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -13,6 +13,83 @@ import { UserRole } from '../users/schemas/user.schema';
 @ApiBearerAuth('JWT-auth')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  // ============== PAGINATED LIST ENDPOINTS ==============
+
+  @Get('users')
+  @ApiOperation({ summary: 'Get all users with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by name, email, or phone' })
+  @ApiQuery({ name: 'role', required: false, description: 'Filter by role' })
+  @ApiResponse({ status: 200, description: 'Paginated users list' })
+  getAllUsers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.adminService.getAllUsers({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      role,
+    });
+  }
+
+  @Get('jobs')
+  @ApiOperation({ summary: 'Get all jobs with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by title or category' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status' })
+  @ApiResponse({ status: 200, description: 'Paginated jobs list' })
+  getAllJobs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllJobs({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Get('reports')
+  @ApiOperation({ summary: 'Get all reports with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by reason' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by type' })
+  @ApiResponse({ status: 200, description: 'Paginated reports list' })
+  getAllReports(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.adminService.getAllReports({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+      type,
+    });
+  }
+
+  @Get('report-stats')
+  @ApiOperation({ summary: 'Get report statistics' })
+  @ApiResponse({ status: 200, description: 'Report statistics' })
+  getReportStats() {
+    return this.adminService.getReportStats();
+  }
+
+  // ============== DASHBOARD STATS & RECENT DATA ==============
 
   @Get('stats')
   @ApiOperation({ summary: 'Get dashboard statistics' })

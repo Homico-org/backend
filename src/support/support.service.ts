@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { SupportTicket, TicketStatus } from './schemas/support-ticket.schema';
+import { SupportTicket, TicketStatus, SupportMessageStatus } from './schemas/support-ticket.schema';
 import { CreateTicketDto, SendMessageDto, UpdateTicketStatusDto, ContactFormDto } from './dto/create-ticket.dto';
+import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class SupportService {
   constructor(
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
+    private chatGateway: ChatGateway,
   ) {}
 
   // Public contact form for unauthenticated users
@@ -45,6 +47,10 @@ export class SupportService {
     });
 
     const savedTicket = await ticket.save();
+
+    // Emit new ticket to admin support room
+    this.chatGateway.emitNewSupportTicket(savedTicket);
+
     return { success: true, ticketId: savedTicket._id.toString() };
   }
 
@@ -61,13 +67,19 @@ export class SupportService {
         senderId: new Types.ObjectId(userId),
         content: createTicketDto.message,
         isAdmin: false,
+        status: 'sent' as SupportMessageStatus,
         createdAt: new Date(),
       }],
       hasUnreadUserMessages: true,
       lastMessageAt: new Date(),
     });
 
-    return ticket.save();
+    const savedTicket = await ticket.save();
+
+    // Emit new ticket to admin support room
+    this.chatGateway.emitNewSupportTicket(savedTicket);
+
+    return savedTicket;
   }
 
   async getUserTickets(userId: string): Promise<SupportTicket[]> {
@@ -108,11 +120,13 @@ export class SupportService {
       throw new ForbiddenException('You do not have access to this ticket');
     }
 
-    const message = {
+    const message: any = {
+      _id: new Types.ObjectId(),
       senderId: new Types.ObjectId(userId),
       content: dto.content,
       isAdmin,
       attachments: dto.attachments || [],
+      status: 'sent' as SupportMessageStatus,
       createdAt: new Date(),
     };
 
@@ -130,15 +144,77 @@ export class SupportService {
       ticket.hasUnreadAdminMessages = false;
     }
 
-    return ticket.save();
+    const savedTicket = await ticket.save();
+
+    // Populate user info for the response
+    await savedTicket.populate('userId', 'name email avatar role');
+
+    // Emit WebSocket events for real-time updates
+    this.chatGateway.emitSupportMessage(ticketId, message, savedTicket);
+
+    return savedTicket;
   }
 
   async markAsRead(ticketId: string, userId: string, isAdmin = false): Promise<void> {
-    const update = isAdmin
-      ? { hasUnreadUserMessages: false }
-      : { hasUnreadAdminMessages: false };
+    const ticket = await this.ticketModel.findById(ticketId);
+    if (!ticket) return;
 
-    await this.ticketModel.findByIdAndUpdate(ticketId, update);
+    const now = new Date();
+    const messageIdsToUpdate: string[] = [];
+
+    // Update message statuses to 'read' for messages from the other party
+    ticket.messages.forEach((msg: any) => {
+      if (isAdmin && !msg.isAdmin && msg.status !== 'read') {
+        msg.status = 'read';
+        msg.readAt = now;
+        messageIdsToUpdate.push(msg._id.toString());
+      } else if (!isAdmin && msg.isAdmin && msg.status !== 'read') {
+        msg.status = 'read';
+        msg.readAt = now;
+        messageIdsToUpdate.push(msg._id.toString());
+      }
+    });
+
+    if (isAdmin) {
+      ticket.hasUnreadUserMessages = false;
+    } else {
+      ticket.hasUnreadAdminMessages = false;
+    }
+
+    await ticket.save();
+
+    // Emit status update to all participants
+    if (messageIdsToUpdate.length > 0) {
+      this.chatGateway.emitSupportMessageStatus(ticketId, messageIdsToUpdate, 'read');
+    }
+  }
+
+  async markAsDelivered(ticketId: string, userId: string, isAdmin = false): Promise<void> {
+    const ticket = await this.ticketModel.findById(ticketId);
+    if (!ticket) return;
+
+    const now = new Date();
+    const messageIdsToUpdate: string[] = [];
+
+    // Update message statuses to 'delivered' for messages from the other party
+    ticket.messages.forEach((msg: any) => {
+      if (isAdmin && !msg.isAdmin && msg.status === 'sent') {
+        msg.status = 'delivered';
+        msg.deliveredAt = now;
+        messageIdsToUpdate.push(msg._id.toString());
+      } else if (!isAdmin && msg.isAdmin && msg.status === 'sent') {
+        msg.status = 'delivered';
+        msg.deliveredAt = now;
+        messageIdsToUpdate.push(msg._id.toString());
+      }
+    });
+
+    await ticket.save();
+
+    // Emit status update
+    if (messageIdsToUpdate.length > 0) {
+      this.chatGateway.emitSupportMessageStatus(ticketId, messageIdsToUpdate, 'delivered');
+    }
   }
 
   // Admin methods
@@ -180,11 +256,14 @@ export class SupportService {
       ticketId,
       update,
       { new: true }
-    );
+    ).populate('userId', 'name email avatar role');
 
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
+
+    // Emit status change to all participants
+    this.chatGateway.emitSupportTicketStatusChange(ticketId, dto.status, ticket);
 
     return ticket;
   }

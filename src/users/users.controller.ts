@@ -195,6 +195,29 @@ export class UsersController {
     return this.usersService.setDefaultPaymentMethod(user.userId, dto.paymentMethodId);
   }
 
+  // ============== NOTIFICATION PREFERENCES ==============
+
+  @Get('notification-preferences')
+  @ApiOperation({ summary: 'Get notification preferences' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Notification preferences' })
+  @UseGuards(JwtAuthGuard)
+  async getNotificationPreferences(@CurrentUser() user: any) {
+    return this.usersService.getNotificationPreferences(user.userId);
+  }
+
+  @Patch('notification-preferences')
+  @ApiOperation({ summary: 'Update notification preferences' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Notification preferences updated' })
+  @UseGuards(JwtAuthGuard)
+  async updateNotificationPreferences(
+    @CurrentUser() user: any,
+    @Body() body: any,
+  ) {
+    return this.usersService.updateNotificationPreferences(user.userId, body);
+  }
+
   // ============== PRO-RELATED ENDPOINTS ==============
   // These replace the old /pro-profiles endpoints
 

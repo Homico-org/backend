@@ -858,4 +858,77 @@ export class UsersService {
       reason: user.deactivationReason,
     };
   }
+
+  // ============== NOTIFICATION PREFERENCES ==============
+
+  async getNotificationPreferences(userId: string) {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Default preferences if not set
+    const defaultPreferences = {
+      email: {
+        enabled: true,
+        newJobs: true,
+        proposals: true,
+        messages: true,
+        marketing: false,
+      },
+      push: {
+        enabled: true,
+        newJobs: true,
+        proposals: true,
+        messages: true,
+      },
+      sms: {
+        enabled: false,
+        proposals: false,
+        messages: false,
+      },
+    };
+
+    return {
+      email: user.email || null,
+      isEmailVerified: user.isEmailVerified || false,
+      phone: user.phone || null,
+      isPhoneVerified: user.isPhoneVerified || false,
+      preferences: user.notificationPreferences || defaultPreferences,
+    };
+  }
+
+  async updateNotificationPreferences(userId: string, preferences: any) {
+    const user = await this.userModel.findById(userId).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Merge with existing preferences
+    const currentPrefs = user.notificationPreferences || {
+      email: { enabled: true, newJobs: true, proposals: true, messages: true, marketing: false },
+      push: { enabled: true, newJobs: true, proposals: true, messages: true },
+      sms: { enabled: false, proposals: false, messages: false },
+    };
+
+    const updatedPrefs = {
+      email: { ...currentPrefs.email, ...(preferences.email || {}) },
+      push: { ...currentPrefs.push, ...(preferences.push || {}) },
+      sms: { ...currentPrefs.sms, ...(preferences.sms || {}) },
+    };
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      notificationPreferences: updatedPrefs,
+    }).exec();
+
+    return {
+      email: user.email || null,
+      isEmailVerified: user.isEmailVerified || false,
+      phone: user.phone || null,
+      isPhoneVerified: user.isPhoneVerified || false,
+      preferences: updatedPrefs,
+    };
+  }
 }

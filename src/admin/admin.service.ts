@@ -1,11 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, FilterQuery } from 'mongoose';
 import { User } from '../users/schemas/user.schema';
 import { Job } from '../jobs/schemas/job.schema';
 import { Proposal } from '../jobs/schemas/proposal.schema';
 import { SupportTicket } from '../support/schemas/support-ticket.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
+
+interface PaginationOptions {
+  page: number;
+  limit: number;
+  search?: string;
+}
+
+interface UserListOptions extends PaginationOptions {
+  role?: string;
+}
+
+interface JobListOptions extends PaginationOptions {
+  status?: string;
+}
+
+interface ReportListOptions extends PaginationOptions {
+  status?: string;
+  type?: string;
+}
 
 @Injectable()
 export class AdminService {
@@ -16,6 +35,200 @@ export class AdminService {
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
   ) {}
+
+  // ============== PAGINATED LIST METHODS ==============
+
+  async getAllUsers(options: UserListOptions) {
+    const { page, limit, search, role } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<User> = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (role && role !== 'all') {
+      query.role = role;
+    }
+
+    const [users, total] = await Promise.all([
+      this.userModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('name email phone role avatar city isActive createdAt lastLoginAt verificationStatus')
+        .lean(),
+      this.userModel.countDocuments(query),
+    ]);
+
+    // Transform users for frontend compatibility
+    const transformedUsers = users.map((user: any) => ({
+      ...user,
+      isVerified: user.verificationStatus === 'verified',
+      isSuspended: !user.isActive,
+      location: user.city,
+    }));
+
+    return {
+      users: transformedUsers,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getAllJobs(options: JobListOptions) {
+    const { page, limit, search, status } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<Job> = {};
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    const [jobs, total] = await Promise.all([
+      this.jobModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('clientId', 'name email avatar')
+        .select('title description category subcategory status budgetAmount budgetType location proposalCount createdAt')
+        .lean(),
+      this.jobModel.countDocuments(query),
+    ]);
+
+    // Transform budget for frontend compatibility
+    const transformedJobs = jobs.map((job: any) => ({
+      ...job,
+      budget: {
+        min: job.budgetAmount,
+        max: job.budgetAmount,
+        type: job.budgetType,
+      },
+    }));
+
+    return {
+      jobs: transformedJobs,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getAllReports(options: ReportListOptions) {
+    // Since we don't have a dedicated Report model, we'll use support tickets as reports
+    // In the future, a separate Report model can be created
+    const { page, limit, search, status, type } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<SupportTicket> = {};
+
+    if (search) {
+      query.$or = [
+        { subject: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (status && status !== 'all') {
+      // Map report status to ticket status
+      const statusMap: Record<string, string> = {
+        pending: 'open',
+        investigating: 'in_progress',
+        resolved: 'resolved',
+        dismissed: 'closed',
+      };
+      query.status = statusMap[status] || status;
+    }
+
+    if (type && type !== 'all') {
+      query.category = type;
+    }
+
+    const [tickets, total] = await Promise.all([
+      this.ticketModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('userId', 'name email avatar')
+        .lean(),
+      this.ticketModel.countDocuments(query),
+    ]);
+
+    // Transform tickets to report format for frontend
+    const reports = tickets.map((ticket: any) => ({
+      _id: ticket._id,
+      type: ticket.category || 'user',
+      reason: ticket.subject,
+      description: ticket.messages?.[0]?.content || '',
+      status: this.mapTicketStatusToReportStatus(ticket.status),
+      priority: ticket.priority || 'medium',
+      reporterId: ticket.userId,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+    }));
+
+    return {
+      reports,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  private mapTicketStatusToReportStatus(ticketStatus: string): string {
+    const statusMap: Record<string, string> = {
+      open: 'pending',
+      in_progress: 'investigating',
+      resolved: 'resolved',
+      closed: 'dismissed',
+    };
+    return statusMap[ticketStatus] || 'pending';
+  }
+
+  async getReportStats() {
+    const [total, open, inProgress, resolved, closed] = await Promise.all([
+      this.ticketModel.countDocuments(),
+      this.ticketModel.countDocuments({ status: 'open' }),
+      this.ticketModel.countDocuments({ status: 'in_progress' }),
+      this.ticketModel.countDocuments({ status: 'resolved' }),
+      this.ticketModel.countDocuments({ status: 'closed' }),
+    ]);
+
+    // Count high priority as "urgent"
+    const urgent = await this.ticketModel.countDocuments({ priority: 'high' });
+
+    return {
+      total,
+      pending: open,
+      investigating: inProgress,
+      resolved,
+      dismissed: closed,
+      urgent,
+    };
+  }
+
+  // ============== DASHBOARD STATS ==============
 
   async getDashboardStats() {
     const now = new Date();

@@ -16,6 +16,11 @@ interface AuthenticatedSocket extends Socket {
   userRole?: string;
 }
 
+interface SupportTypingData {
+  ticketId: string;
+  isTyping: boolean;
+}
+
 @WebSocketGateway({
   cors: {
     origin: [
@@ -108,6 +113,54 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  // Support Ticket WebSocket Events
+  @SubscribeMessage('joinSupportTicket')
+  handleJoinSupportTicket(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() ticketId: string,
+  ) {
+    client.join(`support:${ticketId}`);
+    console.log(`User ${client.userId} joined support ticket ${ticketId}`);
+  }
+
+  @SubscribeMessage('leaveSupportTicket')
+  handleLeaveSupportTicket(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() ticketId: string,
+  ) {
+    client.leave(`support:${ticketId}`);
+  }
+
+  @SubscribeMessage('supportTyping')
+  handleSupportTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: SupportTypingData,
+  ) {
+    client.to(`support:${data.ticketId}`).emit('supportUserTyping', {
+      userId: client.userId,
+      isAdmin: client.userRole === 'admin',
+      isTyping: data.isTyping,
+    });
+  }
+
+  // Join admin support room for real-time ticket notifications
+  @SubscribeMessage('joinAdminSupport')
+  handleJoinAdminSupport(
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    if (client.userRole === 'admin') {
+      client.join('admin:support');
+      console.log(`Admin ${client.userId} joined admin support room`);
+    }
+  }
+
+  @SubscribeMessage('leaveAdminSupport')
+  handleLeaveAdminSupport(
+    @ConnectedSocket() client: AuthenticatedSocket,
+  ) {
+    client.leave('admin:support');
+  }
+
   // Method to emit new message to conversation participants
   emitNewMessage(conversationId: string, message: any) {
     this.server.to(`conversation:${conversationId}`).emit('newMessage', message);
@@ -134,6 +187,58 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       conversationId,
       messageIds,
       status,
+    });
+  }
+
+  // Support Ticket Methods
+  // Emit new support message to ticket room and admin room
+  emitSupportMessage(ticketId: string, message: any, ticket: any) {
+    // Emit to ticket room (for both user and admin viewing this ticket)
+    this.server.to(`support:${ticketId}`).emit('supportNewMessage', {
+      ticketId,
+      message,
+    });
+
+    // Emit ticket update to admin room for list refresh
+    this.server.to('admin:support').emit('supportTicketUpdate', {
+      ticketId,
+      ticket,
+    });
+
+    // Emit to the ticket owner's personal room if they're not in the ticket room
+    if (ticket.userId) {
+      this.server.to(`user:${ticket.userId.toString()}`).emit('supportTicketUpdate', {
+        ticketId,
+        ticket,
+      });
+    }
+  }
+
+  // Emit support message status update
+  emitSupportMessageStatus(ticketId: string, messageIds: string[], status: string) {
+    this.server.to(`support:${ticketId}`).emit('supportMessageStatusUpdate', {
+      ticketId,
+      messageIds,
+      status,
+    });
+  }
+
+  // Emit new support ticket to admin room
+  emitNewSupportTicket(ticket: any) {
+    this.server.to('admin:support').emit('supportNewTicket', ticket);
+  }
+
+  // Emit support ticket status change
+  emitSupportTicketStatusChange(ticketId: string, status: string, ticket: any) {
+    this.server.to(`support:${ticketId}`).emit('supportTicketStatusChange', {
+      ticketId,
+      status,
+      ticket,
+    });
+    this.server.to('admin:support').emit('supportTicketStatusChange', {
+      ticketId,
+      status,
+      ticket,
     });
   }
 }

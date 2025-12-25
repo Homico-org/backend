@@ -138,6 +138,29 @@ export class User extends Document {
   @Prop()
   phoneVerifiedAt: Date;
 
+  // Notification preferences
+  @Prop({ type: Object, default: null })
+  notificationPreferences: {
+    email: {
+      enabled: boolean;
+      newJobs: boolean;
+      proposals: boolean;
+      messages: boolean;
+      marketing: boolean;
+    };
+    push: {
+      enabled: boolean;
+      newJobs: boolean;
+      proposals: boolean;
+      messages: boolean;
+    };
+    sms: {
+      enabled: boolean;
+      proposals: boolean;
+      messages: boolean;
+    };
+  };
+
   // Payment methods
   @Prop({ type: [Object], default: [] })
   paymentMethods: PaymentMethod[];
