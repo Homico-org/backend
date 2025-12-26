@@ -458,38 +458,67 @@ export class UsersService {
 
   // ============== PRO-RELATED METHODS ==============
 
-  // Location data
+  // Location data with Georgian translations
   private readonly LOCATIONS_DATA = {
     'Georgia': {
-      nationwide: 'Countrywide',
+      nationwide: { en: 'Countrywide', ka: 'მთელი საქართველო' },
+      country: { en: 'Georgia', ka: 'საქართველო' },
       regions: {
-        'Tbilisi': ['Tbilisi', 'Rustavi', 'Mtskheta'],
-        'Adjara': ['Batumi', 'Kobuleti', 'Khelvachauri', 'Shuakhevi'],
-        'Imereti': ['Kutaisi', 'Zestaponi', 'Chiatura', 'Khoni', 'Samtredia'],
-        'Kvemo Kartli': ['Rustavi', 'Bolnisi', 'Gardabani', 'Marneuli', 'Tetritskaro'],
-        'Kakheti': ['Telavi', 'Gurjaani', 'Sighnaghi', 'Sagarejo', 'Dedoplistskaro'],
-        'Samegrelo-Zemo Svaneti': ['Zugdidi', 'Poti', 'Mestia', 'Senaki'],
-        'Shida Kartli': ['Gori', 'Kaspi', 'Kareli', 'Khashuri'],
-        'Samtskhe-Javakheti': ['Akhaltsikhe', 'Borjomi', 'Akhalkalaki', 'Ninotsminda'],
-        'Mtskheta-Mtianeti': ['Mtskheta', 'Dusheti', 'Tianeti', 'Kazbegi'],
-        'Racha-Lechkhumi': ['Ambrolauri', 'Oni', 'Tsageri', 'Lentekhi'],
-        'Guria': ['Ozurgeti', 'Lanchkhuti', 'Chokhatauri'],
+        'თბილისი': { en: 'Tbilisi', cities: ['თბილისი', 'რუსთავი', 'მცხეთა'], citiesEn: ['Tbilisi', 'Rustavi', 'Mtskheta'] },
+        'აჭარა': { en: 'Adjara', cities: ['ბათუმი', 'ქობულეთი', 'ხელვაჩაური', 'შუახევი'], citiesEn: ['Batumi', 'Kobuleti', 'Khelvachauri', 'Shuakhevi'] },
+        'იმერეთი': { en: 'Imereti', cities: ['ქუთაისი', 'ზესტაფონი', 'ჭიათურა', 'ხონი', 'სამტრედია'], citiesEn: ['Kutaisi', 'Zestaponi', 'Chiatura', 'Khoni', 'Samtredia'] },
+        'ქვემო ქართლი': { en: 'Kvemo Kartli', cities: ['რუსთავი', 'ბოლნისი', 'გარდაბანი', 'მარნეული', 'თეთრიწყარო'], citiesEn: ['Rustavi', 'Bolnisi', 'Gardabani', 'Marneuli', 'Tetritskaro'] },
+        'კახეთი': { en: 'Kakheti', cities: ['თელავი', 'გურჯაანი', 'სიღნაღი', 'საგარეჯო', 'დედოფლისწყარო'], citiesEn: ['Telavi', 'Gurjaani', 'Sighnaghi', 'Sagarejo', 'Dedoplistskaro'] },
+        'სამეგრელო-ზემო სვანეთი': { en: 'Samegrelo-Zemo Svaneti', cities: ['ზუგდიდი', 'ფოთი', 'მესტია', 'სენაკი'], citiesEn: ['Zugdidi', 'Poti', 'Mestia', 'Senaki'] },
+        'შიდა ქართლი': { en: 'Shida Kartli', cities: ['გორი', 'კასპი', 'ქარელი', 'ხაშური'], citiesEn: ['Gori', 'Kaspi', 'Kareli', 'Khashuri'] },
+        'სამცხე-ჯავახეთი': { en: 'Samtskhe-Javakheti', cities: ['ახალციხე', 'ბორჯომი', 'ახალქალაქი', 'ნინოწმინდა'], citiesEn: ['Akhaltsikhe', 'Borjomi', 'Akhalkalaki', 'Ninotsminda'] },
+        'მცხეთა-მთიანეთი': { en: 'Mtskheta-Mtianeti', cities: ['მცხეთა', 'დუშეთი', 'თიანეთი', 'ყაზბეგი'], citiesEn: ['Mtskheta', 'Dusheti', 'Tianeti', 'Kazbegi'] },
+        'რაჭა-ლეჩხუმი': { en: 'Racha-Lechkhumi', cities: ['ამბროლაური', 'ონი', 'ცაგერი', 'ლენტეხი'], citiesEn: ['Ambrolauri', 'Oni', 'Tsageri', 'Lentekhi'] },
+        'გურია': { en: 'Guria', cities: ['ოზურგეთი', 'ლანჩხუთი', 'ჩოხატაური'], citiesEn: ['Ozurgeti', 'Lanchkhuti', 'Chokhatauri'] },
       },
       emoji: '🇬🇪',
     },
   };
 
-  getLocations(country?: string) {
+  getLocations(country?: string, locale?: string) {
     const targetCountry = country || 'Georgia';
+    const isGeorgian = locale === 'ka';
+
+    type RegionData = { en: string; cities: string[]; citiesEn: string[] };
+
     if (this.LOCATIONS_DATA[targetCountry]) {
+      const data = this.LOCATIONS_DATA[targetCountry];
+
+      // Transform regions to the expected format based on locale
+      const regions: Record<string, string[]> = {};
+      for (const [regionKa, regionData] of Object.entries(data.regions) as [string, RegionData][]) {
+        const regionName = isGeorgian ? regionKa : regionData.en;
+        const cities = isGeorgian ? regionData.cities : regionData.citiesEn;
+        regions[regionName] = cities;
+      }
+
       return {
-        country: targetCountry,
-        ...this.LOCATIONS_DATA[targetCountry],
+        country: isGeorgian ? data.country.ka : data.country.en,
+        nationwide: isGeorgian ? data.nationwide.ka : data.nationwide.en,
+        regions,
+        emoji: data.emoji,
       };
     }
+
+    // Default fallback
+    const defaultData = this.LOCATIONS_DATA['Georgia'];
+    const regions: Record<string, string[]> = {};
+    for (const [regionKa, regionData] of Object.entries(defaultData.regions) as [string, RegionData][]) {
+      const regionName = isGeorgian ? regionKa : regionData.en;
+      const cities = isGeorgian ? regionData.cities : regionData.citiesEn;
+      regions[regionName] = cities;
+    }
+
     return {
-      country: 'Georgia',
-      ...this.LOCATIONS_DATA['Georgia'],
+      country: isGeorgian ? defaultData.country.ka : defaultData.country.en,
+      nationwide: isGeorgian ? defaultData.nationwide.ka : defaultData.nationwide.en,
+      regions,
+      emoji: defaultData.emoji,
     };
   }
 

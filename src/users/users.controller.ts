@@ -257,9 +257,13 @@ export class UsersController {
   @Get('pros/locations')
   @ApiOperation({ summary: 'Get location data by country' })
   @ApiQuery({ name: 'country', required: false })
+  @ApiQuery({ name: 'locale', required: false, description: 'Locale for translations (en or ka)' })
   @ApiResponse({ status: 200, description: 'Location data for country' })
-  getLocations(@Query('country') country?: string) {
-    return this.usersService.getLocations(country);
+  getLocations(
+    @Query('country') country?: string,
+    @Query('locale') locale?: string,
+  ) {
+    return this.usersService.getLocations(country, locale);
   }
 
   @Get('pros')
