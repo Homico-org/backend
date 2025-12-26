@@ -51,7 +51,7 @@ export class AuthService {
 
     // Check if user has a password (might be Google-only user)
     if (!user.password) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('This account uses Google login. Please sign in with Google or use "Forgot Password" to set a password.');
     }
 
     const isPasswordValid = await this.usersService.validatePassword(
