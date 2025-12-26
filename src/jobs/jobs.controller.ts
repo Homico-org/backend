@@ -134,7 +134,7 @@ export class JobsController {
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status: open, in_progress, completed, cancelled' })
   @ApiResponse({ status: 200, description: 'List of my jobs' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   findMyJobs(@CurrentUser() user: any, @Query('status') status?: string) {
     return this.jobsService.findMyJobs(user.userId, status);
   }
@@ -144,7 +144,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'List of my proposals' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   findMyProposals(@CurrentUser() user: any) {
     return this.jobsService.findMyProposals(user.userId);
   }
@@ -174,7 +174,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Count of proposal updates' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   async getProposalUpdatesCount(@CurrentUser() user: any) {
     const count = await this.jobsService.getUnviewedProposalUpdatesCount(user.userId);
     return { count };
@@ -195,7 +195,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal updates marked as viewed' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   async markProposalUpdatesAsViewed(@CurrentUser() user: any) {
     await this.jobsService.markProposalUpdatesAsViewedByPro(user.userId);
     return { success: true };
