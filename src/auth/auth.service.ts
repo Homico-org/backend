@@ -143,6 +143,7 @@ export class AuthService {
       email: googleRegisterDto.email,
       name: googleRegisterDto.name,
       phone: googleRegisterDto.phone,
+      password: googleRegisterDto.password,
       avatar: googleRegisterDto.picture,
       role: googleRegisterDto.role,
       city: googleRegisterDto.city,

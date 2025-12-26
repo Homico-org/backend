@@ -28,6 +28,11 @@ export class GoogleRegisterDto {
   @IsOptional()
   phone?: string;
 
+  @ApiPropertyOptional({ example: 'password123', description: 'Password for the account (allows login without Google)' })
+  @IsString()
+  @IsOptional()
+  password?: string;
+
   @ApiPropertyOptional({ enum: UserRole, example: UserRole.CLIENT, description: 'User role' })
   @IsEnum(UserRole)
   @IsOptional()

@@ -148,6 +148,7 @@ export class UsersService {
     email: string;
     name: string;
     phone: string;
+    password?: string;
     avatar?: string;
     role?: string;
     city?: string;
@@ -180,12 +181,16 @@ export class UsersService {
 
     const uid = await this.generateNextUid();
 
+    // Hash password if provided
+    const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : undefined;
+
     const user = new this.userModel({
       uid,
       googleId: data.googleId,
       email: data.email,
       name: data.name,
       phone: data.phone,
+      password: hashedPassword,
       avatar: data.avatar,
       role: data.role || 'client',
       city: data.city,

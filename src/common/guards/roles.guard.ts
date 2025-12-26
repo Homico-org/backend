@@ -18,6 +18,12 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest();
     console.log('RolesGuard - User role:', user?.role, 'Required roles:', requiredRoles);
+
+    // Admin can access all protected routes
+    if (user?.role === 'admin') {
+      return true;
+    }
+
     return requiredRoles.some((role) => user.role === role);
   }
 }
