@@ -103,9 +103,40 @@ export class UsersService {
   }
 
   async findByEmailOrPhone(identifier: string): Promise<User | null> {
-    return this.userModel.findOne({
-      $or: [{ email: identifier }, { phone: identifier }]
+    // Normalize identifier
+    const normalizedIdentifier = identifier.replace(/[\s\-]/g, '');
+
+    // First try exact match on email (case-insensitive) or phone
+    const user = await this.userModel.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { phone: normalizedIdentifier }
+      ]
     }).exec();
+
+    if (user) return user;
+
+    // If not found and looks like a phone number, try matching with/without country code
+    if (/^\+?\d+$/.test(normalizedIdentifier)) {
+      // Try finding by phone with flexible matching
+      const allUsers = await this.userModel.find({
+        phone: { $exists: true, $ne: null }
+      }).select('_id phone').exec();
+
+      for (const u of allUsers) {
+        if (!u.phone) continue;
+        const storedNormalized = u.phone.replace(/[\s\-]/g, '');
+
+        // Match if phones are equal, or if one ends with the other (handles country code differences)
+        if (storedNormalized === normalizedIdentifier ||
+            storedNormalized.endsWith(normalizedIdentifier) ||
+            normalizedIdentifier.endsWith(storedNormalized)) {
+          return this.userModel.findById(u._id).exec();
+        }
+      }
+    }
+
+    return null;
   }
 
   async findByGoogleId(googleId: string): Promise<User | null> {
