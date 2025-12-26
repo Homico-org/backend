@@ -27,7 +27,8 @@ import { JobStatus, JobPropertyType } from './schemas/job.schema';
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
-  // Job endpoints
+  // ============== STATIC ROUTES FIRST (before :id wildcard) ==============
+
   @Post()
   @ApiOperation({ summary: 'Create a new job posting' })
   @ApiBearerAuth('JWT-auth')
@@ -138,92 +139,6 @@ export class JobsController {
     return this.jobsService.findMyJobs(user.userId, status);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get job by ID' })
-  @ApiResponse({ status: 200, description: 'Job details' })
-  @ApiResponse({ status: 404, description: 'Job not found' })
-  findJobById(@Param('id') id: string) {
-    return this.jobsService.findJobById(id);
-  }
-
-  @Put(':id')
-  @ApiOperation({ summary: 'Update job' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Job updated successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
-  updateJob(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-    @Body() updateJobDto: Partial<CreateJobDto>,
-  ) {
-    return this.jobsService.updateJob(id, user.userId, updateJobDto);
-  }
-
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete job' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Job deleted successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
-  async deleteJob(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.jobsService.deleteJob(id, user.userId);
-    return { message: 'Job deleted successfully' };
-  }
-
-  @Post(':id/complete')
-  @ApiOperation({ summary: 'Mark job as completed and add to pro portfolio' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Job completed successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
-  async completeJob(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-    @Body() completionData?: {
-      completionImages?: string[];
-      completionNote?: string;
-      beforeImages?: string[];
-      afterImages?: string[];
-    },
-  ) {
-    return this.jobsService.completeJob(id, user.userId, completionData);
-  }
-
-  // Proposal endpoints
-  @Post(':jobId/proposals')
-  @ApiOperation({ summary: 'Submit proposal for a job' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 201, description: 'Proposal submitted successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async createProposal(
-    @Param('jobId') jobId: string,
-    @CurrentUser() user: any,
-    @Body() createProposalDto: CreateProposalDto,
-  ) {
-    // Get pro profile ID
-    const ProProfileModel = this.jobsService['proProfileModel'];
-    // We'll need to inject ProProfile model or get it differently
-    // For now, we'll pass undefined and update later
-    return this.jobsService.createProposal(
-      jobId,
-      user.userId,
-      user.proProfileId, // We'll add this to JWT token
-      createProposalDto,
-    );
-  }
-
-  @Get(':jobId/proposals')
-  @ApiOperation({ summary: 'Get proposals for a job (client only)' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'List of proposals' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
-  findJobProposals(@Param('jobId') jobId: string, @CurrentUser() user: any) {
-    return this.jobsService.findJobProposals(jobId, user.userId);
-  }
-
   @Get('my-proposals/list')
   @ApiOperation({ summary: 'Get my proposals (pro only)' })
   @ApiBearerAuth('JWT-auth')
@@ -234,16 +149,59 @@ export class JobsController {
     return this.jobsService.findMyProposals(user.userId);
   }
 
-  @Get(':jobId/my-proposal')
-  @ApiOperation({ summary: 'Get my proposal for a specific job (pro only)' })
+  @Get('saved/list')
+  @ApiOperation({ summary: 'Get list of saved job IDs' })
   @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'My proposal for the job or null' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  findMyProposalForJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
-    return this.jobsService.findMyProposalForJob(jobId, user.userId);
+  @ApiResponse({ status: 200, description: 'List of saved job IDs' })
+  @UseGuards(JwtAuthGuard)
+  getSavedJobIds(@CurrentUser() user: any) {
+    return this.jobsService.getSavedJobIds(user.userId);
   }
 
+  // Header counter endpoints
+  @Get('counters/unviewed-proposals')
+  @ApiOperation({ summary: 'Get count of unviewed proposals on my jobs (for clients)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Count of unviewed proposals' })
+  @UseGuards(JwtAuthGuard)
+  async getUnviewedProposalsCount(@CurrentUser() user: any) {
+    const count = await this.jobsService.getUnviewedProposalsCount(user.userId);
+    return { count };
+  }
+
+  @Get('counters/proposal-updates')
+  @ApiOperation({ summary: 'Get count of proposal status updates not viewed by pro' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Count of proposal updates' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async getProposalUpdatesCount(@CurrentUser() user: any) {
+    const count = await this.jobsService.getUnviewedProposalUpdatesCount(user.userId);
+    return { count };
+  }
+
+  @Post('counters/mark-proposals-viewed/:jobId')
+  @ApiOperation({ summary: 'Mark proposals as viewed by client for a specific job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposals marked as viewed' })
+  @UseGuards(JwtAuthGuard)
+  async markProposalsAsViewed(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    await this.jobsService.markProposalsAsViewedByClient(jobId, user.userId);
+    return { success: true };
+  }
+
+  @Post('counters/mark-proposal-updates-viewed')
+  @ApiOperation({ summary: 'Mark all proposal updates as viewed by pro' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal updates marked as viewed' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async markProposalUpdatesAsViewed(@CurrentUser() user: any) {
+    await this.jobsService.markProposalUpdatesAsViewedByPro(user.userId);
+    return { success: true };
+  }
+
+  // Proposal static routes (before :jobId wildcard)
   @Post('proposals/:proposalId/reveal-contact')
   @ApiOperation({ summary: 'Reveal pro contact information' })
   @ApiBearerAuth('JWT-auth')
@@ -298,7 +256,99 @@ export class JobsController {
     return this.jobsService.withdrawProposal(proposalId, user.userId);
   }
 
-  // Saved Jobs endpoints
+  // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get job by ID' })
+  @ApiResponse({ status: 200, description: 'Job details' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  findJobById(@Param('id') id: string) {
+    return this.jobsService.findJobById(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job updated successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  updateJob(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() updateJobDto: Partial<CreateJobDto>,
+  ) {
+    return this.jobsService.updateJob(id, user.userId, updateJobDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job deleted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  async deleteJob(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.jobsService.deleteJob(id, user.userId);
+    return { message: 'Job deleted successfully' };
+  }
+
+  @Post(':id/complete')
+  @ApiOperation({ summary: 'Mark job as completed and add to pro portfolio' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job completed successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  async completeJob(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() completionData?: {
+      completionImages?: string[];
+      completionNote?: string;
+      beforeImages?: string[];
+      afterImages?: string[];
+    },
+  ) {
+    return this.jobsService.completeJob(id, user.userId, completionData);
+  }
+
+  @Post(':jobId/proposals')
+  @ApiOperation({ summary: 'Submit proposal for a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Proposal submitted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async createProposal(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() createProposalDto: CreateProposalDto,
+  ) {
+    return this.jobsService.createProposal(
+      jobId,
+      user.userId,
+      user.proProfileId,
+      createProposalDto,
+    );
+  }
+
+  @Get(':jobId/proposals')
+  @ApiOperation({ summary: 'Get proposals for a job (client only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of proposals' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  findJobProposals(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.findJobProposals(jobId, user.userId);
+  }
+
+  @Get(':jobId/my-proposal')
+  @ApiOperation({ summary: 'Get my proposal for a specific job (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'My proposal for the job or null' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  findMyProposalForJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.findMyProposalForJob(jobId, user.userId);
+  }
+
   @Post(':jobId/save')
   @ApiOperation({ summary: 'Save a job to favorites' })
   @ApiBearerAuth('JWT-auth')
@@ -315,57 +365,5 @@ export class JobsController {
   @UseGuards(JwtAuthGuard)
   unsaveJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
     return this.jobsService.unsaveJob(user.userId, jobId);
-  }
-
-  @Get('saved/list')
-  @ApiOperation({ summary: 'Get list of saved job IDs' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'List of saved job IDs' })
-  @UseGuards(JwtAuthGuard)
-  getSavedJobIds(@CurrentUser() user: any) {
-    return this.jobsService.getSavedJobIds(user.userId);
-  }
-
-  // Header counter endpoints
-  @Get('counters/unviewed-proposals')
-  @ApiOperation({ summary: 'Get count of unviewed proposals on my jobs (for clients)' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Count of unviewed proposals' })
-  @UseGuards(JwtAuthGuard)
-  async getUnviewedProposalsCount(@CurrentUser() user: any) {
-    const count = await this.jobsService.getUnviewedProposalsCount(user.userId);
-    return { count };
-  }
-
-  @Get('counters/proposal-updates')
-  @ApiOperation({ summary: 'Get count of proposal status updates not viewed by pro' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Count of proposal updates' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async getProposalUpdatesCount(@CurrentUser() user: any) {
-    const count = await this.jobsService.getUnviewedProposalUpdatesCount(user.userId);
-    return { count };
-  }
-
-  @Post('counters/mark-proposals-viewed/:jobId')
-  @ApiOperation({ summary: 'Mark proposals as viewed by client for a specific job' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Proposals marked as viewed' })
-  @UseGuards(JwtAuthGuard)
-  async markProposalsAsViewed(@Param('jobId') jobId: string, @CurrentUser() user: any) {
-    await this.jobsService.markProposalsAsViewedByClient(jobId, user.userId);
-    return { success: true };
-  }
-
-  @Post('counters/mark-proposal-updates-viewed')
-  @ApiOperation({ summary: 'Mark all proposal updates as viewed by pro' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Proposal updates marked as viewed' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async markProposalUpdatesAsViewed(@CurrentUser() user: any) {
-    await this.jobsService.markProposalUpdatesAsViewedByPro(user.userId);
-    return { success: true };
   }
 }
