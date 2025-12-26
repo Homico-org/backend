@@ -302,12 +302,44 @@ export class User extends Document {
   @Prop({ type: [String], default: [] })
   completedProjects: string[];
 
+  // Social links for verification
+  @Prop()
+  facebookUrl: string;
+
+  @Prop()
+  instagramUrl: string;
+
+  @Prop()
+  linkedinUrl: string;
+
+  @Prop()
+  websiteUrl: string;
+
+  // ID Verification documents
+  @Prop()
+  idDocumentUrl: string;  // ID card/passport front
+
+  @Prop()
+  idDocumentBackUrl: string;  // ID card back (optional)
+
+  @Prop()
+  selfieWithIdUrl: string;  // Selfie holding ID
+
+  @Prop()
+  verificationSubmittedAt: Date;
+
   // Verification status
   @Prop({ default: 'pending' })
-  verificationStatus: string;
+  verificationStatus: string;  // pending, submitted, verified, rejected
 
   @Prop()
   verificationNotes: string;
+
+  @Prop()
+  verifiedAt: Date;
+
+  @Prop()
+  verifiedBy: string;  // Admin user ID who verified
 
   // Premium status
   @Prop({ default: false })

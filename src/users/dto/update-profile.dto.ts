@@ -253,4 +253,41 @@ export class UpdateProfileDto {
   @IsNumber()
   @IsOptional()
   externalCompletedJobs?: number;
+
+  // Social links for verification
+  @ApiPropertyOptional({ description: 'Facebook profile/page URL' })
+  @IsString()
+  @IsOptional()
+  facebookUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Instagram profile URL' })
+  @IsString()
+  @IsOptional()
+  instagramUrl?: string;
+
+  @ApiPropertyOptional({ description: 'LinkedIn profile URL' })
+  @IsString()
+  @IsOptional()
+  linkedinUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Personal/business website URL' })
+  @IsString()
+  @IsOptional()
+  websiteUrl?: string;
+
+  // ID Verification documents
+  @ApiPropertyOptional({ description: 'ID document front image URL' })
+  @IsString()
+  @IsOptional()
+  idDocumentUrl?: string;
+
+  @ApiPropertyOptional({ description: 'ID document back image URL (optional)' })
+  @IsString()
+  @IsOptional()
+  idDocumentBackUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Selfie holding ID image URL' })
+  @IsString()
+  @IsOptional()
+  selfieWithIdUrl?: string;
 }
