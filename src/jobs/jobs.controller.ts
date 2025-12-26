@@ -330,11 +330,11 @@ export class JobsController {
   }
 
   @Get(':jobId/proposals')
-  @ApiOperation({ summary: 'Get proposals for a job (client only)' })
+  @ApiOperation({ summary: 'Get proposals for a job (job owner only)' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'List of proposals' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   findJobProposals(@Param('jobId') jobId: string, @CurrentUser() user: any) {
     return this.jobsService.findJobProposals(jobId, user.userId);
   }
