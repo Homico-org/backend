@@ -183,6 +183,10 @@ export class User extends Document {
   @Prop({ type: [String], default: [] })
   subcategories: string[];
 
+  // Custom services added by user during registration (free-form text services)
+  @Prop({ type: [String], default: [] })
+  customServices: string[];
+
   @Prop({ default: 0 })
   yearsExperience: number;
 

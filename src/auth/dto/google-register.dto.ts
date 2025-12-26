@@ -46,6 +46,24 @@ export class GoogleRegisterDto {
   @IsOptional()
   selectedSubcategories?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Custom services added by user during registration',
+    type: [String]
+  })
+  @IsOptional()
+  customServices?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Portfolio projects added during registration',
+    type: 'array',
+  })
+  @IsOptional()
+  portfolioProjects?: Array<{
+    title: string;
+    description?: string;
+    images: string[];
+  }>;
+
   @ApiPropertyOptional({ example: true, description: 'Whether phone has been verified via OTP' })
   @IsOptional()
   isPhoneVerified?: boolean;

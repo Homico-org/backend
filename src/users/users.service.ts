@@ -66,7 +66,26 @@ export class UsersService {
       ...(createUserDto.isPhoneVerified && { phoneVerifiedAt: new Date() }),
     });
 
-    return user.save();
+    const savedUser = await user.save();
+
+    // Create portfolio items in the portfolio collection if provided
+    if (createUserDto.portfolioProjects && createUserDto.portfolioProjects.length > 0) {
+      const portfolioItems = createUserDto.portfolioProjects.map((project, index) => ({
+        proId: savedUser._id,
+        title: project.title || `Project ${index + 1}`,
+        description: project.description || '',
+        imageUrl: project.images[0] || '',
+        images: project.images || [],
+        source: 'external',
+        status: 'completed',
+        projectType: 'project',
+        displayOrder: index,
+      }));
+
+      await this.portfolioItemModel.insertMany(portfolioItems);
+    }
+
+    return savedUser;
   }
 
   private async generateNextUid(): Promise<number> {
@@ -103,6 +122,8 @@ export class UsersService {
     city?: string;
     selectedCategories?: string[];
     selectedSubcategories?: string[];
+    customServices?: string[];
+    portfolioProjects?: Array<{ title: string; description?: string; images: string[] }>;
     isPhoneVerified?: boolean;
   }): Promise<User> {
     // Check if user with same email or phone already exists
@@ -139,13 +160,34 @@ export class UsersService {
       city: data.city,
       selectedCategories: data.selectedCategories || [],
       selectedSubcategories: data.selectedSubcategories || [],
+      customServices: data.customServices || [],
+      portfolioProjects: data.portfolioProjects || [],
       isPhoneVerified: data.isPhoneVerified || false,
       phoneVerifiedAt: data.isPhoneVerified ? new Date() : undefined,
       isEmailVerified: true, // Google emails are verified
       emailVerifiedAt: new Date(),
     });
 
-    return user.save();
+    const savedUser = await user.save();
+
+    // Create portfolio items in the portfolio collection if provided
+    if (data.portfolioProjects && data.portfolioProjects.length > 0) {
+      const portfolioItems = data.portfolioProjects.map((project, index) => ({
+        proId: savedUser._id,
+        title: project.title || `Project ${index + 1}`,
+        description: project.description || '',
+        imageUrl: project.images[0] || '',
+        images: project.images || [],
+        source: 'external',
+        status: 'completed',
+        projectType: 'project',
+        displayOrder: index,
+      }));
+
+      await this.portfolioItemModel.insertMany(portfolioItems);
+    }
+
+    return savedUser;
   }
 
   async findById(id: string): Promise<User> {

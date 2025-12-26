@@ -148,6 +148,8 @@ export class AuthService {
       city: googleRegisterDto.city,
       selectedCategories: googleRegisterDto.selectedCategories,
       selectedSubcategories: googleRegisterDto.selectedSubcategories,
+      customServices: googleRegisterDto.customServices,
+      portfolioProjects: googleRegisterDto.portfolioProjects,
       isPhoneVerified: googleRegisterDto.isPhoneVerified,
     });
 

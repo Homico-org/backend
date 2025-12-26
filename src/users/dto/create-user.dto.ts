@@ -66,6 +66,33 @@ export class CreateUserDto {
   selectedSubcategories?: string[];
 
   @ApiPropertyOptional({
+    description: 'Custom services added by user during registration (free-form text)',
+    example: ['Kitchen Design', 'Bathroom Renovation'],
+    type: [String]
+  })
+  @IsOptional()
+  customServices?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Portfolio projects added during registration',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        images: { type: 'array', items: { type: 'string' } },
+      }
+    }
+  })
+  @IsOptional()
+  portfolioProjects?: Array<{
+    title: string;
+    description?: string;
+    images: string[];
+  }>;
+
+  @ApiPropertyOptional({
     enum: AccountType,
     example: AccountType.INDIVIDUAL,
     description: 'Account type - individual or organization'
