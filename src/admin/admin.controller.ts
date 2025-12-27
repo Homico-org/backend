@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { LoggerService, ActivityType } from '../common/logger';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -12,7 +13,10 @@ import { UserRole } from '../users/schemas/user.schema';
 @Roles(UserRole.ADMIN)
 @ApiBearerAuth('JWT-auth')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly loggerService: LoggerService,
+  ) {}
 
   // ============== PAGINATED LIST ENDPOINTS ==============
 
@@ -166,5 +170,66 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Daily proposals data' })
   getDailyProposals(@Query('days') days?: string) {
     return this.adminService.getDailyProposals(days ? parseInt(days, 10) : 30);
+  }
+
+  // ============== ACTIVITY LOGS ==============
+
+  @Get('activity-logs')
+  @ApiOperation({ summary: 'Get activity logs with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 50)' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by activity type' })
+  @ApiQuery({ name: 'userId', required: false, description: 'Filter by user ID' })
+  @ApiQuery({ name: 'userEmail', required: false, description: 'Filter by user email' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Filter from date (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Filter to date (ISO string)' })
+  @ApiResponse({ status: 200, description: 'Paginated activity logs' })
+  getActivityLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('type') type?: string,
+    @Query('userId') userId?: string,
+    @Query('userEmail') userEmail?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.loggerService.getActivityLogs({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+      type,
+      userId,
+      userEmail,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    });
+  }
+
+  @Get('activity-stats')
+  @ApiOperation({ summary: 'Get activity statistics' })
+  @ApiResponse({ status: 200, description: 'Activity statistics' })
+  getActivityStats() {
+    return this.loggerService.getActivityStats();
+  }
+
+  @Get('activity-types')
+  @ApiOperation({ summary: 'Get all activity types' })
+  @ApiResponse({ status: 200, description: 'List of all activity types' })
+  getActivityTypes() {
+    return Object.values(ActivityType);
+  }
+
+  @Get('deleted-users')
+  @ApiOperation({ summary: 'Get deleted users logs' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiResponse({ status: 200, description: 'Deleted users logs with full user data' })
+  getDeletedUsers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.loggerService.getDeletedUsers(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
   }
 }

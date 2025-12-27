@@ -388,6 +388,17 @@ export class UsersService {
       )
       .exec();
 
+    // Log upgrade to pro
+    this.logger.logActivity({
+      type: ActivityType.USER_UPGRADE_TO_PRO,
+      userId: updatedUser._id.toString(),
+      userEmail: updatedUser.email,
+      userName: updatedUser.name,
+      details: {
+        selectedCategories,
+      },
+    });
+
     return updatedUser;
   }
 
@@ -989,6 +1000,17 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
+    // Log profile update
+    this.logger.logActivity({
+      type: ActivityType.PROFILE_UPDATE,
+      userId: updatedUser._id.toString(),
+      userEmail: updatedUser.email,
+      userName: updatedUser.name,
+      details: {
+        updatedFields: Object.keys(updateData),
+      },
+    });
+
     return updatedUser;
   }
 
@@ -1101,6 +1123,18 @@ export class UsersService {
       .select("-password")
       .exec();
 
+    // Log profile deactivation
+    this.logger.logActivity({
+      type: ActivityType.PROFILE_DEACTIVATE,
+      userId: updatedUser._id.toString(),
+      userEmail: updatedUser.email,
+      userName: updatedUser.name,
+      details: {
+        deactivateUntil,
+        reason,
+      },
+    });
+
     return updatedUser;
   }
 
@@ -1139,6 +1173,14 @@ export class UsersService {
       )
       .select("-password")
       .exec();
+
+    // Log profile reactivation
+    this.logger.logActivity({
+      type: ActivityType.PROFILE_REACTIVATE,
+      userId: updatedUser._id.toString(),
+      userEmail: updatedUser.email,
+      userName: updatedUser.name,
+    });
 
     return updatedUser;
   }

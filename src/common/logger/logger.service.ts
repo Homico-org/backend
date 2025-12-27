@@ -1,6 +1,7 @@
-import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
-import * as winston from 'winston';
-import LokiTransport from 'winston-loki';
+import { Injectable, LoggerService as NestLoggerService, OnModuleInit } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { ActivityLog } from './schemas/activity-log.schema';
 
 export enum ActivityType {
   // Auth
@@ -55,7 +56,7 @@ export enum ActivityType {
   ADMIN_VERIFICATION_ACTION = 'admin.verification_action',
 }
 
-interface ActivityLogData {
+export interface ActivityLogData {
   type: ActivityType;
   userId?: string;
   userEmail?: string;
@@ -68,141 +69,65 @@ interface ActivityLogData {
 }
 
 @Injectable()
-export class LoggerService implements NestLoggerService {
-  private logger: winston.Logger;
-  private activityLogger: winston.Logger;
+export class LoggerService implements NestLoggerService, OnModuleInit {
+  constructor(
+    @InjectModel(ActivityLog.name) private activityLogModel: Model<ActivityLog>,
+  ) {}
 
-  constructor() {
-    const lokiHost = process.env.LOKI_HOST || 'http://localhost:3100';
-    const lokiUser = process.env.LOKI_USER || '';
-    const lokiPassword = process.env.LOKI_PASSWORD || '';
-    const appName = process.env.APP_NAME || 'homico-backend';
-    const environment = process.env.NODE_ENV || 'development';
-
-    // Console format for development
-    const consoleFormat = winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.colorize(),
-      winston.format.printf(({ timestamp, level, message, ...meta }) => {
-        const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : '';
-        return `${timestamp} [${level}]: ${message} ${metaStr}`;
-      }),
-    );
-
-    // JSON format for Loki
-    const jsonFormat = winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json(),
-    );
-
-    // Loki basic auth for Grafana Cloud
-    const lokiBasicAuth = lokiUser && lokiPassword
-      ? { username: lokiUser, password: lokiPassword }
-      : undefined;
-
-    // Transports array
-    const transports: winston.transport[] = [
-      new winston.transports.Console({
-        format: consoleFormat,
-      }),
-    ];
-
-    // Add Loki transport if LOKI_HOST is configured
-    if (process.env.LOKI_HOST) {
-      transports.push(
-        new LokiTransport({
-          host: lokiHost,
-          labels: { app: appName, env: environment },
-          json: true,
-          format: jsonFormat,
-          replaceTimestamp: true,
-          basicAuth: lokiBasicAuth,
-          onConnectionError: (err) => console.error('Loki connection error:', err),
-        }),
-      );
-      console.log(`[Logger] Loki transport configured for: ${lokiHost}`);
-    }
-
-    // Main application logger
-    this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
-      transports,
-    });
-
-    // Activity logger with specific labels
-    const activityTransports: winston.transport[] = [
-      new winston.transports.Console({
-        format: consoleFormat,
-      }),
-    ];
-
-    if (process.env.LOKI_HOST) {
-      activityTransports.push(
-        new LokiTransport({
-          host: lokiHost,
-          labels: { app: appName, env: environment, type: 'activity' },
-          json: true,
-          format: jsonFormat,
-          replaceTimestamp: true,
-          basicAuth: lokiBasicAuth,
-          onConnectionError: (err) => console.error('Loki connection error:', err),
-        }),
-      );
-    }
-
-    this.activityLogger = winston.createLogger({
-      level: 'info',
-      transports: activityTransports,
-    });
+  onModuleInit() {
+    console.log('[Logger] MongoDB Activity Logger initialized');
   }
 
   // Standard NestJS logger methods
   log(message: string, context?: string) {
-    this.logger.info(message, { context });
+    console.log(`[${context || 'LOG'}] ${message}`);
   }
 
   error(message: string, trace?: string, context?: string) {
-    this.logger.error(message, { trace, context });
+    console.error(`[${context || 'ERROR'}] ${message}`, trace);
   }
 
   warn(message: string, context?: string) {
-    this.logger.warn(message, { context });
+    console.warn(`[${context || 'WARN'}] ${message}`);
   }
 
   debug(message: string, context?: string) {
-    this.logger.debug(message, { context });
+    console.debug(`[${context || 'DEBUG'}] ${message}`);
   }
 
   verbose(message: string, context?: string) {
-    this.logger.verbose(message, { context });
+    console.log(`[${context || 'VERBOSE'}] ${message}`);
   }
 
-  // Activity logging - this is what you'll query in Grafana
-  logActivity(data: ActivityLogData) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      activity_type: data.type,
-      user_id: data.userId || 'anonymous',
-      user_email: data.userEmail || 'unknown',
-      user_name: data.userName || 'unknown',
-      target_id: data.targetId,
-      target_type: data.targetType,
-      details: data.details,
-      ip: data.ip,
-      user_agent: data.userAgent,
-    };
+  // Activity logging - saves to MongoDB
+  async logActivity(data: ActivityLogData): Promise<void> {
+    try {
+      // Save to MongoDB
+      await this.activityLogModel.create({
+        type: data.type,
+        userId: data.userId || 'anonymous',
+        userEmail: data.userEmail || 'unknown',
+        userName: data.userName || 'unknown',
+        targetId: data.targetId,
+        targetType: data.targetType,
+        details: data.details,
+        ip: data.ip,
+        userAgent: data.userAgent,
+        timestamp: new Date(),
+      });
 
-    this.activityLogger.info(`Activity: ${data.type}`, logEntry);
-
-    // Also log to console in a readable format
-    console.log(
-      `[ACTIVITY] ${data.type} | User: ${data.userEmail || data.userId || 'anonymous'} | Target: ${data.targetType}:${data.targetId || 'N/A'}`,
-    );
+      // Also log to console
+      console.log(
+        `[ACTIVITY] ${data.type} | User: ${data.userEmail || data.userId || 'anonymous'} | Target: ${data.targetType}:${data.targetId || 'N/A'}`,
+      );
+    } catch (error) {
+      console.error('[ACTIVITY LOG ERROR]', error);
+    }
   }
 
   // Helper for user deletion - captures full user data before delete
-  logUserDeletion(user: any, deletedBy?: string) {
-    this.logActivity({
+  async logUserDeletion(user: any, deletedBy?: string): Promise<void> {
+    await this.logActivity({
       type: ActivityType.USER_DELETE,
       userId: user._id?.toString() || user.id,
       userEmail: user.email,
@@ -215,7 +140,7 @@ export class LoggerService implements NestLoggerService {
         accountCreatedAt: user.createdAt,
         wasVerified: user.verificationStatus === 'verified',
         hadCompletedProfile: user.isProfileCompleted,
-        // Store important user data for reference
+        // Store full user data for reference
         fullUserSnapshot: {
           name: user.name,
           email: user.email,
@@ -223,9 +148,85 @@ export class LoggerService implements NestLoggerService {
           role: user.role,
           city: user.city,
           categories: user.categories,
+          subcategories: user.subcategories,
           createdAt: user.createdAt,
+          avatar: user.avatar,
+          title: user.title,
+          description: user.description,
         },
       },
+    });
+  }
+
+  // Query methods for admin panel
+  async getActivityLogs(options: {
+    type?: string;
+    userId?: string;
+    userEmail?: string;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    limit?: number;
+  }): Promise<{ logs: ActivityLog[]; total: number; page: number; pages: number }> {
+    const { type, userId, userEmail, startDate, endDate, page = 1, limit = 50 } = options;
+
+    const query: any = {};
+
+    if (type) query.type = type;
+    if (userId) query.userId = userId;
+    if (userEmail) query.userEmail = { $regex: userEmail, $options: 'i' };
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = startDate;
+      if (endDate) query.timestamp.$lte = endDate;
+    }
+
+    const total = await this.activityLogModel.countDocuments(query);
+    const pages = Math.ceil(total / limit);
+    const skip = (page - 1) * limit;
+
+    const logs = await this.activityLogModel
+      .find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+
+    return { logs, total, page, pages };
+  }
+
+  // Get activity stats
+  async getActivityStats(): Promise<any> {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [todayCount, weekCount, monthCount, byType] = await Promise.all([
+      this.activityLogModel.countDocuments({ timestamp: { $gte: today } }),
+      this.activityLogModel.countDocuments({ timestamp: { $gte: thisWeek } }),
+      this.activityLogModel.countDocuments({ timestamp: { $gte: thisMonth } }),
+      this.activityLogModel.aggregate([
+        { $match: { timestamp: { $gte: thisMonth } } },
+        { $group: { _id: '$type', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+    ]);
+
+    return {
+      today: todayCount,
+      thisWeek: weekCount,
+      thisMonth: monthCount,
+      byType,
+    };
+  }
+
+  // Get deleted users
+  async getDeletedUsers(page = 1, limit = 20): Promise<any> {
+    return this.getActivityLogs({
+      type: ActivityType.USER_DELETE,
+      page,
+      limit,
     });
   }
 }

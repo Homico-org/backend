@@ -133,6 +133,18 @@ export class AuthService {
       // User already exists, log them in
       await this.usersService.updateLastLogin(existingGoogleUser._id.toString());
 
+      // Log Google login
+      this.logger.logActivity({
+        type: ActivityType.USER_LOGIN,
+        userId: existingGoogleUser._id.toString(),
+        userEmail: existingGoogleUser.email,
+        userName: existingGoogleUser.name,
+        details: {
+          role: existingGoogleUser.role,
+          loginMethod: 'google',
+        },
+      });
+
       const payload = {
         sub: existingGoogleUser._id,
         email: existingGoogleUser.email,
@@ -179,6 +191,19 @@ export class AuthService {
       customServices: googleRegisterDto.customServices,
       portfolioProjects: googleRegisterDto.portfolioProjects,
       isPhoneVerified: googleRegisterDto.isPhoneVerified,
+    });
+
+    // Log Google registration
+    this.logger.logActivity({
+      type: ActivityType.USER_REGISTER,
+      userId: user._id.toString(),
+      userEmail: user.email,
+      userName: user.name,
+      details: {
+        role: user.role,
+        phone: user.phone,
+        registrationMethod: 'google',
+      },
     });
 
     const payload = {
