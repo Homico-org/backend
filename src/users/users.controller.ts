@@ -44,8 +44,11 @@ export class UsersController {
       avatar: userData.avatar,
       accountType: userData.accountType,
       companyName: userData.companyName,
-      selectedCategories: userData.selectedCategories,
-      selectedSubcategories: userData.selectedSubcategories,
+      selectedCategories: userData.selectedCategories || userData.categories,
+      // For pro users, subcategories are stored in 'subcategories' field
+      selectedSubcategories: userData.selectedSubcategories?.length > 0
+        ? userData.selectedSubcategories
+        : userData.subcategories,
     };
   }
 
@@ -70,8 +73,10 @@ export class UsersController {
       avatar: updatedUser.avatar,
       accountType: updatedUser.accountType,
       companyName: updatedUser.companyName,
-      selectedCategories: updatedUser.selectedCategories,
-      selectedSubcategories: updatedUser.selectedSubcategories,
+      selectedCategories: updatedUser.selectedCategories || updatedUser.categories,
+      selectedSubcategories: updatedUser.selectedSubcategories?.length > 0
+        ? updatedUser.selectedSubcategories
+        : updatedUser.subcategories,
     };
   }
 
@@ -107,8 +112,10 @@ export class UsersController {
         avatar: updatedUser.avatar,
         accountType: updatedUser.accountType,
         companyName: updatedUser.companyName,
-        selectedCategories: updatedUser.selectedCategories,
-        selectedSubcategories: updatedUser.selectedSubcategories,
+        selectedCategories: updatedUser.selectedCategories || updatedUser.categories,
+        selectedSubcategories: updatedUser.selectedSubcategories?.length > 0
+          ? updatedUser.selectedSubcategories
+          : updatedUser.subcategories,
       },
       message: 'Account upgraded to professional successfully',
     };
