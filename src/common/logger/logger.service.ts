@@ -74,6 +74,8 @@ export class LoggerService implements NestLoggerService {
 
   constructor() {
     const lokiHost = process.env.LOKI_HOST || 'http://localhost:3100';
+    const lokiUser = process.env.LOKI_USER || '';
+    const lokiPassword = process.env.LOKI_PASSWORD || '';
     const appName = process.env.APP_NAME || 'homico-backend';
     const environment = process.env.NODE_ENV || 'development';
 
@@ -93,6 +95,11 @@ export class LoggerService implements NestLoggerService {
       winston.format.json(),
     );
 
+    // Loki basic auth for Grafana Cloud
+    const lokiBasicAuth = lokiUser && lokiPassword
+      ? { username: lokiUser, password: lokiPassword }
+      : undefined;
+
     // Transports array
     const transports: winston.transport[] = [
       new winston.transports.Console({
@@ -109,9 +116,11 @@ export class LoggerService implements NestLoggerService {
           json: true,
           format: jsonFormat,
           replaceTimestamp: true,
+          basicAuth: lokiBasicAuth,
           onConnectionError: (err) => console.error('Loki connection error:', err),
         }),
       );
+      console.log(`[Logger] Loki transport configured for: ${lokiHost}`);
     }
 
     // Main application logger
@@ -135,6 +144,7 @@ export class LoggerService implements NestLoggerService {
           json: true,
           format: jsonFormat,
           replaceTimestamp: true,
+          basicAuth: lokiBasicAuth,
           onConnectionError: (err) => console.error('Loki connection error:', err),
         }),
       );
