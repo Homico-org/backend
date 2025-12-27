@@ -1,22 +1,27 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
-import { User, PaymentMethod } from './schemas/user.schema';
-import { CreateUserDto } from './dto/create-user.dto';
-import { v4 as uuidv4 } from 'uuid';
-import { Job } from '../jobs/schemas/job.schema';
-import { Proposal } from '../jobs/schemas/proposal.schema';
-import { SavedJob } from '../jobs/schemas/saved-job.schema';
-import { Conversation } from '../conversation/schemas/conversation.schema';
-import { Message } from '../message/schemas/message.schema';
-import { Notification } from '../notifications/schemas/notification.schema';
-import { Review } from '../review/schemas/review.schema';
-import { Like } from '../likes/schemas/like.schema';
-import { PortfolioItem } from '../portfolio/schemas/portfolio-item.schema';
-import { ProjectRequest } from '../project-request/schemas/project-request.schema';
-import { Offer } from '../offer/schemas/offer.schema';
-import { SupportTicket } from '../support/schemas/support-ticket.schema';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import * as bcrypt from "bcrypt";
+import { Model } from "mongoose";
+import { v4 as uuidv4 } from "uuid";
+import { Conversation } from "../conversation/schemas/conversation.schema";
+import { Job } from "../jobs/schemas/job.schema";
+import { Proposal } from "../jobs/schemas/proposal.schema";
+import { SavedJob } from "../jobs/schemas/saved-job.schema";
+import { Like } from "../likes/schemas/like.schema";
+import { Message } from "../message/schemas/message.schema";
+import { Notification } from "../notifications/schemas/notification.schema";
+import { Offer } from "../offer/schemas/offer.schema";
+import { PortfolioItem } from "../portfolio/schemas/portfolio-item.schema";
+import { ProjectRequest } from "../project-request/schemas/project-request.schema";
+import { Review } from "../review/schemas/review.schema";
+import { SupportTicket } from "../support/schemas/support-ticket.schema";
+import { CreateUserDto } from "./dto/create-user.dto";
+import { PaymentMethod, User } from "./schemas/user.schema";
 
 @Injectable()
 export class UsersService {
@@ -25,31 +30,42 @@ export class UsersService {
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
-    @InjectModel(Conversation.name) private conversationModel: Model<Conversation>,
+    @InjectModel(Conversation.name)
+    private conversationModel: Model<Conversation>,
     @InjectModel(Message.name) private messageModel: Model<Message>,
-    @InjectModel(Notification.name) private notificationModel: Model<Notification>,
+    @InjectModel(Notification.name)
+    private notificationModel: Model<Notification>,
     @InjectModel(Review.name) private reviewModel: Model<Review>,
     @InjectModel(Like.name) private likeModel: Model<Like>,
-    @InjectModel(PortfolioItem.name) private portfolioItemModel: Model<PortfolioItem>,
-    @InjectModel(ProjectRequest.name) private projectRequestModel: Model<ProjectRequest>,
+    @InjectModel(PortfolioItem.name)
+    private portfolioItemModel: Model<PortfolioItem>,
+    @InjectModel(ProjectRequest.name)
+    private projectRequestModel: Model<ProjectRequest>,
     @InjectModel(Offer.name) private offerModel: Model<Offer>,
-    @InjectModel(SupportTicket.name) private supportTicketModel: Model<SupportTicket>,
+    @InjectModel(SupportTicket.name)
+    private supportTicketModel: Model<SupportTicket>
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     // Only check email uniqueness if email is provided
     if (createUserDto.email) {
-      const existingUserByEmail = await this.userModel.findOne({ email: createUserDto.email });
+      const existingUserByEmail = await this.userModel.findOne({
+        email: createUserDto.email,
+      });
       if (existingUserByEmail) {
-        throw new ConflictException('User with this email already exists');
+        throw new ConflictException("User with this email already exists");
       }
     }
 
     // Check phone uniqueness (phone is now required)
     if (createUserDto.phone) {
-      const existingUserByPhone = await this.userModel.findOne({ phone: createUserDto.phone });
+      const existingUserByPhone = await this.userModel.findOne({
+        phone: createUserDto.phone,
+      });
       if (existingUserByPhone) {
-        throw new ConflictException('User with this phone number already exists');
+        throw new ConflictException(
+          "User with this phone number already exists"
+        );
       }
     }
 
@@ -69,18 +85,23 @@ export class UsersService {
     const savedUser = await user.save();
 
     // Create portfolio items in the portfolio collection if provided
-    if (createUserDto.portfolioProjects && createUserDto.portfolioProjects.length > 0) {
-      const portfolioItems = createUserDto.portfolioProjects.map((project, index) => ({
-        proId: savedUser._id,
-        title: project.title || `Project ${index + 1}`,
-        description: project.description || '',
-        imageUrl: project.images[0] || '',
-        images: project.images || [],
-        source: 'external',
-        status: 'completed',
-        projectType: 'project',
-        displayOrder: index,
-      }));
+    if (
+      createUserDto.portfolioProjects &&
+      createUserDto.portfolioProjects.length > 0
+    ) {
+      const portfolioItems = createUserDto.portfolioProjects.map(
+        (project, index) => ({
+          proId: savedUser._id,
+          title: project.title || `Project ${index + 1}`,
+          description: project.description || "",
+          imageUrl: project.images[0] || "",
+          images: project.images || [],
+          source: "external",
+          status: "completed",
+          projectType: "project",
+          displayOrder: index,
+        })
+      );
 
       await this.portfolioItemModel.insertMany(portfolioItems);
     }
@@ -89,7 +110,10 @@ export class UsersService {
   }
 
   private async generateNextUid(): Promise<number> {
-    const lastUser = await this.userModel.findOne({ uid: { $exists: true } }).sort({ uid: -1 }).exec();
+    const lastUser = await this.userModel
+      .findOne({ uid: { $exists: true } })
+      .sort({ uid: -1 })
+      .exec();
     const startingUid = 100001;
     return lastUser?.uid ? lastUser.uid + 1 : startingUid;
   }
@@ -104,33 +128,40 @@ export class UsersService {
 
   async findByEmailOrPhone(identifier: string): Promise<User | null> {
     // Normalize identifier
-    const normalizedIdentifier = identifier.replace(/[\s\-]/g, '');
+    const normalizedIdentifier = identifier.replace(/[\s\-]/g, "");
 
     // First try exact match on email (case-insensitive) or phone
-    const user = await this.userModel.findOne({
-      $or: [
-        { email: identifier.toLowerCase() },
-        { phone: normalizedIdentifier }
-      ]
-    }).exec();
+    const user = await this.userModel
+      .findOne({
+        $or: [
+          { email: identifier.toLowerCase() },
+          { phone: normalizedIdentifier },
+        ],
+      })
+      .exec();
 
     if (user) return user;
 
     // If not found and looks like a phone number, try matching with/without country code
     if (/^\+?\d+$/.test(normalizedIdentifier)) {
       // Try finding by phone with flexible matching
-      const allUsers = await this.userModel.find({
-        phone: { $exists: true, $ne: null }
-      }).select('_id phone').exec();
+      const allUsers = await this.userModel
+        .find({
+          phone: { $exists: true, $ne: null },
+        })
+        .select("_id phone")
+        .exec();
 
       for (const u of allUsers) {
         if (!u.phone) continue;
-        const storedNormalized = u.phone.replace(/[\s\-]/g, '');
+        const storedNormalized = u.phone.replace(/[\s\-]/g, "");
 
         // Match if phones are equal, or if one ends with the other (handles country code differences)
-        if (storedNormalized === normalizedIdentifier ||
-            storedNormalized.endsWith(normalizedIdentifier) ||
-            normalizedIdentifier.endsWith(storedNormalized)) {
+        if (
+          storedNormalized === normalizedIdentifier ||
+          storedNormalized.endsWith(normalizedIdentifier) ||
+          normalizedIdentifier.endsWith(storedNormalized)
+        ) {
           return this.userModel.findById(u._id).exec();
         }
       }
@@ -155,34 +186,50 @@ export class UsersService {
     selectedCategories?: string[];
     selectedSubcategories?: string[];
     customServices?: string[];
-    portfolioProjects?: Array<{ title: string; description?: string; images: string[] }>;
+    portfolioProjects?: Array<{
+      title: string;
+      description?: string;
+      images: string[];
+    }>;
     isPhoneVerified?: boolean;
   }): Promise<User> {
     // Check if user with same email or phone already exists
     if (data.email) {
-      const existingByEmail = await this.userModel.findOne({ email: data.email });
+      const existingByEmail = await this.userModel.findOne({
+        email: data.email,
+      });
       if (existingByEmail) {
-        throw new ConflictException('User with this email already exists');
+        throw new ConflictException("User with this email already exists");
       }
     }
 
     if (data.phone) {
-      const existingByPhone = await this.userModel.findOne({ phone: data.phone });
+      const existingByPhone = await this.userModel.findOne({
+        phone: data.phone,
+      });
       if (existingByPhone) {
-        throw new ConflictException('User with this phone number already exists');
+        throw new ConflictException(
+          "User with this phone number already exists"
+        );
       }
     }
 
     // Check if googleId already exists
-    const existingByGoogleId = await this.userModel.findOne({ googleId: data.googleId });
+    const existingByGoogleId = await this.userModel.findOne({
+      googleId: data.googleId,
+    });
     if (existingByGoogleId) {
-      throw new ConflictException('User with this Google account already exists');
+      throw new ConflictException(
+        "User with this Google account already exists"
+      );
     }
 
     const uid = await this.generateNextUid();
 
     // Hash password if provided
-    const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : undefined;
+    const hashedPassword = data.password
+      ? await bcrypt.hash(data.password, 10)
+      : undefined;
 
     const user = new this.userModel({
       uid,
@@ -192,7 +239,7 @@ export class UsersService {
       phone: data.phone,
       password: hashedPassword,
       avatar: data.avatar,
-      role: data.role || 'client',
+      role: data.role || "client",
       city: data.city,
       selectedCategories: data.selectedCategories || [],
       selectedSubcategories: data.selectedSubcategories || [],
@@ -211,12 +258,12 @@ export class UsersService {
       const portfolioItems = data.portfolioProjects.map((project, index) => ({
         proId: savedUser._id,
         title: project.title || `Project ${index + 1}`,
-        description: project.description || '',
-        imageUrl: project.images[0] || '',
+        description: project.description || "",
+        imageUrl: project.images[0] || "",
         images: project.images || [],
-        source: 'external',
-        status: 'completed',
-        projectType: 'project',
+        source: "external",
+        status: "completed",
+        projectType: "project",
         displayOrder: index,
       }));
 
@@ -230,13 +277,16 @@ export class UsersService {
     const user = await this.userModel.findById(id).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return user;
   }
 
-  async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
+  async validatePassword(
+    password: string,
+    hashedPassword: string
+  ): Promise<boolean> {
     return bcrypt.compare(password, hashedPassword);
   }
 
@@ -247,80 +297,94 @@ export class UsersService {
   }
 
   async update(userId: string, updateData: Partial<User>): Promise<User> {
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true },
-    ).exec();
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, updateData, { new: true })
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return user;
   }
 
-  async getDemoAccounts(): Promise<{ email: string; role: string; name: string }[]> {
-    const users = await this.userModel.find({
-      email: { $regex: /@demo\.com$/ }
-    }).select('email role name').sort({ role: 1, email: 1 }).exec();
+  async getDemoAccounts(): Promise<
+    { email: string; role: string; name: string }[]
+  > {
+    const users = await this.userModel
+      .find({
+        email: { $regex: /@demo\.com$/ },
+      })
+      .select("email role name")
+      .sort({ role: 1, email: 1 })
+      .exec();
 
-    return users.map(u => ({
+    return users.map((u) => ({
       email: u.email,
       role: u.role,
       name: u.name,
     }));
   }
 
-  async checkExists(field: 'email' | 'phone', value: string): Promise<{ exists: boolean }> {
+  async checkExists(
+    field: "email" | "phone",
+    value: string
+  ): Promise<{ exists: boolean }> {
     let normalizedValue = value;
-    if (field === 'email') {
+    if (field === "email") {
       normalizedValue = value.toLowerCase();
-    } else if (field === 'phone') {
+    } else if (field === "phone") {
       // Normalize phone: remove all spaces and dashes
-      normalizedValue = value.replace(/[\s\-]/g, '');
+      normalizedValue = value.replace(/[\s\-]/g, "");
     }
 
     // For phone, search with normalized value (no spaces)
-    if (field === 'phone') {
+    if (field === "phone") {
       // Find any user whose phone, when normalized, matches the input
-      const users = await this.userModel.find({}).select('phone').exec();
-      const exists = users.some(u => {
+      const users = await this.userModel.find({}).select("phone").exec();
+      const exists = users.some((u) => {
         if (!u.phone) return false;
-        const storedNormalized = u.phone.replace(/[\s\-]/g, '');
+        const storedNormalized = u.phone.replace(/[\s\-]/g, "");
         return storedNormalized === normalizedValue;
       });
       return { exists };
     }
 
     const query = { [field]: normalizedValue };
-    const user = await this.userModel.findOne(query).select('_id').exec();
+    const user = await this.userModel.findOne(query).select("_id").exec();
     return { exists: !!user };
   }
 
-  async upgradeToPro(userId: string, selectedCategories: string[]): Promise<User> {
+  async upgradeToPro(
+    userId: string,
+    selectedCategories: string[]
+  ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    if (user.role === 'pro') {
-      throw new ConflictException('User is already a professional');
+    if (user.role === "pro") {
+      throw new ConflictException("User is already a professional");
     }
 
-    if (user.role !== 'client') {
-      throw new ConflictException('Only clients can upgrade to professional status');
+    if (user.role !== "client") {
+      throw new ConflictException(
+        "Only clients can upgrade to professional status"
+      );
     }
 
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      userId,
-      {
-        role: 'pro',
-        selectedCategories,
-      },
-      { new: true },
-    ).exec();
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          role: "pro",
+          selectedCategories,
+        },
+        { new: true }
+      )
+      .exec();
 
     return updatedUser;
   }
@@ -330,7 +394,10 @@ export class UsersService {
   }
 
   async assignUidsToExistingUsers(): Promise<{ updated: number }> {
-    const usersWithoutUid = await this.userModel.find({ uid: { $exists: false } }).sort({ createdAt: 1 }).exec();
+    const usersWithoutUid = await this.userModel
+      .find({ uid: { $exists: false } })
+      .sort({ createdAt: 1 })
+      .exec();
 
     if (usersWithoutUid.length === 0) {
       return { updated: 0 };
@@ -352,7 +419,7 @@ export class UsersService {
   async getPaymentMethods(userId: string): Promise<PaymentMethod[]> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
     return user.paymentMethods || [];
   }
@@ -362,11 +429,11 @@ export class UsersService {
     cardNumber: string,
     cardExpiry: string,
     cardholderName: string,
-    setAsDefault: boolean = false,
+    setAsDefault: boolean = false
   ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Detect card brand from number
@@ -375,18 +442,18 @@ export class UsersService {
 
     const newPaymentMethod: PaymentMethod = {
       id: uuidv4(),
-      type: 'card',
+      type: "card",
       cardLast4,
       cardBrand,
       cardExpiry,
       cardholderName,
-      isDefault: setAsDefault || (user.paymentMethods?.length === 0),
+      isDefault: setAsDefault || user.paymentMethods?.length === 0,
       createdAt: new Date(),
     };
 
     // If setting as default, unset other defaults
     if (newPaymentMethod.isDefault && user.paymentMethods?.length > 0) {
-      user.paymentMethods = user.paymentMethods.map(pm => ({
+      user.paymentMethods = user.paymentMethods.map((pm) => ({
         ...pm,
         isDefault: false,
       }));
@@ -402,30 +469,29 @@ export class UsersService {
     userId: string,
     bankName: string,
     iban: string,
-    setAsDefault: boolean = false,
+    setAsDefault: boolean = false
   ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Mask IBAN (show first 4 and last 4)
-    const maskedIban = iban.length > 8
-      ? `${iban.slice(0, 4)}****${iban.slice(-4)}`
-      : iban;
+    const maskedIban =
+      iban.length > 8 ? `${iban.slice(0, 4)}****${iban.slice(-4)}` : iban;
 
     const newPaymentMethod: PaymentMethod = {
       id: uuidv4(),
-      type: 'bank',
+      type: "bank",
       bankName,
       maskedIban,
-      isDefault: setAsDefault || (user.paymentMethods?.length === 0),
+      isDefault: setAsDefault || user.paymentMethods?.length === 0,
       createdAt: new Date(),
     };
 
     // If setting as default, unset other defaults
     if (newPaymentMethod.isDefault && user.paymentMethods?.length > 0) {
-      user.paymentMethods = user.paymentMethods.map(pm => ({
+      user.paymentMethods = user.paymentMethods.map((pm) => ({
         ...pm,
         isDefault: false,
       }));
@@ -437,15 +503,20 @@ export class UsersService {
     return newPaymentMethod;
   }
 
-  async deletePaymentMethod(userId: string, paymentMethodId: string): Promise<void> {
+  async deletePaymentMethod(
+    userId: string,
+    paymentMethodId: string
+  ): Promise<void> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    const methodIndex = user.paymentMethods?.findIndex(pm => pm.id === paymentMethodId);
+    const methodIndex = user.paymentMethods?.findIndex(
+      (pm) => pm.id === paymentMethodId
+    );
     if (methodIndex === undefined || methodIndex === -1) {
-      throw new NotFoundException('Payment method not found');
+      throw new NotFoundException("Payment method not found");
     }
 
     const wasDefault = user.paymentMethods[methodIndex].isDefault;
@@ -459,19 +530,24 @@ export class UsersService {
     await user.save();
   }
 
-  async setDefaultPaymentMethod(userId: string, paymentMethodId: string): Promise<PaymentMethod> {
+  async setDefaultPaymentMethod(
+    userId: string,
+    paymentMethodId: string
+  ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    const methodIndex = user.paymentMethods?.findIndex(pm => pm.id === paymentMethodId);
+    const methodIndex = user.paymentMethods?.findIndex(
+      (pm) => pm.id === paymentMethodId
+    );
     if (methodIndex === undefined || methodIndex === -1) {
-      throw new NotFoundException('Payment method not found');
+      throw new NotFoundException("Payment method not found");
     }
 
     // Unset all defaults and set the new one
-    user.paymentMethods = user.paymentMethods.map(pm => ({
+    user.paymentMethods = user.paymentMethods.map((pm) => ({
       ...pm,
       isDefault: pm.id === paymentMethodId,
     }));
@@ -481,44 +557,107 @@ export class UsersService {
   }
 
   private detectCardBrand(cardNumber: string): string {
-    const cleanNumber = cardNumber.replace(/\s/g, '');
+    const cleanNumber = cardNumber.replace(/\s/g, "");
 
-    if (/^4/.test(cleanNumber)) return 'Visa';
-    if (/^5[1-5]/.test(cleanNumber) || /^2[2-7]/.test(cleanNumber)) return 'Mastercard';
-    if (/^3[47]/.test(cleanNumber)) return 'Amex';
-    if (/^6(?:011|5)/.test(cleanNumber)) return 'Discover';
-    if (/^(?:2131|1800|35)/.test(cleanNumber)) return 'JCB';
+    if (/^4/.test(cleanNumber)) return "Visa";
+    if (/^5[1-5]/.test(cleanNumber) || /^2[2-7]/.test(cleanNumber))
+      return "Mastercard";
+    if (/^3[47]/.test(cleanNumber)) return "Amex";
+    if (/^6(?:011|5)/.test(cleanNumber)) return "Discover";
+    if (/^(?:2131|1800|35)/.test(cleanNumber)) return "JCB";
 
-    return 'Card';
+    return "Card";
   }
 
   // ============== PRO-RELATED METHODS ==============
 
   // Location data with Georgian translations
   private readonly LOCATIONS_DATA = {
-    'Georgia': {
-      nationwide: { en: 'Countrywide', ka: 'მთელი საქართველო' },
-      country: { en: 'Georgia', ka: 'საქართველო' },
+    Georgia: {
+      nationwide: { en: "Countrywide", ka: "საქართველოს მასშტაბით" },
+      country: { en: "Georgia", ka: "საქართველო" },
       regions: {
-        'თბილისი': { en: 'Tbilisi', cities: ['თბილისი', 'რუსთავი', 'მცხეთა'], citiesEn: ['Tbilisi', 'Rustavi', 'Mtskheta'] },
-        'აჭარა': { en: 'Adjara', cities: ['ბათუმი', 'ქობულეთი', 'ხელვაჩაური', 'შუახევი'], citiesEn: ['Batumi', 'Kobuleti', 'Khelvachauri', 'Shuakhevi'] },
-        'იმერეთი': { en: 'Imereti', cities: ['ქუთაისი', 'ზესტაფონი', 'ჭიათურა', 'ხონი', 'სამტრედია'], citiesEn: ['Kutaisi', 'Zestaponi', 'Chiatura', 'Khoni', 'Samtredia'] },
-        'ქვემო ქართლი': { en: 'Kvemo Kartli', cities: ['რუსთავი', 'ბოლნისი', 'გარდაბანი', 'მარნეული', 'თეთრიწყარო'], citiesEn: ['Rustavi', 'Bolnisi', 'Gardabani', 'Marneuli', 'Tetritskaro'] },
-        'კახეთი': { en: 'Kakheti', cities: ['თელავი', 'გურჯაანი', 'სიღნაღი', 'საგარეჯო', 'დედოფლისწყარო'], citiesEn: ['Telavi', 'Gurjaani', 'Sighnaghi', 'Sagarejo', 'Dedoplistskaro'] },
-        'სამეგრელო-ზემო სვანეთი': { en: 'Samegrelo-Zemo Svaneti', cities: ['ზუგდიდი', 'ფოთი', 'მესტია', 'სენაკი'], citiesEn: ['Zugdidi', 'Poti', 'Mestia', 'Senaki'] },
-        'შიდა ქართლი': { en: 'Shida Kartli', cities: ['გორი', 'კასპი', 'ქარელი', 'ხაშური'], citiesEn: ['Gori', 'Kaspi', 'Kareli', 'Khashuri'] },
-        'სამცხე-ჯავახეთი': { en: 'Samtskhe-Javakheti', cities: ['ახალციხე', 'ბორჯომი', 'ახალქალაქი', 'ნინოწმინდა'], citiesEn: ['Akhaltsikhe', 'Borjomi', 'Akhalkalaki', 'Ninotsminda'] },
-        'მცხეთა-მთიანეთი': { en: 'Mtskheta-Mtianeti', cities: ['მცხეთა', 'დუშეთი', 'თიანეთი', 'ყაზბეგი'], citiesEn: ['Mtskheta', 'Dusheti', 'Tianeti', 'Kazbegi'] },
-        'რაჭა-ლეჩხუმი': { en: 'Racha-Lechkhumi', cities: ['ამბროლაური', 'ონი', 'ცაგერი', 'ლენტეხი'], citiesEn: ['Ambrolauri', 'Oni', 'Tsageri', 'Lentekhi'] },
-        'გურია': { en: 'Guria', cities: ['ოზურგეთი', 'ლანჩხუთი', 'ჩოხატაური'], citiesEn: ['Ozurgeti', 'Lanchkhuti', 'Chokhatauri'] },
+        თბილისი: {
+          en: "Tbilisi",
+          cities: ["თბილისი", "რუსთავი", "მცხეთა"],
+          citiesEn: ["Tbilisi", "Rustavi", "Mtskheta"],
+        },
+        აჭარა: {
+          en: "Adjara",
+          cities: ["ბათუმი", "ქობულეთი", "ხელვაჩაური", "შუახევი"],
+          citiesEn: ["Batumi", "Kobuleti", "Khelvachauri", "Shuakhevi"],
+        },
+        იმერეთი: {
+          en: "Imereti",
+          cities: ["ქუთაისი", "ზესტაფონი", "ჭიათურა", "ხონი", "სამტრედია"],
+          citiesEn: ["Kutaisi", "Zestaponi", "Chiatura", "Khoni", "Samtredia"],
+        },
+        "ქვემო ქართლი": {
+          en: "Kvemo Kartli",
+          cities: ["რუსთავი", "ბოლნისი", "გარდაბანი", "მარნეული", "თეთრიწყარო"],
+          citiesEn: [
+            "Rustavi",
+            "Bolnisi",
+            "Gardabani",
+            "Marneuli",
+            "Tetritskaro",
+          ],
+        },
+        კახეთი: {
+          en: "Kakheti",
+          cities: [
+            "თელავი",
+            "გურჯაანი",
+            "სიღნაღი",
+            "საგარეჯო",
+            "დედოფლისწყარო",
+          ],
+          citiesEn: [
+            "Telavi",
+            "Gurjaani",
+            "Sighnaghi",
+            "Sagarejo",
+            "Dedoplistskaro",
+          ],
+        },
+        "სამეგრელო-ზემო სვანეთი": {
+          en: "Samegrelo-Zemo Svaneti",
+          cities: ["ზუგდიდი", "ფოთი", "მესტია", "სენაკი"],
+          citiesEn: ["Zugdidi", "Poti", "Mestia", "Senaki"],
+        },
+        "შიდა ქართლი": {
+          en: "Shida Kartli",
+          cities: ["გორი", "კასპი", "ქარელი", "ხაშური"],
+          citiesEn: ["Gori", "Kaspi", "Kareli", "Khashuri"],
+        },
+        "სამცხე-ჯავახეთი": {
+          en: "Samtskhe-Javakheti",
+          cities: ["ახალციხე", "ბორჯომი", "ახალქალაქი", "ნინოწმინდა"],
+          citiesEn: ["Akhaltsikhe", "Borjomi", "Akhalkalaki", "Ninotsminda"],
+        },
+        "მცხეთა-მთიანეთი": {
+          en: "Mtskheta-Mtianeti",
+          cities: ["მცხეთა", "დუშეთი", "თიანეთი", "ყაზბეგი"],
+          citiesEn: ["Mtskheta", "Dusheti", "Tianeti", "Kazbegi"],
+        },
+        "რაჭა-ლეჩხუმი": {
+          en: "Racha-Lechkhumi",
+          cities: ["ამბროლაური", "ონი", "ცაგერი", "ლენტეხი"],
+          citiesEn: ["Ambrolauri", "Oni", "Tsageri", "Lentekhi"],
+        },
+        გურია: {
+          en: "Guria",
+          cities: ["ოზურგეთი", "ლანჩხუთი", "ჩოხატაური"],
+          citiesEn: ["Ozurgeti", "Lanchkhuti", "Chokhatauri"],
+        },
       },
-      emoji: '🇬🇪',
+      emoji: "🇬🇪",
     },
   };
 
   getLocations(country?: string, locale?: string) {
-    const targetCountry = country || 'Georgia';
-    const isGeorgian = locale === 'ka';
+    const targetCountry = country || "Georgia";
+    const isGeorgian = locale === "ka";
 
     type RegionData = { en: string; cities: string[]; citiesEn: string[] };
 
@@ -527,7 +666,10 @@ export class UsersService {
 
       // Transform regions to the expected format based on locale
       const regions: Record<string, string[]> = {};
-      for (const [regionKa, regionData] of Object.entries(data.regions) as [string, RegionData][]) {
+      for (const [regionKa, regionData] of Object.entries(data.regions) as [
+        string,
+        RegionData,
+      ][]) {
         const regionName = isGeorgian ? regionKa : regionData.en;
         const cities = isGeorgian ? regionData.cities : regionData.citiesEn;
         regions[regionName] = cities;
@@ -542,9 +684,11 @@ export class UsersService {
     }
 
     // Default fallback
-    const defaultData = this.LOCATIONS_DATA['Georgia'];
+    const defaultData = this.LOCATIONS_DATA["Georgia"];
     const regions: Record<string, string[]> = {};
-    for (const [regionKa, regionData] of Object.entries(defaultData.regions) as [string, RegionData][]) {
+    for (const [regionKa, regionData] of Object.entries(
+      defaultData.regions
+    ) as [string, RegionData][]) {
       const regionName = isGeorgian ? regionKa : regionData.en;
       const cities = isGeorgian ? regionData.cities : regionData.citiesEn;
       regions[regionName] = cities;
@@ -552,7 +696,9 @@ export class UsersService {
 
     return {
       country: isGeorgian ? defaultData.country.ka : defaultData.country.en,
-      nationwide: isGeorgian ? defaultData.nationwide.ka : defaultData.nationwide.en,
+      nationwide: isGeorgian
+        ? defaultData.nationwide.ka
+        : defaultData.nationwide.en,
       regions,
       emoji: defaultData.emoji,
     };
@@ -588,19 +734,19 @@ export class UsersService {
     // Build sort object - always sort premium first
     let sortObj: any = {};
     switch (filters?.sort) {
-      case 'rating':
+      case "rating":
         sortObj = { isPremium: -1, avgRating: -1 };
         break;
-      case 'reviews':
+      case "reviews":
         sortObj = { isPremium: -1, totalReviews: -1 };
         break;
-      case 'price-low':
+      case "price-low":
         sortObj = { isPremium: -1, basePrice: 1 };
         break;
-      case 'price-high':
+      case "price-high":
         sortObj = { isPremium: -1, basePrice: -1 };
         break;
-      case 'newest':
+      case "newest":
         sortObj = { isPremium: -1, createdAt: -1 };
         break;
       default: // 'recommended'
@@ -612,13 +758,10 @@ export class UsersService {
     // Exclude deactivated profiles
     // Only show pros with completed profiles
     const query: any = {
-      role: 'pro',
+      role: "pro",
       $and: [
         {
-          $or: [
-            { isAvailable: true },
-            { isAvailable: { $exists: false } },
-          ],
+          $or: [{ isAvailable: true }, { isAvailable: { $exists: false } }],
         },
         {
           $or: [
@@ -634,7 +777,12 @@ export class UsersService {
               $and: [
                 { isProfileCompleted: { $exists: false } },
                 { categories: { $exists: true, $ne: [] } },
-                { $or: [{ bio: { $exists: true, $ne: '' } }, { description: { $exists: true, $ne: '' } }] },
+                {
+                  $or: [
+                    { bio: { $exists: true, $ne: "" } },
+                    { description: { $exists: true, $ne: "" } },
+                  ],
+                },
               ],
             },
           ],
@@ -644,7 +792,7 @@ export class UsersService {
 
     // Exclude current user from results
     if (filters?.excludeUserId) {
-      const { Types } = require('mongoose');
+      const { Types } = require("mongoose");
       query._id = { $ne: new Types.ObjectId(filters.excludeUserId) };
     }
 
@@ -673,21 +821,23 @@ export class UsersService {
     }
 
     if (filters?.companyIds && filters.companyIds.length > 0) {
-      const { Types } = require('mongoose');
-      query.companyId = { $in: filters.companyIds.map(id => new Types.ObjectId(id)) };
+      const { Types } = require("mongoose");
+      query.companyId = {
+        $in: filters.companyIds.map((id) => new Types.ObjectId(id)),
+      };
     }
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
 
-      if (searchTerm.startsWith('#')) {
+      if (searchTerm.startsWith("#")) {
         const uidSearch = searchTerm.substring(1);
         const uidNumber = parseInt(uidSearch, 10);
         if (!isNaN(uidNumber)) {
           query.uid = uidNumber;
         }
       } else {
-        const searchRegex = new RegExp(searchTerm, 'i');
+        const searchRegex = new RegExp(searchTerm, "i");
         query.$or = [
           { name: searchRegex },
           { title: searchRegex },
@@ -703,7 +853,7 @@ export class UsersService {
     const total = await this.userModel.countDocuments(query).exec();
     const data = await this.userModel
       .find(query)
-      .select('-password')
+      .select("-password")
       .sort(sortObj)
       .skip(skip)
       .limit(limit)
@@ -724,23 +874,33 @@ export class UsersService {
   }
 
   async findProById(id: string): Promise<User> {
-    const { Types } = require('mongoose');
+    const { Types } = require("mongoose");
 
     // Check if id is a numeric UID (6-digit number starting with 1)
     const isOnlyDigits = /^\d+$/.test(id);
     const numericId = parseInt(id, 10);
-    const isNumericUid = isOnlyDigits && !isNaN(numericId) && numericId >= 100001 && numericId <= 999999;
+    const isNumericUid =
+      isOnlyDigits &&
+      !isNaN(numericId) &&
+      numericId >= 100001 &&
+      numericId <= 999999;
 
     let user: User | null = null;
 
     if (isNumericUid) {
-      user = await this.userModel.findOne({ uid: numericId, role: 'pro' }).select('-password').exec();
+      user = await this.userModel
+        .findOne({ uid: numericId, role: "pro" })
+        .select("-password")
+        .exec();
     } else if (Types.ObjectId.isValid(id)) {
-      user = await this.userModel.findOne({ _id: id, role: 'pro' }).select('-password').exec();
+      user = await this.userModel
+        .findOne({ _id: id, role: "pro" })
+        .select("-password")
+        .exec();
     }
 
     if (!user) {
-      throw new NotFoundException('Pro profile not found');
+      throw new NotFoundException("Pro profile not found");
     }
 
     return user;
@@ -750,7 +910,8 @@ export class UsersService {
     const user = await this.findById(userId);
     const totalReviews = (user.totalReviews || 0) + 1;
     const currentRating = user.avgRating || 0;
-    const avgRating = (currentRating * (user.totalReviews || 0) + newRating) / totalReviews;
+    const avgRating =
+      (currentRating * (user.totalReviews || 0) + newRating) / totalReviews;
 
     await this.userModel.findByIdAndUpdate(userId, {
       avgRating,
@@ -761,8 +922,10 @@ export class UsersService {
   async updateProProfile(userId: string, proData: any): Promise<User> {
     const user = await this.findById(userId);
 
-    if (user.role !== 'pro') {
-      throw new BadRequestException('Only pro users can update their pro profile');
+    if (user.role !== "pro") {
+      throw new BadRequestException(
+        "Only pro users can update their pro profile"
+      );
     }
 
     // Update the pro-specific fields on the user document
@@ -771,42 +934,57 @@ export class UsersService {
     // Pro profile fields
     if (proData.title !== undefined) updateData.title = proData.title;
     if (proData.bio !== undefined) updateData.bio = proData.bio;
-    if (proData.description !== undefined) updateData.description = proData.description;
-    if (proData.categories !== undefined) updateData.categories = proData.categories;
-    if (proData.subcategories !== undefined) updateData.subcategories = proData.subcategories;
-    if (proData.yearsExperience !== undefined) updateData.yearsExperience = proData.yearsExperience;
+    if (proData.description !== undefined)
+      updateData.description = proData.description;
+    if (proData.categories !== undefined)
+      updateData.categories = proData.categories;
+    if (proData.subcategories !== undefined)
+      updateData.subcategories = proData.subcategories;
+    if (proData.yearsExperience !== undefined)
+      updateData.yearsExperience = proData.yearsExperience;
     if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
-    if (proData.pricingModel !== undefined) updateData.pricingModel = proData.pricingModel;
-    if (proData.basePrice !== undefined) updateData.basePrice = proData.basePrice;
+    if (proData.pricingModel !== undefined)
+      updateData.pricingModel = proData.pricingModel;
+    if (proData.basePrice !== undefined)
+      updateData.basePrice = proData.basePrice;
     if (proData.maxPrice !== undefined) updateData.maxPrice = proData.maxPrice;
-    if (proData.serviceAreas !== undefined) updateData.serviceAreas = proData.serviceAreas;
-    if (proData.portfolioProjects !== undefined) updateData.portfolioProjects = proData.portfolioProjects;
-    if (proData.pinterestLinks !== undefined) updateData.pinterestLinks = proData.pinterestLinks;
-    if (proData.architectLicenseNumber !== undefined) updateData.architectLicenseNumber = proData.architectLicenseNumber;
-    if (proData.cadastralId !== undefined) updateData.cadastralId = proData.cadastralId;
-    if (proData.availability !== undefined) updateData.availability = proData.availability;
-    if (proData.isAvailable !== undefined) updateData.isAvailable = proData.isAvailable;
-    if (proData.profileType !== undefined) updateData.profileType = proData.profileType;
+    if (proData.serviceAreas !== undefined)
+      updateData.serviceAreas = proData.serviceAreas;
+    if (proData.portfolioProjects !== undefined)
+      updateData.portfolioProjects = proData.portfolioProjects;
+    if (proData.pinterestLinks !== undefined)
+      updateData.pinterestLinks = proData.pinterestLinks;
+    if (proData.architectLicenseNumber !== undefined)
+      updateData.architectLicenseNumber = proData.architectLicenseNumber;
+    if (proData.cadastralId !== undefined)
+      updateData.cadastralId = proData.cadastralId;
+    if (proData.availability !== undefined)
+      updateData.availability = proData.availability;
+    if (proData.isAvailable !== undefined)
+      updateData.isAvailable = proData.isAvailable;
+    if (proData.profileType !== undefined)
+      updateData.profileType = proData.profileType;
 
     // Check if profile has required fields to be considered complete
     // Required: bio/description, categories, serviceAreas
     const hasRequiredFields =
       (proData.bio || proData.description || user.bio || user.description) &&
-      ((proData.categories && proData.categories.length > 0) || (user.categories && user.categories.length > 0)) &&
-      ((proData.serviceAreas && proData.serviceAreas.length > 0) || (user.serviceAreas && user.serviceAreas.length > 0));
+      ((proData.categories && proData.categories.length > 0) ||
+        (user.categories && user.categories.length > 0)) &&
+      ((proData.serviceAreas && proData.serviceAreas.length > 0) ||
+        (user.serviceAreas && user.serviceAreas.length > 0));
 
     if (hasRequiredFields) {
       updateData.isProfileCompleted = true;
     }
 
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true },
-    ).select('-password').exec();
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
+      .select("-password")
+      .exec();
 
     if (!updatedUser) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return updatedUser;
@@ -816,7 +994,7 @@ export class UsersService {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Delete all related data in parallel for better performance
@@ -831,9 +1009,11 @@ export class UsersService {
       this.savedJobModel.deleteMany({ userId: userId }).exec(),
 
       // Delete conversations where user is participant (as client or pro)
-      this.conversationModel.deleteMany({
-        $or: [{ clientId: userId }, { proId: userId }]
-      }).exec(),
+      this.conversationModel
+        .deleteMany({
+          $or: [{ clientId: userId }, { proId: userId }],
+        })
+        .exec(),
 
       // Delete messages sent by this user
       this.messageModel.deleteMany({ senderId: userId }).exec(),
@@ -842,9 +1022,11 @@ export class UsersService {
       this.notificationModel.deleteMany({ userId: userId }).exec(),
 
       // Delete reviews (both given and received)
-      this.reviewModel.deleteMany({
-        $or: [{ clientId: userId }, { proId: userId }]
-      }).exec(),
+      this.reviewModel
+        .deleteMany({
+          $or: [{ clientId: userId }, { proId: userId }],
+        })
+        .exec(),
 
       // Delete likes by this user
       this.likeModel.deleteMany({ userId: userId }).exec(),
@@ -853,9 +1035,11 @@ export class UsersService {
       this.portfolioItemModel.deleteMany({ proId: userId }).exec(),
 
       // Delete project requests (as client or assigned pro)
-      this.projectRequestModel.deleteMany({
-        $or: [{ clientId: userId }, { proId: userId }]
-      }).exec(),
+      this.projectRequestModel
+        .deleteMany({
+          $or: [{ clientId: userId }, { proId: userId }],
+        })
+        .exec(),
 
       // Delete offers made by this user (as pro)
       this.offerModel.deleteMany({ proId: userId }).exec(),
@@ -873,20 +1057,22 @@ export class UsersService {
   async deactivateProProfile(
     userId: string,
     deactivateUntil?: Date,
-    reason?: string,
+    reason?: string
   ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    if (user.role !== 'pro') {
-      throw new BadRequestException('Only pro users can deactivate their profile');
+    if (user.role !== "pro") {
+      throw new BadRequestException(
+        "Only pro users can deactivate their profile"
+      );
     }
 
     if (user.isProfileDeactivated) {
-      throw new ConflictException('Profile is already deactivated');
+      throw new ConflictException("Profile is already deactivated");
     }
 
     const updateData: any = {
@@ -903,11 +1089,10 @@ export class UsersService {
       updateData.deactivationReason = reason;
     }
 
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true },
-    ).select('-password').exec();
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
+      .select("-password")
+      .exec();
 
     return updatedUser;
   }
@@ -916,32 +1101,37 @@ export class UsersService {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    if (user.role !== 'pro') {
-      throw new BadRequestException('Only pro users can reactivate their profile');
+    if (user.role !== "pro") {
+      throw new BadRequestException(
+        "Only pro users can reactivate their profile"
+      );
     }
 
     if (!user.isProfileDeactivated) {
-      throw new ConflictException('Profile is not deactivated');
+      throw new ConflictException("Profile is not deactivated");
     }
 
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          isProfileDeactivated: false,
-          isAvailable: true,
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            isProfileDeactivated: false,
+            isAvailable: true,
+          },
+          $unset: {
+            deactivatedAt: 1,
+            deactivatedUntil: 1,
+            deactivationReason: 1,
+          },
         },
-        $unset: {
-          deactivatedAt: 1,
-          deactivatedUntil: 1,
-          deactivationReason: 1,
-        },
-      },
-      { new: true },
-    ).select('-password').exec();
+        { new: true }
+      )
+      .select("-password")
+      .exec();
 
     return updatedUser;
   }
@@ -955,7 +1145,7 @@ export class UsersService {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return {
@@ -972,7 +1162,7 @@ export class UsersService {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Default preferences if not set
@@ -1010,12 +1200,18 @@ export class UsersService {
     const user = await this.userModel.findById(userId).exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Merge with existing preferences
     const currentPrefs = user.notificationPreferences || {
-      email: { enabled: true, newJobs: true, proposals: true, messages: true, marketing: false },
+      email: {
+        enabled: true,
+        newJobs: true,
+        proposals: true,
+        messages: true,
+        marketing: false,
+      },
       push: { enabled: true, newJobs: true, proposals: true, messages: true },
       sms: { enabled: false, proposals: false, messages: false },
     };
@@ -1026,9 +1222,11 @@ export class UsersService {
       sms: { ...currentPrefs.sms, ...(preferences.sms || {}) },
     };
 
-    await this.userModel.findByIdAndUpdate(userId, {
-      notificationPreferences: updatedPrefs,
-    }).exec();
+    await this.userModel
+      .findByIdAndUpdate(userId, {
+        notificationPreferences: updatedPrefs,
+      })
+      .exec();
 
     return {
       email: user.email || null,
