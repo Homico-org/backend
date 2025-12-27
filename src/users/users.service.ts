@@ -22,6 +22,7 @@ import { Review } from "../review/schemas/review.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { PaymentMethod, User } from "./schemas/user.schema";
+import { LoggerService, ActivityType } from "../common/logger";
 
 @Injectable()
 export class UsersService {
@@ -43,7 +44,8 @@ export class UsersService {
     private projectRequestModel: Model<ProjectRequest>,
     @InjectModel(Offer.name) private offerModel: Model<Offer>,
     @InjectModel(SupportTicket.name)
-    private supportTicketModel: Model<SupportTicket>
+    private supportTicketModel: Model<SupportTicket>,
+    private readonly logger: LoggerService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -997,6 +999,9 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
+    // Log the deletion BEFORE actually deleting (capture full user data)
+    this.logger.logUserDeletion(user);
+
     // Delete all related data in parallel for better performance
     await Promise.all([
       // Delete jobs created by this user (as client)
@@ -1050,6 +1055,8 @@ export class UsersService {
 
     // Finally, delete the user document
     await this.userModel.findByIdAndDelete(userId).exec();
+
+    this.logger.log(`User account deleted successfully: ${user.email}`, 'UsersService');
   }
 
   // ============== PRO PROFILE DEACTIVATION ==============

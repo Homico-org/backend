@@ -4,16 +4,31 @@ import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleRegisterDto } from './dto/google-register.dto';
+import { LoggerService, ActivityType } from '../common/logger';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private readonly logger: LoggerService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
     const user = await this.usersService.create(createUserDto);
+
+    // Log registration
+    this.logger.logActivity({
+      type: ActivityType.USER_REGISTER,
+      userId: user._id.toString(),
+      userEmail: user.email,
+      userName: user.name,
+      details: {
+        role: user.role,
+        phone: user.phone,
+        registrationMethod: 'email',
+      },
+    });
 
     const payload = {
       sub: user._id,
@@ -64,6 +79,18 @@ export class AuthService {
     }
 
     await this.usersService.updateLastLogin(user._id.toString());
+
+    // Log login
+    this.logger.logActivity({
+      type: ActivityType.USER_LOGIN,
+      userId: user._id.toString(),
+      userEmail: user.email,
+      userName: user.name,
+      details: {
+        role: user.role,
+        loginMethod: 'email',
+      },
+    });
 
     const payload = {
       sub: user._id,
