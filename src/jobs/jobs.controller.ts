@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
+import { ProjectTrackingService } from './project-tracking.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -21,11 +23,15 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { JobStatus, JobPropertyType } from './schemas/job.schema';
+import { ProjectStage } from './schemas/project-tracking.schema';
 
 @ApiTags('Jobs')
 @Controller('jobs')
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) {}
+  constructor(
+    private readonly jobsService: JobsService,
+    private readonly projectTrackingService: ProjectTrackingService,
+  ) {}
 
   // ============== STATIC ROUTES FIRST (before :id wildcard) ==============
 
@@ -254,6 +260,120 @@ export class JobsController {
   @Roles(UserRole.PRO)
   withdrawProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.withdrawProposal(proposalId, user.userId);
+  }
+
+  // ============== PROJECT TRACKING ROUTES ==============
+
+  @Get('projects/my-projects')
+  @ApiOperation({ summary: 'Get all my active projects (as client or pro)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of projects' })
+  @UseGuards(JwtAuthGuard)
+  async getMyProjects(
+    @CurrentUser() user: any,
+    @Query('role') role?: 'client' | 'pro',
+  ) {
+    const userRole = role || (user.role === 'pro' ? 'pro' : 'client');
+    return this.projectTrackingService.getUserProjects(user.userId, userRole);
+  }
+
+  @Get('projects/:jobId')
+  @ApiOperation({ summary: 'Get project tracking details for a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Project tracking details' })
+  @UseGuards(JwtAuthGuard)
+  async getProjectDetails(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.projectTrackingService.getProjectDetails(jobId, user.userId);
+  }
+
+  @Patch('projects/:jobId/stage')
+  @ApiOperation({ summary: 'Update project stage' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Stage updated successfully' })
+  @UseGuards(JwtAuthGuard)
+  async updateProjectStage(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { stage: ProjectStage; note?: string },
+  ) {
+    return this.projectTrackingService.updateStage(jobId, user.userId, body.stage, body.note);
+  }
+
+  @Patch('projects/:jobId/progress')
+  @ApiOperation({ summary: 'Update project progress percentage' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Progress updated successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async updateProjectProgress(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { progress: number },
+  ) {
+    return this.projectTrackingService.updateProgress(jobId, user.userId, body.progress);
+  }
+
+  @Patch('projects/:jobId/expected-end-date')
+  @ApiOperation({ summary: 'Set expected end date for project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Expected end date updated' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async setExpectedEndDate(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { expectedEndDate: string },
+  ) {
+    return this.projectTrackingService.setExpectedEndDate(
+      jobId,
+      user.userId,
+      new Date(body.expectedEndDate),
+    );
+  }
+
+  @Post('projects/:jobId/comments')
+  @ApiOperation({ summary: 'Add comment to project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Comment added successfully' })
+  @UseGuards(JwtAuthGuard)
+  async addProjectComment(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { content: string },
+  ) {
+    return this.projectTrackingService.addComment(jobId, user.userId, body.content);
+  }
+
+  @Post('projects/:jobId/attachments')
+  @ApiOperation({ summary: 'Add attachment to project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Attachment added successfully' })
+  @UseGuards(JwtAuthGuard)
+  async addProjectAttachment(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: {
+      fileName: string;
+      fileUrl: string;
+      fileType: string;
+      fileSize?: number;
+      description?: string;
+    },
+  ) {
+    return this.projectTrackingService.addAttachment(jobId, user.userId, body);
+  }
+
+  @Delete('projects/:jobId/attachments/:index')
+  @ApiOperation({ summary: 'Delete attachment from project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Attachment deleted successfully' })
+  @UseGuards(JwtAuthGuard)
+  async deleteProjectAttachment(
+    @Param('jobId') jobId: string,
+    @Param('index') index: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.deleteAttachment(jobId, user.userId, parseInt(index, 10));
   }
 
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============

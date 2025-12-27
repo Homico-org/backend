@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -6,6 +6,7 @@ import { CreateProposalDto } from './dto/create-proposal.dto';
 import { Job, JobPropertyType, JobStatus } from './schemas/job.schema';
 import { Proposal, ProposalStatus } from './schemas/proposal.schema';
 import { SavedJob } from './schemas/saved-job.schema';
+import { ProjectTracking, ProjectStage } from './schemas/project-tracking.schema';
 import { User } from '../users/schemas/user.schema';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class JobsService {
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
+    @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
@@ -521,6 +523,27 @@ export class JobsService {
     // Update job status
     await this.jobModel.findByIdAndUpdate(job._id, {
       status: JobStatus.IN_PROGRESS,
+    });
+
+    // Create project tracking for this job
+    const now = new Date();
+    await this.projectTrackingModel.create({
+      jobId: new Types.ObjectId(job._id),
+      clientId: new Types.ObjectId(clientId),
+      proId: proposal.proId,
+      proposalId: new Types.ObjectId(proposalId),
+      currentStage: ProjectStage.HIRED,
+      progress: 0,
+      hiredAt: now,
+      agreedPrice: proposal.proposedPrice,
+      estimatedDuration: proposal.estimatedDuration,
+      estimatedDurationUnit: proposal.estimatedDurationUnit,
+      stageHistory: [
+        {
+          stage: ProjectStage.HIRED,
+          enteredAt: now,
+        },
+      ],
     });
 
     return proposal;
