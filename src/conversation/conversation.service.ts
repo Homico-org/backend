@@ -1,9 +1,9 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Conversation } from './schemas/conversation.schema';
 import { Message } from '../message/schemas/message.schema';
 import { User } from '../users/schemas/user.schema';
+import { Conversation } from './schemas/conversation.schema';
 
 @Injectable()
 export class ConversationService {
@@ -137,12 +137,31 @@ export class ConversationService {
     await this.conversationModel.findByIdAndUpdate(conversationId, update);
   }
 
-  async resetUnreadCount(conversationId: string, userRole: 'client' | 'pro'): Promise<void> {
+  async resetUnreadCount(conversationId: string, userRole: 'client' | 'pro', userId?: string): Promise<void> {
+
+    // If userId is provided, determine the role based on conversation membership
+    if (userId) {
+      const conversation = await this.conversationModel.findById(conversationId).exec();
+      if (conversation) {
+        const isClient = conversation.clientId.toString() === userId;
+        const isPro = conversation.proId.toString() === userId;
+
+        if (isClient) {
+          await this.conversationModel.findByIdAndUpdate(conversationId, { unreadCountClient: 0 });
+          return;
+        } else if (isPro) {
+          await this.conversationModel.findByIdAndUpdate(conversationId, { unreadCountPro: 0 });
+          return;
+        }
+      }
+    }
+
+    // Fallback to role-based logic
     const update = userRole === 'client'
       ? { unreadCountClient: 0 }
       : { unreadCountPro: 0 };
 
-    await this.conversationModel.findByIdAndUpdate(conversationId, update);
+    const result = await this.conversationModel.findByIdAndUpdate(conversationId, update, { new: true });
   }
 
   async startConversation(senderId: string, recipientId: string, messageContent: string, senderRole: string): Promise<{ conversation: Conversation; message: Message }> {
@@ -202,41 +221,37 @@ export class ConversationService {
   }
 
   async getTotalUnreadCount(userId: string, role: string): Promise<number> {
-    let query: any;
+    // Get unread count from conversations where user is the client
+    const clientResult = await this.conversationModel.aggregate([
+      {
+        $match: {
+          $or: [
+            { clientId: new Types.ObjectId(userId) },
+            { clientId: userId }
+          ]
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$unreadCountClient' } } }
+    ]).exec();
 
-    if (role === 'pro') {
-      // For pro, count unread in conversations where they are the pro
-      query = {
-        $or: [
-          { proId: new Types.ObjectId(userId) },
-          { proId: userId }
-        ]
-      };
+    // Get unread count from conversations where user is the pro
+    const proResult = await this.conversationModel.aggregate([
+      {
+        $match: {
+          $or: [
+            { proId: new Types.ObjectId(userId) },
+            { proId: userId }
+          ]
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$unreadCountPro' } } }
+    ]).exec();
 
-      // Aggregate unreadCountPro for pro users
-      const result = await this.conversationModel.aggregate([
-        { $match: query },
-        { $group: { _id: null, total: { $sum: '$unreadCountPro' } } }
-      ]).exec();
+    const clientUnread = clientResult[0]?.total || 0;
+    const proUnread = proResult[0]?.total || 0;
+    const total = clientUnread + proUnread;
 
-      return result[0]?.total || 0;
-    } else {
-      // Client query
-      query = {
-        $or: [
-          { clientId: new Types.ObjectId(userId) },
-          { clientId: userId }
-        ]
-      };
-
-      // Aggregate unreadCountClient for client users
-      const result = await this.conversationModel.aggregate([
-        { $match: query },
-        { $group: { _id: null, total: { $sum: '$unreadCountClient' } } }
-      ]).exec();
-
-      return result[0]?.total || 0;
-    }
+    return total;
   }
 
   async deleteConversation(conversationId: string, userId: string): Promise<void> {

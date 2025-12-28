@@ -63,7 +63,7 @@ export class ConversationController {
     @CurrentUser() user: any,
     @Param('id') id: string,
   ) {
-    await this.conversationService.resetUnreadCount(id, user.role);
+    await this.conversationService.resetUnreadCount(id, user.role, user.userId);
     return { success: true };
   }
 
