@@ -1,13 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Notification, NotificationType } from './schemas/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
@@ -98,12 +101,62 @@ export class NotificationsService {
     message: string,
     options?: { link?: string; referenceId?: string; referenceModel?: string; metadata?: any },
   ): Promise<Notification> {
-    return this.create({
+    const notification = await this.create({
       userId,
       type,
       title,
       message,
       ...options,
+    });
+
+    // Push real-time notification via WebSocket
+    try {
+      this.notificationsGateway.sendNotification(userId, {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        isRead: notification.isRead,
+        link: notification.link,
+        referenceId: notification.referenceId,
+        referenceModel: notification.referenceModel,
+        metadata: notification.metadata,
+        createdAt: (notification as any).createdAt,
+      });
+    } catch (error) {
+      console.error('[Notifications] Failed to push real-time notification:', error);
+    }
+
+    return notification;
+  }
+
+  // Notify multiple users at once
+  async notifyMany(
+    userIds: string[],
+    type: NotificationType,
+    title: string,
+    message: string,
+    options?: { link?: string; referenceId?: string; referenceModel?: string; metadata?: any },
+  ): Promise<void> {
+    await Promise.all(
+      userIds.map(userId => this.notify(userId, type, title, message, options))
+    );
+  }
+
+  // Broadcast system announcement to all users
+  async broadcastAnnouncement(
+    title: string,
+    message: string,
+    options?: { link?: string; metadata?: any },
+  ): Promise<void> {
+    // This would typically save to a separate announcements collection
+    // and broadcast to all connected users
+    this.notificationsGateway.broadcastSystemAnnouncement({
+      type: NotificationType.SYSTEM_ANNOUNCEMENT,
+      title,
+      message,
+      ...options,
+      createdAt: new Date(),
     });
   }
 }

@@ -8,6 +8,7 @@ import { Proposal, ProposalSchema } from './schemas/proposal.schema';
 import { SavedJob, SavedJobSchema } from './schemas/saved-job.schema';
 import { ProjectTracking, ProjectTrackingSchema } from './schemas/project-tracking.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: ProjectTracking.name, schema: ProjectTrackingSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [JobsController],
   providers: [JobsService, ProjectTrackingService],

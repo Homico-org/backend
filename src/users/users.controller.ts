@@ -316,7 +316,6 @@ export class UsersController {
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       companyIds: companyIds ? companyIds.split(',').filter(id => id.trim()) : undefined,
-      excludeUserId: user?.userId,
     });
   }
 

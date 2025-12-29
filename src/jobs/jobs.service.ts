@@ -8,6 +8,8 @@ import { Proposal, ProposalStatus } from './schemas/proposal.schema';
 import { SavedJob } from './schemas/saved-job.schema';
 import { ProjectTracking, ProjectStage } from './schemas/project-tracking.schema';
 import { User } from '../users/schemas/user.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 @Injectable()
 export class JobsService {
@@ -17,6 +19,7 @@ export class JobsService {
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
     @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
     @InjectModel(User.name) private userModel: Model<User>,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Jobs CRUD
@@ -65,11 +68,6 @@ export class JobsService {
     const skip = (page - 1) * limit;
 
     const query: any = { status: filters?.status || JobStatus.OPEN };
-
-    // Exclude current user's own jobs (pros shouldn't see their own jobs)
-    if (filters?.userId) {
-      query.clientId = { $ne: new Types.ObjectId(filters.userId) };
-    }
 
     // Support filtering by multiple categories (for pro users with selected categories)
     if (filters?.categories && filters.categories.length > 0) {
@@ -389,6 +387,30 @@ export class JobsService {
     // Increment proposal count
     await this.jobModel.findByIdAndUpdate(jobId, { $inc: { proposalCount: 1 } });
 
+    // Send notification to job owner (client)
+    try {
+      const pro = await this.userModel.findById(proId).select('name').exec();
+      await this.notificationsService.notify(
+        job.clientId.toString(),
+        NotificationType.NEW_PROPOSAL,
+        'ახალი შეთავაზება',
+        `${pro?.name || 'სპეციალისტმა'} გამოგიგზავნათ შეთავაზება: "${job.title}"`,
+        {
+          link: `/my-jobs?job=${jobId}`,
+          referenceId: proposal._id.toString(),
+          referenceModel: 'Proposal',
+          metadata: {
+            jobId,
+            jobTitle: job.title,
+            proName: pro?.name,
+            proposedPrice: createProposalDto.proposedPrice,
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Failed to send new proposal notification:', error);
+    }
+
     return proposal;
   }
 
@@ -546,6 +568,29 @@ export class JobsService {
       ],
     });
 
+    // Send notification to pro that their proposal was accepted
+    try {
+      const client = await this.userModel.findById(clientId).select('name').exec();
+      await this.notificationsService.notify(
+        proposal.proId.toString(),
+        NotificationType.PROPOSAL_ACCEPTED,
+        'შეთავაზება მიღებულია!',
+        `${client?.name || 'კლიენტმა'} მიიღო თქვენი შეთავაზება: "${job.title}"`,
+        {
+          link: `/my-proposals?proposal=${proposalId}`,
+          referenceId: proposalId,
+          referenceModel: 'Proposal',
+          metadata: {
+            jobId: job._id.toString(),
+            jobTitle: job.title,
+            clientName: client?.name,
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Failed to send proposal accepted notification:', error);
+    }
+
     return proposal;
   }
 
@@ -575,6 +620,29 @@ export class JobsService {
     proposal.status = ProposalStatus.REJECTED;
     proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
     await proposal.save();
+
+    // Send notification to pro that their proposal was rejected
+    try {
+      const client = await this.userModel.findById(clientId).select('name').exec();
+      await this.notificationsService.notify(
+        proposal.proId.toString(),
+        NotificationType.PROPOSAL_REJECTED,
+        'შეთავაზება უარყოფილია',
+        `${client?.name || 'კლიენტმა'} უარყო თქვენი შეთავაზება: "${job.title}"`,
+        {
+          link: `/my-proposals`,
+          referenceId: proposalId,
+          referenceModel: 'Proposal',
+          metadata: {
+            jobId: job._id.toString(),
+            jobTitle: job.title,
+            clientName: client?.name,
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Failed to send proposal rejected notification:', error);
+    }
 
     return proposal;
   }

@@ -674,6 +674,22 @@ export class UsersService {
 
     type RegionData = { en: string; cities: string[]; citiesEn: string[] };
 
+    const buildCityMapping = (regions: Record<string, RegionData>): Record<string, string> => {
+      // Build a mapping from any city name (ka or en) to the current locale's display name
+      const mapping: Record<string, string> = {};
+      for (const regionData of Object.values(regions)) {
+        for (let i = 0; i < regionData.cities.length; i++) {
+          const cityKa = regionData.cities[i];
+          const cityEn = regionData.citiesEn[i];
+          const displayCity = isGeorgian ? cityKa : cityEn;
+          // Map both ka and en names to the display name
+          mapping[cityKa] = displayCity;
+          mapping[cityEn] = displayCity;
+        }
+      }
+      return mapping;
+    };
+
     if (this.LOCATIONS_DATA[targetCountry]) {
       const data = this.LOCATIONS_DATA[targetCountry];
 
@@ -688,10 +704,16 @@ export class UsersService {
         regions[regionName] = cities;
       }
 
+      // Build city mapping for translating saved serviceAreas
+      const cityMapping = buildCityMapping(data.regions as Record<string, RegionData>);
+
       return {
         country: isGeorgian ? data.country.ka : data.country.en,
         nationwide: isGeorgian ? data.nationwide.ka : data.nationwide.en,
+        nationwideKa: data.nationwide.ka,
+        nationwideEn: data.nationwide.en,
         regions,
+        cityMapping,
         emoji: data.emoji,
       };
     }
@@ -707,12 +729,18 @@ export class UsersService {
       regions[regionName] = cities;
     }
 
+    // Build city mapping for translating saved serviceAreas
+    const cityMapping = buildCityMapping(defaultData.regions as Record<string, RegionData>);
+
     return {
       country: isGeorgian ? defaultData.country.ka : defaultData.country.en,
       nationwide: isGeorgian
         ? defaultData.nationwide.ka
         : defaultData.nationwide.en,
+      nationwideKa: defaultData.nationwide.ka,
+      nationwideEn: defaultData.nationwide.en,
       regions,
+      cityMapping,
       emoji: defaultData.emoji,
     };
   }
@@ -785,10 +813,9 @@ export class UsersService {
         {
           $or: [
             { isProfileCompleted: true },
-            // For backwards compatibility: consider profiles without this field as complete if they have basic data
+            // For backwards compatibility: consider profiles with basic data as complete
             {
               $and: [
-                { isProfileCompleted: { $exists: false } },
                 { categories: { $exists: true, $ne: [] } },
                 {
                   $or: [
