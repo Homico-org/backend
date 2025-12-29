@@ -1,20 +1,21 @@
-import { ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CreateJobDto } from './dto/create-job.dto';
-import { CreateProposalDto } from './dto/create-proposal.dto';
-import { Job, JobPropertyType, JobStatus } from './schemas/job.schema';
-import { Proposal, ProposalStatus } from './schemas/proposal.schema';
-import { SavedJob } from './schemas/saved-job.schema';
-import { ProjectTracking, ProjectStage } from './schemas/project-tracking.schema';
-import { User } from '../users/schemas/user.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
+import { User } from '../users/schemas/user.schema';
+import { CreateJobDto } from './dto/create-job.dto';
+import { CreateProposalDto } from './dto/create-proposal.dto';
+import { Job, JobPropertyType, JobStatus, JobView } from './schemas/job.schema';
+import { ProjectStage, ProjectTracking } from './schemas/project-tracking.schema';
+import { Proposal, ProposalStatus } from './schemas/proposal.schema';
+import { SavedJob } from './schemas/saved-job.schema';
 
 @Injectable()
 export class JobsService {
   constructor(
     @InjectModel(Job.name) private jobModel: Model<Job>,
+    @InjectModel(JobView.name) private jobViewModel: Model<JobView>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
     @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
@@ -25,9 +26,24 @@ export class JobsService {
   // Jobs CRUD
   async createJob(clientId: string, createJobDto: CreateJobDto): Promise<Job> {
     const { Types } = require('mongoose');
+
+    // Set expiration date to 30 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // Get next job number (auto-increment)
+    const lastJob = await this.jobModel
+      .findOne({}, { jobNumber: 1 })
+      .sort({ jobNumber: -1 })
+      .lean()
+      .exec();
+    const nextJobNumber = (lastJob?.jobNumber || 1000) + 1;
+
     const job = new this.jobModel({
       clientId: new Types.ObjectId(clientId),
       ...createJobDto,
+      jobNumber: nextJobNumber,
+      expiresAt,
     });
     return job.save();
   }
@@ -251,18 +267,84 @@ export class JobsService {
     };
   }
 
-  async findJobById(id: string): Promise<Job> {
+  async findJobById(id: string, userId?: string, visitorId?: string): Promise<any> {
     const job = await this.jobModel
       .findById(id)
       .populate('clientId', '_id name email avatar city phone accountType companyName')
+      .lean()
       .exec();
 
     if (!job) {
       throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
-    // Increment view count
-    await this.jobModel.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+    // Don't count view if viewer is the job owner
+    const isOwner = userId && job.clientId && (job.clientId as any)._id.toString() === userId;
+
+    if (!isOwner) {
+      // Try to record unique view
+      try {
+        const jobObjectId = new Types.ObjectId(id);
+
+        if (userId) {
+          // Logged in user - check by userId
+          const existingView = await this.jobViewModel.findOne({
+            jobId: jobObjectId,
+            userId: new Types.ObjectId(userId),
+          });
+
+          if (!existingView) {
+            await this.jobViewModel.create({
+              jobId: jobObjectId,
+              userId: new Types.ObjectId(userId),
+            });
+            await this.jobModel.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+          }
+        } else if (visitorId) {
+          // Anonymous user - check by visitorId (IP hash)
+          const existingView = await this.jobViewModel.findOne({
+            jobId: jobObjectId,
+            visitorId: visitorId,
+          });
+
+          if (!existingView) {
+            await this.jobViewModel.create({
+              jobId: jobObjectId,
+              visitorId: visitorId,
+            });
+            await this.jobModel.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+          }
+        }
+      } catch (error) {
+        // Silently ignore duplicate key errors (race condition)
+        if (error.code !== 11000) {
+          console.error('Error recording job view:', error);
+        }
+      }
+    }
+
+    // For in_progress jobs, find the accepted proposal and get hired pro info
+    if (job.status === 'in_progress') {
+      const acceptedProposal = await this.proposalModel
+        .findOne({ jobId: job._id, status: 'accepted' })
+        .populate({
+          path: 'proProfileId',
+          select: '_id userId avatar title',
+          populate: {
+            path: 'userId',
+            select: 'name avatar',
+          },
+        })
+        .lean()
+        .exec();
+
+      if (acceptedProposal?.proProfileId) {
+        return {
+          ...job,
+          hiredPro: acceptedProposal.proProfileId,
+        };
+      }
+    }
 
     return job;
   }
@@ -280,6 +362,9 @@ export class JobsService {
       } else if (status === 'hired') {
         // 'hired' maps to in_progress
         query.status = 'in_progress';
+      } else if (status === 'expired') {
+        // 'expired' status
+        query.status = 'expired';
       } else {
         query.status = status;
       }
@@ -291,9 +376,34 @@ export class JobsService {
       .lean()
       .exec();
 
+    // Get job IDs for batch querying proposals
+    const jobIds = jobs.map((job) => job._id);
+
+    // Get shortlisted counts for all jobs in one query
+    const shortlistedCounts = await this.proposalModel.aggregate([
+      {
+        $match: {
+          jobId: { $in: jobIds },
+          status: 'shortlisted',
+        },
+      },
+      {
+        $group: {
+          _id: '$jobId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const shortlistedCountMap = new Map(
+      shortlistedCounts.map((item) => [item._id.toString(), item.count])
+    );
+
     // For in_progress jobs, find the accepted proposal and get hired pro info
-    const jobsWithHiredPro = await Promise.all(
+    const jobsWithDetails = await Promise.all(
       jobs.map(async (job) => {
+        const shortlistedCount = shortlistedCountMap.get(job._id.toString()) || 0;
+
         if (job.status === 'in_progress') {
           const acceptedProposal = await this.proposalModel
             .findOne({ jobId: job._id, status: 'accepted' })
@@ -311,15 +421,19 @@ export class JobsService {
           if (acceptedProposal?.proProfileId) {
             return {
               ...job,
+              shortlistedCount,
               hiredPro: acceptedProposal.proProfileId,
             };
           }
         }
-        return job;
+        return {
+          ...job,
+          shortlistedCount,
+        };
       })
     );
 
-    return jobsWithHiredPro;
+    return jobsWithDetails;
   }
 
   async updateJob(id: string, clientId: string, updateData: Partial<CreateJobDto>): Promise<Job> {
@@ -449,7 +563,32 @@ export class JobsService {
       .exec();
 
     // Filter out proposals where the job has been deleted
-    return proposals.filter(p => p.jobId !== null);
+    const validProposals = proposals.filter(p => p.jobId !== null);
+
+    // Fetch project tracking for accepted proposals
+    const acceptedProposals = validProposals.filter(p => p.status === ProposalStatus.ACCEPTED || p.status === ProposalStatus.COMPLETED);
+    const jobIds = acceptedProposals.map(p => (p.jobId as any)._id);
+
+    if (jobIds.length > 0) {
+      const projectTrackings = await this.projectTrackingModel
+        .find({ jobId: { $in: jobIds } })
+        .select('jobId currentStage progress startedAt completedAt')
+        .lean()
+        .exec();
+
+      const trackingMap = new Map(projectTrackings.map(pt => [pt.jobId.toString(), pt]));
+
+      return validProposals.map(p => {
+        const jobId = (p.jobId as any)?._id?.toString();
+        const tracking = jobId ? trackingMap.get(jobId) : null;
+        return {
+          ...p,
+          projectTracking: tracking || null,
+        };
+      });
+    }
+
+    return validProposals;
   }
 
   async findMyProposalForJob(jobId: string, proId: string): Promise<Proposal | null> {
@@ -643,6 +782,43 @@ export class JobsService {
     } catch (error) {
       console.error('Failed to send proposal rejected notification:', error);
     }
+
+    return proposal;
+  }
+
+  async revertProposalToPending(proposalId: string, clientId: string): Promise<Proposal> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate('jobId')
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('You can only manage proposals for your own jobs');
+    }
+
+    if (proposal.status === ProposalStatus.PENDING) {
+      throw new ForbiddenException('Proposal is already pending');
+    }
+
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      throw new ForbiddenException('Cannot revert an accepted proposal');
+    }
+
+    if (proposal.status === ProposalStatus.WITHDRAWN) {
+      throw new ForbiddenException('Cannot revert a withdrawn proposal');
+    }
+
+    // Revert to pending and clear hiring choice
+    proposal.status = ProposalStatus.PENDING;
+    proposal.hiringChoice = undefined;
+    proposal.contactRevealed = false;
+    proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
+    await proposal.save();
 
     return proposal;
   }
@@ -889,5 +1065,52 @@ export class JobsService {
     );
 
     return this.jobModel.findById(jobId).exec();
+  }
+
+  // Renew an expired job - extends for another 30 days
+  async renewJob(jobId: string, clientId: string): Promise<Job> {
+    const job = await this.jobModel.findById(jobId);
+
+    if (!job) {
+      throw new NotFoundException('სამუშაო ვერ მოიძებნა');
+    }
+
+    if (job.clientId.toString() !== clientId) {
+      throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების განახლება');
+    }
+
+    if (job.status !== JobStatus.EXPIRED) {
+      throw new ForbiddenException('მხოლოდ ვადაგასული სამუშაოების განახლება შეიძლება');
+    }
+
+    // Set new expiration date to 30 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    return this.jobModel.findByIdAndUpdate(
+      jobId,
+      {
+        status: JobStatus.OPEN,
+        expiresAt,
+      },
+      { new: true }
+    ).exec();
+  }
+
+  // Expire old jobs - called by scheduled task
+  async expireOldJobs(): Promise<number> {
+    const now = new Date();
+
+    const result = await this.jobModel.updateMany(
+      {
+        status: JobStatus.OPEN,
+        expiresAt: { $lte: now },
+      },
+      {
+        status: JobStatus.EXPIRED,
+      }
+    );
+
+    return result.modifiedCount;
   }
 }

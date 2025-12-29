@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -11,6 +11,9 @@ import {
 import { Proposal } from './schemas/proposal.schema';
 import { Job } from './schemas/job.schema';
 import { User } from '../users/schemas/user.schema';
+import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 @Injectable()
 export class ProjectTrackingService {
@@ -19,6 +22,9 @@ export class ProjectTrackingService {
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Create project tracking when proposal is accepted
@@ -162,7 +168,37 @@ export class ProjectTrackingService {
       project.progress = stageProgress[newStage];
     }
 
-    return project.save();
+    const savedProject = await project.save();
+
+    // Send notification when stage changes
+    try {
+      const job = await this.jobModel.findById(jobId).select('title').exec();
+      const user = await this.userModel.findById(userId).select('name').exec();
+
+      // Notify the other party about stage change
+      const recipientId = isPro ? project.clientId.toString() : project.proId.toString();
+
+      const stageMessages: Record<ProjectStage, { title: string; titleKa: string; message: string; messageKa: string }> = {
+        [ProjectStage.HIRED]: { title: 'Project Created', titleKa: 'პროექტი შეიქმნა', message: 'You have been hired', messageKa: 'თქვენ დაგიქირავეს' },
+        [ProjectStage.STARTED]: { title: 'Project Started', titleKa: 'პროექტი დაიწყო', message: `${user?.name || 'Pro'} has started working on "${job?.title}"`, messageKa: `${user?.name || 'სპეციალისტმა'} დაიწყო მუშაობა: "${job?.title}"` },
+        [ProjectStage.IN_PROGRESS]: { title: 'Work in Progress', titleKa: 'მიმდინარეობს', message: `Work is in progress on "${job?.title}"`, messageKa: `მიმდინარეობს მუშაობა: "${job?.title}"` },
+        [ProjectStage.REVIEW]: { title: 'Ready for Review', titleKa: 'მზადაა შესამოწმებლად', message: `"${job?.title}" is ready for your review`, messageKa: `"${job?.title}" მზადაა შესამოწმებლად` },
+        [ProjectStage.COMPLETED]: { title: 'Project Completed', titleKa: 'პროექტი დასრულდა', message: `"${job?.title}" has been completed`, messageKa: `"${job?.title}" დასრულდა` },
+      };
+
+      const msg = stageMessages[newStage];
+      await this.notificationsService.notify(
+        recipientId,
+        NotificationType.PROFILE_UPDATE, // Using profile_update as a generic notification type
+        msg.titleKa,
+        msg.messageKa,
+        { link: `/my-jobs?job=${jobId}`, referenceId: jobId, referenceModel: 'Job' }
+      );
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to send stage notification:', error);
+    }
+
+    return savedProject;
   }
 
   // Update progress percentage
@@ -211,7 +247,7 @@ export class ProjectTrackingService {
     return project.save();
   }
 
-  // Add comment
+  // Add comment (legacy - kept for backwards compatibility)
   async addComment(
     jobId: string,
     userId: string,
@@ -246,6 +282,101 @@ export class ProjectTrackingService {
 
     project.comments.push(comment);
     return project.save();
+  }
+
+  // Get messages (returns comments as messages for now)
+  async getMessages(
+    jobId: string,
+    userId: string,
+  ): Promise<{ messages: any[] }> {
+    const project = await this.projectTrackingModel
+      .findOne({ jobId: new Types.ObjectId(jobId) })
+      .exec();
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    // Transform comments to messages format
+    const messages = project.comments.map((comment: any, idx: number) => ({
+      _id: comment._id?.toString() || `msg-${idx}`,
+      senderId: comment.userId?.toString() || comment.userId,
+      senderName: comment.userName,
+      senderAvatar: comment.userAvatar,
+      senderRole: comment.userRole,
+      content: comment.content,
+      attachments: comment.attachments || [],
+      createdAt: comment.createdAt,
+    }));
+
+    return { messages };
+  }
+
+  // Add message with attachments
+  async addMessage(
+    jobId: string,
+    userId: string,
+    content: string,
+    attachments?: string[],
+  ): Promise<{ message: any }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    // Get user info
+    const user = await this.userModel.findById(userId).select('name avatar').exec();
+
+    const comment: any = {
+      _id: new Types.ObjectId(),
+      userId: new Types.ObjectId(userId),
+      userName: user?.name || 'Unknown',
+      userAvatar: user?.avatar,
+      userRole: isClient ? 'client' : 'pro',
+      content,
+      attachments: attachments || [],
+      createdAt: new Date(),
+    };
+
+    project.comments.push(comment);
+    await project.save();
+
+    const formattedMessage = {
+      _id: comment._id.toString(),
+      senderId: userId,
+      senderName: comment.userName,
+      senderAvatar: comment.userAvatar,
+      senderRole: comment.userRole,
+      content: comment.content,
+      attachments: comment.attachments,
+      createdAt: comment.createdAt,
+    };
+
+    // Emit real-time message via WebSocket
+    try {
+      this.chatGateway.emitProjectMessage(jobId, formattedMessage);
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to emit project message:', error);
+    }
+
+    return { message: formattedMessage };
   }
 
   // Add attachment

@@ -252,6 +252,16 @@ export class JobsController {
     return this.jobsService.rejectProposal(proposalId, user.userId);
   }
 
+  @Post('proposals/:proposalId/revert-to-pending')
+  @ApiOperation({ summary: 'Revert a shortlisted/rejected proposal back to pending' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Proposal reverted to pending successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  revertToPending(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.revertProposalToPending(proposalId, user.userId);
+  }
+
   @Post('proposals/:proposalId/withdraw')
   @ApiOperation({ summary: 'Withdraw a proposal (pro only)' })
   @ApiBearerAuth('JWT-auth')
@@ -344,6 +354,30 @@ export class JobsController {
     return this.projectTrackingService.addComment(jobId, user.userId, body.content);
   }
 
+  @Get('projects/:jobId/messages')
+  @ApiOperation({ summary: 'Get project messages' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async getProjectMessages(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.getMessages(jobId, user.userId);
+  }
+
+  @Post('projects/:jobId/messages')
+  @ApiOperation({ summary: 'Send message in project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Message sent successfully' })
+  @UseGuards(JwtAuthGuard)
+  async sendProjectMessage(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { content: string; attachments?: string[] },
+  ) {
+    return this.projectTrackingService.addMessage(jobId, user.userId, body.content, body.attachments);
+  }
+
   @Post('projects/:jobId/attachments')
   @ApiOperation({ summary: 'Add attachment to project' })
   @ApiBearerAuth('JWT-auth')
@@ -382,8 +416,16 @@ export class JobsController {
   @ApiOperation({ summary: 'Get job by ID' })
   @ApiResponse({ status: 200, description: 'Job details' })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  findJobById(@Param('id') id: string) {
-    return this.jobsService.findJobById(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  findJobById(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Req() req: any,
+  ) {
+    const userId = user?.userId;
+    // Use IP address as visitor ID for anonymous users
+    const visitorId = !userId ? (req.ip || req.headers['x-forwarded-for'] || 'unknown') : undefined;
+    return this.jobsService.findJobById(id, userId, visitorId);
   }
 
   @Put(':id')
@@ -428,6 +470,16 @@ export class JobsController {
     },
   ) {
     return this.jobsService.completeJob(id, user.userId, completionData);
+  }
+
+  @Post(':id/renew')
+  @ApiOperation({ summary: 'Renew an expired job for another 30 days' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job renewed successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  async renewJob(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.jobsService.renewJob(id, user.userId);
   }
 
   @Post(':jobId/proposals')

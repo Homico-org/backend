@@ -6,6 +6,7 @@ export enum JobStatus {
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  EXPIRED = 'expired',
 }
 
 export enum JobBudgetType {
@@ -35,6 +36,9 @@ export enum JobPropertyType {
 export class Job extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
+
+  @Prop({ type: Number, unique: true })
+  jobNumber: number; // Sequential job number for display
 
   @Prop({ required: true, trim: true })
   title: string;
@@ -181,6 +185,9 @@ export class Job extends Document {
   })
   status: JobStatus;
 
+  @Prop({ type: Date })
+  expiresAt: Date;
+
   @Prop({ type: [String], default: [] })
   images: string[];
 
@@ -206,3 +213,25 @@ export class Job extends Document {
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
+
+// Schema for tracking unique job views
+@Schema({ timestamps: true })
+export class JobView extends Document {
+  @Prop({ type: Types.ObjectId, ref: 'Job', required: true, index: true })
+  jobId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', index: true })
+  userId?: Types.ObjectId;
+
+  @Prop({ type: String, index: true })
+  visitorId?: string; // For anonymous users (IP hash or fingerprint)
+
+  @Prop({ type: Date, default: Date.now })
+  viewedAt: Date;
+}
+
+export const JobViewSchema = SchemaFactory.createForClass(JobView);
+
+// Compound index for unique views
+JobViewSchema.index({ jobId: 1, userId: 1 }, { unique: true, sparse: true });
+JobViewSchema.index({ jobId: 1, visitorId: 1 }, { unique: true, sparse: true });

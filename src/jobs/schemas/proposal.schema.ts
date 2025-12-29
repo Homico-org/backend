@@ -7,6 +7,7 @@ export enum ProposalStatus {
   ACCEPTED = 'accepted',
   REJECTED = 'rejected',
   WITHDRAWN = 'withdrawn',
+  COMPLETED = 'completed',
 }
 
 export enum HiringChoice {

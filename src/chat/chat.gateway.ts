@@ -161,6 +161,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.leave('admin:support');
   }
 
+  // Project Chat WebSocket Events
+  @SubscribeMessage('joinProjectChat')
+  handleJoinProjectChat(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() jobId: string,
+  ) {
+    client.join(`project:${jobId}`);
+    console.log(`User ${client.userId} joined project chat ${jobId}`);
+  }
+
+  @SubscribeMessage('leaveProjectChat')
+  handleLeaveProjectChat(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() jobId: string,
+  ) {
+    client.leave(`project:${jobId}`);
+  }
+
+  @SubscribeMessage('projectTyping')
+  handleProjectTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { jobId: string; isTyping: boolean },
+  ) {
+    client.to(`project:${data.jobId}`).emit('projectTyping', {
+      userId: client.userId,
+      isTyping: data.isTyping,
+    });
+  }
+
+  // Emit project message to project room
+  emitProjectMessage(jobId: string, message: any) {
+    this.server.to(`project:${jobId}`).emit('projectMessage', message);
+  }
+
   // Method to emit new message to conversation participants
   emitNewMessage(conversationId: string, message: any) {
     this.server.to(`conversation:${conversationId}`).emit('newMessage', message);

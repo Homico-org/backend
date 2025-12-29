@@ -1,28 +1,32 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
+import { JobsTasksService } from './jobs-tasks.service';
 import { ProjectTrackingService } from './project-tracking.service';
-import { Job, JobSchema } from './schemas/job.schema';
+import { Job, JobSchema, JobView, JobViewSchema } from './schemas/job.schema';
 import { Proposal, ProposalSchema } from './schemas/proposal.schema';
 import { SavedJob, SavedJobSchema } from './schemas/saved-job.schema';
 import { ProjectTracking, ProjectTrackingSchema } from './schemas/project-tracking.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Job.name, schema: JobSchema },
+      { name: JobView.name, schema: JobViewSchema },
       { name: Proposal.name, schema: ProposalSchema },
       { name: SavedJob.name, schema: SavedJobSchema },
       { name: ProjectTracking.name, schema: ProjectTrackingSchema },
       { name: User.name, schema: UserSchema },
     ]),
     NotificationsModule,
+    forwardRef(() => ChatModule),
   ],
   controllers: [JobsController],
-  providers: [JobsService, ProjectTrackingService],
+  providers: [JobsService, JobsTasksService, ProjectTrackingService],
   exports: [JobsService, ProjectTrackingService],
 })
 export class JobsModule {}
