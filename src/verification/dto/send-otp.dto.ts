@@ -6,6 +6,11 @@ export enum OtpType {
   PHONE = 'phone',
 }
 
+export enum OtpChannel {
+  SMS = 'sms',
+  WHATSAPP = 'whatsapp',
+}
+
 export class SendOtpDto {
   @ApiProperty({
     description: 'Email address or phone number to send OTP to',
@@ -21,6 +26,16 @@ export class SendOtpDto {
   })
   @IsEnum(OtpType)
   type: OtpType;
+
+  @ApiProperty({
+    description: 'Channel for phone verification (sms or whatsapp)',
+    enum: OtpChannel,
+    example: OtpChannel.SMS,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(OtpChannel)
+  channel?: OtpChannel;
 }
 
 export class VerifyOtpDto {

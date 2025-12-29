@@ -3,9 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Otp, OtpType, OtpPurpose } from './schemas/otp.schema';
-import { SendOtpDto, VerifyOtpDto, ForgotPasswordDto, ResetPasswordDto, VerifyResetCodeDto } from './dto/send-otp.dto';
+import { SendOtpDto, VerifyOtpDto, ForgotPasswordDto, ResetPasswordDto, VerifyResetCodeDto, OtpChannel } from './dto/send-otp.dto';
 import { EmailService } from './services/email.service';
-import { SmsService } from './services/sms.service';
+import { SmsService, OtpChannelType } from './services/sms.service';
 import { User } from '../users/schemas/user.schema';
 
 @Injectable()
@@ -23,8 +23,8 @@ export class VerificationService {
     return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
-  async sendOtp(sendOtpDto: SendOtpDto): Promise<{ message: string; expiresIn: number }> {
-    const { identifier, type } = sendOtpDto;
+  async sendOtp(sendOtpDto: SendOtpDto): Promise<{ message: string; expiresIn: number; channel?: string }> {
+    const { identifier, type, channel } = sendOtpDto;
 
     // Check rate limiting - max 3 OTPs per identifier in 10 minutes
     const recentOtps = await this.otpModel.countDocuments({
@@ -39,7 +39,10 @@ export class VerificationService {
 
     // For phone verification with Twilio Verify, let Twilio handle the OTP
     if (type === OtpType.PHONE) {
-      const sent = await this.smsService.sendOtp(identifier, '');
+      // Determine channel: 'sms' or 'whatsapp', default to 'sms'
+      const otpChannel: OtpChannelType = channel === OtpChannel.WHATSAPP ? 'whatsapp' : 'sms';
+
+      const sent = await this.smsService.sendOtp(identifier, '', otpChannel);
       if (!sent) {
         throw new BadRequestException('Failed to send verification code. Please try again.');
       }
@@ -53,9 +56,11 @@ export class VerificationService {
       });
       await otp.save();
 
+      const channelLabel = otpChannel === 'whatsapp' ? 'WhatsApp' : 'SMS';
       return {
-        message: 'Verification code sent to your phone',
+        message: `Verification code sent via ${channelLabel}`,
         expiresIn: 600, // 10 minutes for Twilio Verify
+        channel: otpChannel,
       };
     }
 

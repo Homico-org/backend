@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as twilio from 'twilio';
 
+export type OtpChannelType = 'sms' | 'whatsapp';
+
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
@@ -25,9 +27,9 @@ export class SmsService {
     }
   }
 
-  async sendOtp(phoneNumber: string, code: string): Promise<boolean> {
+  async sendOtp(phoneNumber: string, code: string, channel: OtpChannelType = 'sms'): Promise<boolean> {
     if (!this.isConfigured || !this.client) {
-      this.logger.log(`[DEV MODE] SMS OTP for ${phoneNumber}: ${code}`);
+      this.logger.log(`[DEV MODE] ${channel.toUpperCase()} OTP for ${phoneNumber}: ${code}`);
       return true;
     }
 
@@ -35,18 +37,18 @@ export class SmsService {
       // Format the phone number if needed (ensure it has + prefix)
       const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-      // Use Twilio Verify to send the OTP
+      // Use Twilio Verify to send the OTP via SMS or WhatsApp
       const verification = await this.client.verify.v2
         .services(this.verifySid)
         .verifications.create({
           to: formattedNumber,
-          channel: 'sms',
+          channel: channel, // 'sms' or 'whatsapp'
         });
 
-      this.logger.log(`OTP SMS sent successfully to ${phoneNumber}, Status: ${verification.status}`);
+      this.logger.log(`OTP ${channel.toUpperCase()} sent successfully to ${phoneNumber}, Status: ${verification.status}`);
       return true;
     } catch (error: any) {
-      this.logger.error(`Failed to send OTP SMS to ${phoneNumber}: ${error?.message || error}`);
+      this.logger.error(`Failed to send OTP ${channel.toUpperCase()} to ${phoneNumber}: ${error?.message || error}`);
       if (error?.code) {
         this.logger.error(`Twilio error code: ${error.code}, status: ${error.status}, moreInfo: ${error.moreInfo}`);
       }
