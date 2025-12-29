@@ -1,80 +1,137 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as twilio from 'twilio';
 
 export type OtpChannelType = 'sms' | 'whatsapp';
+
+export interface SendOtpResult {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+}
 
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
-  private readonly client: twilio.Twilio | null;
-  private readonly verifySid: string;
+  private readonly apiKey: string;
   private readonly isConfigured: boolean;
+  private readonly baseUrl = 'https://api.prelude.dev/v2';
 
   constructor(private configService: ConfigService) {
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
-    this.verifySid = this.configService.get<string>('TWILIO_VERIFY_SID') || '';
+    this.apiKey = this.configService.get<string>('PRELUDE_API_KEY') || '';
 
-    if (accountSid && authToken && this.verifySid) {
-      this.client = twilio.default(accountSid, authToken);
+    if (this.apiKey) {
       this.isConfigured = true;
-      this.logger.log('Twilio Verify service configured');
+      this.logger.log('Prelude Verify service configured');
     } else {
-      this.client = null;
       this.isConfigured = false;
-      this.logger.warn('Twilio credentials not configured - SMS will be logged only');
+      this.logger.warn('Prelude API key not configured - SMS will be logged only');
     }
   }
 
-  async sendOtp(phoneNumber: string, code: string, channel: OtpChannelType = 'sms'): Promise<boolean> {
-    if (!this.isConfigured || !this.client) {
-      this.logger.log(`[DEV MODE] ${channel.toUpperCase()} OTP for ${phoneNumber}: ${code}`);
-      return true;
+  private getErrorMessage(errorCode: string, errorMessage: string): string {
+    switch (errorCode) {
+      case 'region_blocked_by_customer':
+        return 'SMS verification is not available for this region. Please contact support.';
+      case 'insufficient_balance':
+        return 'SMS service temporarily unavailable. Please try again later.';
+      case 'invalid_phone_number':
+        return 'Invalid phone number format. Please check and try again.';
+      case 'rate_limited':
+        return 'Too many requests. Please wait a moment and try again.';
+      default:
+        return errorMessage || 'Failed to send verification code. Please try again.';
+    }
+  }
+
+  async sendOtp(phoneNumber: string, _code: string, _channel: OtpChannelType = 'sms'): Promise<SendOtpResult> {
+    // Format the phone number (ensure it has + prefix)
+    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+
+    if (!this.isConfigured) {
+      this.logger.log(`[DEV MODE] SMS OTP for ${formattedNumber}: (code managed by Prelude in production)`);
+      return { success: true };
     }
 
     try {
-      // Format the phone number if needed (ensure it has + prefix)
-      const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+      // Use Prelude Verify API to send OTP
+      const response = await fetch(`${this.baseUrl}/verification`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target: {
+            type: 'phone_number',
+            value: formattedNumber,
+          },
+        }),
+      });
 
-      // Use Twilio Verify to send the OTP via SMS or WhatsApp
-      const verification = await this.client.verify.v2
-        .services(this.verifySid)
-        .verifications.create({
-          to: formattedNumber,
-          channel: channel, // 'sms' or 'whatsapp'
-        });
-
-      this.logger.log(`OTP ${channel.toUpperCase()} sent successfully to ${phoneNumber}, Status: ${verification.status}`);
-      return true;
-    } catch (error: any) {
-      this.logger.error(`Failed to send OTP ${channel.toUpperCase()} to ${phoneNumber}: ${error?.message || error}`);
-      if (error?.code) {
-        this.logger.error(`Twilio error code: ${error.code}, status: ${error.status}, moreInfo: ${error.moreInfo}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        this.logger.error(`Failed to send OTP to ${formattedNumber}: ${response.status} - ${JSON.stringify(errorData)}`);
+        return {
+          success: false,
+          error: this.getErrorMessage(errorData.code, errorData.message),
+          errorCode: errorData.code,
+        };
       }
-      return false;
+
+      const data = await response.json();
+      this.logger.log(`OTP sent successfully to ${formattedNumber}, verification_id: ${data.id}`);
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`Failed to send OTP to ${formattedNumber}: ${error?.message || error}`);
+      return {
+        success: false,
+        error: 'Failed to send verification code. Please try again.',
+      };
     }
   }
 
   async verifyOtp(phoneNumber: string, code: string): Promise<boolean> {
-    if (!this.isConfigured || !this.client) {
-      // In dev mode, we'll let the verification service handle this with stored OTP
+    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+
+    if (!this.isConfigured) {
+      // In dev mode, let the verification service handle it with stored OTP
       return false;
     }
 
     try {
-      const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-
-      const verificationCheck = await this.client.verify.v2
-        .services(this.verifySid)
-        .verificationChecks.create({
-          to: formattedNumber,
+      // Use Prelude Verify API to validate OTP
+      const response = await fetch(`${this.baseUrl}/verification/check`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target: {
+            type: 'phone_number',
+            value: formattedNumber,
+          },
           code: code,
-        });
+        }),
+      });
 
-      return verificationCheck.status === 'approved';
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        this.logger.error(`Failed to verify OTP for ${formattedNumber}: ${response.status} - ${JSON.stringify(errorData)}`);
+        return false;
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        this.logger.log(`OTP verified successfully for ${formattedNumber}`);
+        return true;
+      } else {
+        this.logger.warn(`OTP verification failed for ${formattedNumber}: ${data.status}`);
+        return false;
+      }
     } catch (error: any) {
-      this.logger.error(`Failed to verify OTP for ${phoneNumber}:`, error?.message || error);
+      this.logger.error(`Failed to verify OTP for ${formattedNumber}: ${error?.message || error}`);
       return false;
     }
   }

@@ -49,6 +49,8 @@ export class UsersController {
       selectedSubcategories: userData.selectedSubcategories?.length > 0
         ? userData.selectedSubcategories
         : userData.subcategories,
+      // Include verification status for pro users
+      ...(userData.role === 'pro' ? { verificationStatus: userData.verificationStatus || 'pending' } : {}),
     };
   }
 

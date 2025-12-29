@@ -37,29 +37,28 @@ export class VerificationService {
       throw new BadRequestException('Too many OTP requests. Please try again later.');
     }
 
-    // For phone verification with Twilio Verify, let Twilio handle the OTP
+    // For phone verification, use Prelude Verify (OTP is managed by Prelude)
     if (type === OtpType.PHONE) {
-      // Determine channel: 'sms' or 'whatsapp', default to 'sms'
       const otpChannel: OtpChannelType = channel === OtpChannel.WHATSAPP ? 'whatsapp' : 'sms';
 
-      const sent = await this.smsService.sendOtp(identifier, '', otpChannel);
-      if (!sent) {
-        throw new BadRequestException('Failed to send verification code. Please try again.');
+      const result = await this.smsService.sendOtp(identifier, '', otpChannel);
+      if (!result.success) {
+        throw new BadRequestException(result.error || 'Failed to send verification code. Please try again.');
       }
 
-      // Still track the request for rate limiting
+      // Track the request for rate limiting
       const otp = new this.otpModel({
         identifier,
-        code: 'TWILIO_VERIFY', // Placeholder - actual code is managed by Twilio
+        code: 'PRELUDE_VERIFY', // Placeholder - actual code is managed by Prelude
         type,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes for Twilio
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
       });
       await otp.save();
 
       const channelLabel = otpChannel === 'whatsapp' ? 'WhatsApp' : 'SMS';
       return {
         message: `Verification code sent via ${channelLabel}`,
-        expiresIn: 600, // 10 minutes for Twilio Verify
+        expiresIn: 300, // 5 minutes
         channel: otpChannel,
       };
     }
@@ -90,14 +89,14 @@ export class VerificationService {
 
     return {
       message: 'Verification code sent to your email',
-      expiresIn: 300, // 5 minutes in seconds
+      expiresIn: 300, // 5 minutes
     };
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto): Promise<{ verified: boolean }> {
     const { identifier, code, type } = verifyOtpDto;
 
-    // For phone verification, use Twilio Verify
+    // For phone verification, use Prelude Verify
     if (type === OtpType.PHONE) {
       const verified = await this.smsService.verifyOtp(identifier, code);
       if (verified) {
@@ -109,13 +108,13 @@ export class VerificationService {
         return { verified: true };
       }
 
-      // If Twilio is not configured, fall back to our stored OTP
+      // If Prelude is not configured, fall back to our stored OTP
       const otp = await this.otpModel.findOne({
         identifier,
         type,
         isUsed: false,
         expiresAt: { $gt: new Date() },
-        code: { $ne: 'TWILIO_VERIFY' }, // Only check non-Twilio records
+        code: { $ne: 'PRELUDE_VERIFY' }, // Only check non-Prelude records
       }).sort({ createdAt: -1 });
 
       if (otp && otp.code === code) {
@@ -189,25 +188,25 @@ export class VerificationService {
       { isUsed: true },
     );
 
-    // Use Twilio Verify for SMS
-    const sent = await this.smsService.sendOtp(phone, '');
-    if (!sent) {
-      throw new BadRequestException('Failed to send verification code. Please try again.');
+    // Use Prelude Verify for SMS
+    const result = await this.smsService.sendOtp(phone, '');
+    if (!result.success) {
+      throw new BadRequestException(result.error || 'Failed to send verification code. Please try again.');
     }
 
     // Track the request for rate limiting
     const otp = new this.otpModel({
       identifier: phone,
-      code: 'TWILIO_VERIFY', // Placeholder - actual code is managed by Twilio
+      code: 'PRELUDE_VERIFY', // Placeholder - actual code is managed by Prelude
       type: OtpType.PHONE,
       purpose: OtpPurpose.PASSWORD_RESET,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes for Twilio
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
     });
     await otp.save();
 
     return {
       message: 'Verification code sent to your phone',
-      expiresIn: 600, // 10 minutes
+      expiresIn: 300, // 5 minutes
     };
   }
 
@@ -220,7 +219,7 @@ export class VerificationService {
       throw new NotFoundException('No account found with this phone number');
     }
 
-    // Verify with Twilio
+    // Verify with Plivo
     const verified = await this.smsService.verifyOtp(phone, code);
     if (!verified) {
       throw new BadRequestException('Invalid verification code');
