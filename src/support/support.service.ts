@@ -101,7 +101,9 @@ export class SupportService {
     }
 
     // Non-admin users can only view their own tickets
-    if (!isAdmin && ticket.userId.toString() !== userId) {
+    // After populate, userId is an object with _id, so we need to check _id
+    const ticketOwnerId = (ticket.userId as any)?._id?.toString() || ticket.userId?.toString();
+    if (!isAdmin && ticketOwnerId !== userId) {
       throw new ForbiddenException('You do not have access to this ticket');
     }
 
