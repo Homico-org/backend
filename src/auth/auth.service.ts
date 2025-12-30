@@ -128,45 +128,56 @@ export class AuthService {
 
   async googleRegister(googleRegisterDto: GoogleRegisterDto) {
     // Check if user already exists with this Google ID
-    const existingGoogleUser = await this.usersService.findByGoogleId(googleRegisterDto.googleId);
-    if (existingGoogleUser) {
+    let existingUser = await this.usersService.findByGoogleId(googleRegisterDto.googleId);
+
+    // If not found by Google ID, also check by email (user may have registered before linking Google)
+    if (!existingUser && googleRegisterDto.email) {
+      existingUser = await this.usersService.findByEmail(googleRegisterDto.email);
+
+      // If found by email, update their googleId for future logins
+      if (existingUser && !existingUser.googleId) {
+        await this.usersService.updateGoogleId(existingUser._id.toString(), googleRegisterDto.googleId);
+      }
+    }
+
+    if (existingUser) {
       // User already exists, log them in
-      await this.usersService.updateLastLogin(existingGoogleUser._id.toString());
+      await this.usersService.updateLastLogin(existingUser._id.toString());
 
       // Log Google login
       this.logger.logActivity({
         type: ActivityType.USER_LOGIN,
-        userId: existingGoogleUser._id.toString(),
-        userEmail: existingGoogleUser.email,
-        userName: existingGoogleUser.name,
+        userId: existingUser._id.toString(),
+        userEmail: existingUser.email,
+        userName: existingUser.name,
         details: {
-          role: existingGoogleUser.role,
+          role: existingUser.role,
           loginMethod: 'google',
         },
       });
 
       const payload = {
-        sub: existingGoogleUser._id,
-        email: existingGoogleUser.email,
-        role: existingGoogleUser.role,
+        sub: existingUser._id,
+        email: existingUser.email,
+        role: existingUser.role,
       };
 
       return {
         access_token: this.jwtService.sign(payload),
         user: {
-          id: existingGoogleUser._id,
-          uid: existingGoogleUser.uid,
-          name: existingGoogleUser.name,
-          email: existingGoogleUser.email,
-          phone: existingGoogleUser.phone,
-          role: existingGoogleUser.role,
-          avatar: existingGoogleUser.avatar,
-          city: existingGoogleUser.city,
-          selectedCategories: existingGoogleUser.selectedCategories || [],
-          selectedSubcategories: existingGoogleUser.selectedSubcategories || [],
-          accountType: existingGoogleUser.accountType || 'individual',
-          companyName: existingGoogleUser.companyName,
-          isProfileCompleted: existingGoogleUser.isProfileCompleted ?? false,
+          id: existingUser._id,
+          uid: existingUser.uid,
+          name: existingUser.name,
+          email: existingUser.email,
+          phone: existingUser.phone,
+          role: existingUser.role,
+          avatar: existingUser.avatar,
+          city: existingUser.city,
+          selectedCategories: existingUser.selectedCategories || [],
+          selectedSubcategories: existingUser.selectedSubcategories || [],
+          accountType: existingUser.accountType || 'individual',
+          companyName: existingUser.companyName,
+          isProfileCompleted: existingUser.isProfileCompleted ?? false,
         },
       };
     }

@@ -298,6 +298,10 @@ export class UsersService {
     });
   }
 
+  async updateGoogleId(userId: string, googleId: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, { googleId });
+  }
+
   async update(userId: string, updateData: Partial<User>): Promise<User> {
     const user = await this.userModel
       .findByIdAndUpdate(userId, updateData, { new: true })
