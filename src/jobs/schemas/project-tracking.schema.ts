@@ -23,8 +23,11 @@ export class ProjectComment {
   @Prop({ required: true, enum: ['client', 'pro'] })
   userRole: 'client' | 'pro';
 
-  @Prop({ required: true })
+  @Prop({ default: '' })
   content: string;
+
+  @Prop({ type: [String], default: [] })
+  attachments: string[];
 
   @Prop({ type: Date, default: Date.now })
   createdAt: Date;

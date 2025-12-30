@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -326,6 +326,13 @@ export class ProjectTrackingService {
     content: string,
     attachments?: string[],
   ): Promise<{ message: any }> {
+    const hasContent = content && content.trim().length > 0;
+    const hasAttachments = attachments && attachments.length > 0;
+
+    if (!hasContent && !hasAttachments) {
+      throw new BadRequestException('Message must have content or attachments');
+    }
+
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
