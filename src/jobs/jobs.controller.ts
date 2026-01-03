@@ -14,7 +14,9 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { ProjectTrackingService } from './project-tracking.service';
+import { WorkspaceService } from './workspace.service';
 import { CreateJobDto } from './dto/create-job.dto';
+import { WorkspaceItemType, ReactionType } from './schemas/workspace.schema';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
@@ -31,6 +33,7 @@ export class JobsController {
   constructor(
     private readonly jobsService: JobsService,
     private readonly projectTrackingService: ProjectTrackingService,
+    private readonly workspaceService: WorkspaceService,
   ) {}
 
   // ============== STATIC ROUTES FIRST (before :id wildcard) ==============
@@ -408,6 +411,225 @@ export class JobsController {
     @CurrentUser() user: any,
   ) {
     return this.projectTrackingService.deleteAttachment(jobId, user.userId, parseInt(index, 10));
+  }
+
+  // ============== WORKSPACE ROUTES ==============
+
+  @Get('projects/:jobId/workspace')
+  @ApiOperation({ summary: 'Get workspace for a project' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Workspace data' })
+  @UseGuards(JwtAuthGuard)
+  async getWorkspace(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.workspaceService.getWorkspace(jobId, user.userId);
+  }
+
+  @Post('projects/:jobId/workspace/sections')
+  @ApiOperation({ summary: 'Create a new section in workspace' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Section created successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async createSection(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: {
+      title: string;
+      description?: string;
+      attachments?: Array<{
+        fileName: string;
+        fileUrl: string;
+        fileType: string;
+        fileSize?: number;
+      }>;
+    },
+  ) {
+    return this.workspaceService.createSection(jobId, user.userId, body);
+  }
+
+  @Patch('projects/:jobId/workspace/sections/:sectionId')
+  @ApiOperation({ summary: 'Update a section' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Section updated successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async updateSection(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: any,
+    @Body() body: {
+      title?: string;
+      description?: string;
+      attachments?: Array<{
+        _id?: string;
+        fileName: string;
+        fileUrl: string;
+        fileType: string;
+        fileSize?: number;
+      }>;
+    },
+  ) {
+    return this.workspaceService.updateSection(jobId, sectionId, user.userId, body);
+  }
+
+  @Delete('projects/:jobId/workspace/sections/:sectionId')
+  @ApiOperation({ summary: 'Delete a section' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Section deleted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async deleteSection(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.workspaceService.deleteSection(jobId, sectionId, user.userId);
+    return { success: true };
+  }
+
+  @Post('projects/:jobId/workspace/sections/:sectionId/items')
+  @ApiOperation({ summary: 'Add an item to a section' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Item added successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async createItem(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: any,
+    @Body() body: {
+      title: string;
+      description?: string;
+      type: WorkspaceItemType;
+      fileUrl?: string;
+      linkUrl?: string;
+      price?: number;
+      currency?: string;
+      storeName?: string;
+      storeAddress?: string;
+    },
+  ) {
+    return this.workspaceService.createItem(jobId, sectionId, user.userId, body);
+  }
+
+  @Patch('projects/:jobId/workspace/sections/:sectionId/items/:itemId')
+  @ApiOperation({ summary: 'Update an item' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Item updated successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async updateItem(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+    @Body() body: {
+      title?: string;
+      description?: string;
+      fileUrl?: string;
+      linkUrl?: string;
+      price?: number;
+      currency?: string;
+      storeName?: string;
+      storeAddress?: string;
+    },
+  ) {
+    return this.workspaceService.updateItem(jobId, sectionId, itemId, user.userId, body);
+  }
+
+  @Delete('projects/:jobId/workspace/sections/:sectionId/items/:itemId')
+  @ApiOperation({ summary: 'Delete an item' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Item deleted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async deleteItem(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.workspaceService.deleteItem(jobId, sectionId, itemId, user.userId);
+    return { success: true };
+  }
+
+  @Post('projects/:jobId/workspace/sections/:sectionId/items/:itemId/reactions')
+  @ApiOperation({ summary: 'Toggle reaction on an item' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Reaction toggled' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT)
+  async toggleReaction(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+    @Body() body: { type: ReactionType },
+  ) {
+    return this.workspaceService.toggleReaction(
+      jobId,
+      sectionId,
+      itemId,
+      user.userId,
+      body.type,
+    );
+  }
+
+  @Post('projects/:jobId/workspace/sections/:sectionId/items/:itemId/comments')
+  @ApiOperation({ summary: 'Add comment on an item' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Comment added' })
+  @UseGuards(JwtAuthGuard)
+  async addItemComment(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: any,
+    @Body() body: { content: string },
+  ) {
+    return this.workspaceService.addComment(
+      jobId,
+      sectionId,
+      itemId,
+      user.userId,
+      body.content,
+    );
+  }
+
+  @Delete('projects/:jobId/workspace/sections/:sectionId/items/:itemId/comments/:commentId')
+  @ApiOperation({ summary: 'Delete a comment' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Comment deleted' })
+  @UseGuards(JwtAuthGuard)
+  async deleteItemComment(
+    @Param('jobId') jobId: string,
+    @Param('sectionId') sectionId: string,
+    @Param('itemId') itemId: string,
+    @Param('commentId') commentId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.workspaceService.deleteComment(
+      jobId,
+      sectionId,
+      itemId,
+      commentId,
+      user.userId,
+    );
+    return { success: true };
+  }
+
+  @Patch('projects/:jobId/workspace/sections/reorder')
+  @ApiOperation({ summary: 'Reorder sections' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Sections reordered' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async reorderSections(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { sectionIds: string[] },
+  ) {
+    return this.workspaceService.reorderSections(jobId, user.userId, body.sectionIds);
   }
 
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============
