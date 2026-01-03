@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JobsService } from './jobs.service';
 import { ProjectTrackingService } from './project-tracking.service';
 import { WorkspaceService } from './workspace.service';
+import { PollsService } from './polls.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { WorkspaceItemType, ReactionType } from './schemas/workspace.schema';
 import { CreateProposalDto } from './dto/create-proposal.dto';
@@ -34,6 +35,7 @@ export class JobsController {
     private readonly jobsService: JobsService,
     private readonly projectTrackingService: ProjectTrackingService,
     private readonly workspaceService: WorkspaceService,
+    private readonly pollsService: PollsService,
   ) {}
 
   // ============== STATIC ROUTES FIRST (before :id wildcard) ==============
@@ -759,5 +761,77 @@ export class JobsController {
   @UseGuards(JwtAuthGuard)
   unsaveJob(@Param('jobId') jobId: string, @CurrentUser() user: any) {
     return this.jobsService.unsaveJob(user.userId, jobId);
+  }
+
+  // ============== POLLS ENDPOINTS ==============
+
+  @Get(':jobId/polls')
+  @ApiOperation({ summary: 'Get all polls for a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of polls for the job' })
+  @UseGuards(JwtAuthGuard)
+  async getPolls(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.pollsService.getPollsByJobId(jobId, user.userId);
+  }
+
+  @Post(':jobId/polls')
+  @ApiOperation({ summary: 'Create a new poll for a job (Pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Poll created successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async createPoll(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() createPollDto: { title: string; description?: string; options: { text?: string; imageUrl?: string }[] },
+  ) {
+    return this.pollsService.createPoll(jobId, user.userId, createPollDto);
+  }
+
+  @Post('polls/:pollId/vote')
+  @ApiOperation({ summary: 'Vote on a poll option (Client only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Vote recorded successfully' })
+  @UseGuards(JwtAuthGuard)
+  async votePoll(
+    @Param('pollId') pollId: string,
+    @CurrentUser() user: any,
+    @Body() body: { optionId: string },
+  ) {
+    return this.pollsService.vote(pollId, user.userId, body.optionId);
+  }
+
+  @Post('polls/:pollId/approve')
+  @ApiOperation({ summary: 'Approve a poll option (Client only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Poll approved successfully' })
+  @UseGuards(JwtAuthGuard)
+  async approvePoll(
+    @Param('pollId') pollId: string,
+    @CurrentUser() user: any,
+    @Body() body: { optionId: string },
+  ) {
+    return this.pollsService.approve(pollId, user.userId, body.optionId);
+  }
+
+  @Post('polls/:pollId/close')
+  @ApiOperation({ summary: 'Close a poll (Pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Poll closed successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async closePoll(@Param('pollId') pollId: string, @CurrentUser() user: any) {
+    return this.pollsService.close(pollId, user.userId);
+  }
+
+  @Delete('polls/:pollId')
+  @ApiOperation({ summary: 'Delete a poll (Pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Poll deleted successfully' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async deletePoll(@Param('pollId') pollId: string, @CurrentUser() user: any) {
+    await this.pollsService.delete(pollId, user.userId);
+    return { success: true };
   }
 }
