@@ -197,18 +197,89 @@ export class ProjectTrackingService {
       };
 
       const msg = stageMessages[newStage];
+      // Client sees project at /jobs/{id}, Pro sees project at /my-jobs/{id}
+      const notificationLink = isPro ? `/jobs/${jobId}` : `/my-jobs/${jobId}`;
       await this.notificationsService.notify(
         recipientId,
         NotificationType.PROFILE_UPDATE, // Using profile_update as a generic notification type
         msg.titleKa,
         msg.messageKa,
-        { link: `/my-jobs/${jobId}`, referenceId: jobId, referenceModel: 'Job' }
+        { link: notificationLink, referenceId: jobId, referenceModel: 'Job' }
       );
     } catch (error) {
       console.error('[ProjectTracking] Failed to send stage notification:', error);
     }
 
     return savedProject;
+  }
+
+  // Client confirms project completion - triggers payment process
+  async confirmCompletion(
+    jobId: string,
+    userId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    // Only the client can confirm completion
+    if (project.clientId.toString() !== userId) {
+      throw new ForbiddenException('Only the client can confirm project completion');
+    }
+
+    // Project must be in completed stage
+    if (project.currentStage !== ProjectStage.COMPLETED) {
+      throw new BadRequestException('Project must be marked as completed by the professional first');
+    }
+
+    // Check if already confirmed
+    if (project.clientConfirmedAt) {
+      throw new BadRequestException('Project has already been confirmed');
+    }
+
+    const now = new Date();
+
+    // Mark as client confirmed
+    project.clientConfirmedAt = now;
+
+    // Update the job status to completed
+    await this.jobModel.findByIdAndUpdate(jobId, { status: 'completed' });
+
+    await project.save();
+
+    // Log to history
+    await this.addHistoryEvent(
+      jobId,
+      ProjectHistoryEventType.PROJECT_COMPLETED,
+      userId,
+      { description: 'Client confirmed completion' },
+    );
+
+    // Notify the pro that client confirmed and payment will be processed
+    try {
+      const job = await this.jobModel.findById(jobId).select('title').exec();
+      await this.notificationsService.notify(
+        project.proId.toString(),
+        NotificationType.JOB_COMPLETED,
+        'გადახდა მოხდება მალე',
+        `კლიენტმა დაადასტურა "${job?.title}" პროექტის დასრულება. გადახდა მოხდება მალე.`,
+        { link: `/my-jobs/${jobId}`, referenceId: jobId, referenceModel: 'Job' }
+      );
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to send confirmation notification:', error);
+    }
+
+    // TODO: Trigger actual payment process here
+    // await this.paymentService.processPayment(project);
+
+    return {
+      success: true,
+      message: 'Project confirmed. Payment will be processed shortly.',
+    };
   }
 
   // Update progress percentage
@@ -298,7 +369,7 @@ export class ProjectTrackingService {
   async getMessages(
     jobId: string,
     userId: string,
-  ): Promise<{ messages: any[] }> {
+  ): Promise<{ messages: any[]; unreadCount: number }> {
     const project = await this.projectTrackingModel
       .findOne({ jobId: new Types.ObjectId(jobId) })
       .exec();
@@ -314,19 +385,200 @@ export class ProjectTrackingService {
       throw new ForbiddenException('You are not part of this project');
     }
 
-    // Transform comments to messages format
-    const messages = project.comments.map((comment: any, idx: number) => ({
-      _id: comment._id?.toString() || `msg-${idx}`,
-      senderId: comment.userId?.toString() || comment.userId,
-      senderName: comment.userName,
-      senderAvatar: comment.userAvatar,
-      senderRole: comment.userRole,
-      content: comment.content,
-      attachments: comment.attachments || [],
-      createdAt: comment.createdAt,
-    }));
+    // Get last read timestamp for current user
+    const lastReadAt = isClient ? project.clientLastReadAt : project.proLastReadAt;
 
-    return { messages };
+    // Transform comments to messages format
+    const messages = project.comments.map((comment: any, idx: number) => {
+      const isFromOther = comment.userRole !== (isClient ? 'client' : 'pro');
+      const isUnread = isFromOther && (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
+
+      return {
+        _id: comment._id?.toString() || `msg-${idx}`,
+        senderId: comment.userId?.toString() || comment.userId,
+        senderName: comment.userName,
+        senderAvatar: comment.userAvatar,
+        senderRole: comment.userRole,
+        content: comment.content,
+        attachments: comment.attachments || [],
+        createdAt: comment.createdAt,
+        isRead: !isUnread,
+      };
+    });
+
+    // Count unread messages
+    const unreadCount = messages.filter((m: any) => !m.isRead).length;
+
+    return { messages, unreadCount };
+  }
+
+  // Mark messages as read
+  async markMessagesAsRead(
+    jobId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    // Update the last read timestamp for the current user
+    const now = new Date();
+    if (isClient) {
+      project.clientLastReadAt = now;
+    } else {
+      project.proLastReadAt = now;
+    }
+
+    await project.save();
+
+    return { success: true };
+  }
+
+  // Mark polls as viewed
+  async markPollsAsViewed(
+    jobId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    const now = new Date();
+    if (isClient) {
+      project.clientLastViewedPollsAt = now;
+    } else {
+      project.proLastViewedPollsAt = now;
+    }
+
+    await project.save();
+
+    return { success: true };
+  }
+
+  // Mark materials as viewed
+  async markMaterialsAsViewed(
+    jobId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    const now = new Date();
+    if (isClient) {
+      project.clientLastViewedMaterialsAt = now;
+    } else {
+      project.proLastViewedMaterialsAt = now;
+    }
+
+    await project.save();
+
+    return { success: true };
+  }
+
+  // Get unread counts for chat, polls, materials
+  async getUnreadCounts(
+    jobId: string,
+    userId: string,
+  ): Promise<{ chat: number; polls: number; materials: number }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    // Get last viewed timestamps for current user
+    const lastReadAt = isClient ? project.clientLastReadAt : project.proLastReadAt;
+    const lastViewedPollsAt = isClient ? project.clientLastViewedPollsAt : project.proLastViewedPollsAt;
+    const lastViewedMaterialsAt = isClient ? project.clientLastViewedMaterialsAt : project.proLastViewedMaterialsAt;
+
+    // Count unread messages (from the other party)
+    const userRole = isClient ? 'client' : 'pro';
+    const unreadMessages = project.comments.filter((comment: any) => {
+      const isFromOther = comment.userRole !== userRole;
+      const isUnread = isFromOther && (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
+      return isUnread;
+    }).length;
+
+    // For polls, we need to query the Poll collection
+    // Count polls created after lastViewedPollsAt by the other party
+    const Poll = this.projectTrackingModel.db.model('Poll');
+    let unreadPolls = 0;
+    try {
+      const pollQuery: any = { jobId: new Types.ObjectId(jobId) };
+      if (lastViewedPollsAt) {
+        pollQuery.createdAt = { $gt: lastViewedPollsAt };
+      }
+      // Only count polls created by the other party
+      if (isClient) {
+        pollQuery.createdBy = { $ne: new Types.ObjectId(userId) };
+      } else {
+        pollQuery.createdBy = { $ne: new Types.ObjectId(userId) };
+      }
+      unreadPolls = await Poll.countDocuments(pollQuery);
+    } catch (e) {
+      // Poll model might not exist or other error, ignore
+    }
+
+    // For materials, count items/sections created after lastViewedMaterialsAt
+    // This would require accessing workspace data - for now we track based on history
+    let unreadMaterials = 0;
+    if (project.history) {
+      unreadMaterials = project.history.filter((event: any) => {
+        const isResourceEvent = ['resource_added', 'resource_item_added'].includes(event.eventType);
+        const isFromOther = event.userRole !== userRole;
+        const isAfterLastViewed = !lastViewedMaterialsAt || new Date(event.createdAt) > lastViewedMaterialsAt;
+        return isResourceEvent && isFromOther && isAfterLastViewed;
+      }).length;
+    }
+
+    return {
+      chat: unreadMessages,
+      polls: unreadPolls,
+      materials: unreadMaterials,
+    };
   }
 
   // Add message with attachments
@@ -391,6 +643,30 @@ export class ProjectTrackingService {
       this.chatGateway.emitProjectMessage(jobId, formattedMessage);
     } catch (error) {
       console.error('[ProjectTracking] Failed to emit project message:', error);
+    }
+
+    // Send notification to the other party
+    try {
+      const recipientId = isClient ? project.proId.toString() : project.clientId.toString();
+      const job = await this.jobModel.findById(jobId).select('title').exec();
+      const senderName = user?.name || (isClient ? 'კლიენტი' : 'სპეციალისტი');
+      const messagePreview = content && content.length > 50 ? content.substring(0, 50) + '...' : content || 'ფაილი გაიგზავნა';
+      const link = isClient ? `/my-jobs/${jobId}` : `/jobs/${jobId}`;
+
+      await this.notificationsService.notify(
+        recipientId,
+        NotificationType.PROJECT_MESSAGE,
+        'ახალი შეტყობინება',
+        `${senderName}: ${messagePreview}`,
+        {
+          link,
+          referenceId: jobId,
+          referenceModel: 'Job',
+          metadata: { jobTitle: job?.title },
+        },
+      );
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to send message notification:', error);
     }
 
     return { message: formattedMessage };

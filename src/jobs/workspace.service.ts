@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -18,6 +20,9 @@ import {
 } from './schemas/workspace.schema';
 import { ProjectTracking } from './schemas/project-tracking.schema';
 import { User } from '../users/schemas/user.schema';
+import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 @Injectable()
 export class WorkspaceService {
@@ -25,6 +30,9 @@ export class WorkspaceService {
     @InjectModel(ProjectWorkspace.name) private workspaceModel: Model<ProjectWorkspace>,
     @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Get or create workspace for a job
@@ -108,6 +116,31 @@ export class WorkspaceService {
     workspace.sections.push(section);
     await workspace.save();
 
+    // Emit WebSocket event
+    this.chatGateway.emitMaterialsUpdate(jobId, {
+      type: 'section_added',
+      section,
+    });
+
+    // Send notification to client
+    try {
+      const pro = await this.userModel.findById(userId).select('name').exec();
+      await this.notificationsService.notify(
+        workspace.clientId.toString(),
+        NotificationType.PROJECT_MATERIAL_ADDED,
+        'ახალი მასალა',
+        `${pro?.name || 'სპეციალისტმა'} დაამატა მასალები: "${data.title}"`,
+        {
+          link: `/jobs/${jobId}`,
+          referenceId: jobId,
+          referenceModel: 'Job',
+          metadata: { sectionTitle: data.title },
+        },
+      );
+    } catch (error) {
+      console.error('[WorkspaceService] Failed to send section added notification:', error);
+    }
+
     return { section };
   }
 
@@ -159,6 +192,13 @@ export class WorkspaceService {
     }
 
     await workspace.save();
+
+    // Emit WebSocket event
+    this.chatGateway.emitMaterialsUpdate(jobId, {
+      type: 'section_updated',
+      section,
+    });
+
     return { section };
   }
 
@@ -185,6 +225,12 @@ export class WorkspaceService {
 
     workspace.sections.splice(sectionIndex, 1);
     await workspace.save();
+
+    // Emit WebSocket event
+    this.chatGateway.emitMaterialsUpdate(jobId, {
+      type: 'section_deleted',
+      sectionId,
+    });
   }
 
   // Create an item in a section
@@ -238,6 +284,13 @@ export class WorkspaceService {
 
     section.items.push(item);
     await workspace.save();
+
+    // Emit WebSocket event
+    this.chatGateway.emitMaterialsUpdate(jobId, {
+      type: 'item_added',
+      sectionId,
+      item,
+    });
 
     return { item };
   }
@@ -326,6 +379,13 @@ export class WorkspaceService {
 
     section.items.splice(itemIndex, 1);
     await workspace.save();
+
+    // Emit WebSocket event
+    this.chatGateway.emitMaterialsUpdate(jobId, {
+      type: 'item_deleted',
+      sectionId,
+      item: { _id: itemId },
+    });
   }
 
   // Toggle reaction on an item (client only)

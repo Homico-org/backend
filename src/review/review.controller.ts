@@ -49,4 +49,14 @@ export class ReviewController {
   findOne(@Param('id') id: string) {
     return this.reviewService.findOne(id);
   }
+
+  @Get('check/job/:jobId')
+  @UseGuards(JwtAuthGuard)
+  async checkReviewExists(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    const hasReview = await this.reviewService.hasReviewForJob(user.userId, jobId);
+    return { hasReview };
+  }
 }

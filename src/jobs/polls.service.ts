@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Poll, PollStatus } from './schemas/poll.schema';
 import { ProjectTracking } from './schemas/project-tracking.schema';
+import { Job } from './schemas/job.schema';
+import { User } from '../users/schemas/user.schema';
+import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 
 interface CreatePollDto {
   title: string;
@@ -15,6 +20,11 @@ export class PollsService {
   constructor(
     @InjectModel(Poll.name) private pollModel: Model<Poll>,
     @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
+    @InjectModel(Job.name) private jobModel: Model<Job>,
+    @InjectModel(User.name) private userModel: Model<User>,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -85,10 +95,38 @@ export class PollsService {
     await poll.save();
 
     // Populate and return
-    return this.pollModel
+    const populatedPoll = await this.pollModel
       .findById(poll._id)
       .populate('createdBy', 'name avatar')
       .lean();
+
+    // Emit WebSocket event
+    this.chatGateway.emitPollUpdate(jobId, {
+      type: 'created',
+      poll: populatedPoll,
+    });
+
+    // Send notification to client
+    try {
+      const job = await this.jobModel.findById(jobId).select('title').exec();
+      const pro = await this.userModel.findById(userId).select('name').exec();
+      await this.notificationsService.notify(
+        project.clientId.toString(),
+        NotificationType.PROJECT_POLL_CREATED,
+        'ახალი გამოკითხვა',
+        `${pro?.name || 'სპეციალისტმა'} შექმნა გამოკითხვა: "${createPollDto.title}"`,
+        {
+          link: `/jobs/${jobId}`,
+          referenceId: jobId,
+          referenceModel: 'Job',
+          metadata: { pollId: poll._id.toString(), pollTitle: createPollDto.title },
+        },
+      );
+    } catch (error) {
+      console.error('[PollsService] Failed to send poll created notification:', error);
+    }
+
+    return populatedPoll;
   }
 
   /**
@@ -124,10 +162,39 @@ export class PollsService {
     poll.clientVote = new Types.ObjectId(optionId);
     await poll.save();
 
-    return this.pollModel
+    const populatedPoll = await this.pollModel
       .findById(poll._id)
       .populate('createdBy', 'name avatar')
       .lean();
+
+    // Emit WebSocket event
+    this.chatGateway.emitPollUpdate(poll.jobId.toString(), {
+      type: 'voted',
+      poll: populatedPoll,
+    });
+
+    // Send notification to pro
+    try {
+      const job = await this.jobModel.findById(poll.jobId).select('title').exec();
+      const client = await this.userModel.findById(userId).select('name').exec();
+      const votedOption = poll.options.find(opt => opt._id.toString() === optionId);
+      await this.notificationsService.notify(
+        project.proId.toString(),
+        NotificationType.PROJECT_POLL_VOTED,
+        'კლიენტმა ხმა მისცა',
+        `${client?.name || 'კლიენტმა'} ხმა მისცა გამოკითხვაში: "${poll.title}"`,
+        {
+          link: `/my-jobs/${poll.jobId.toString()}`,
+          referenceId: poll.jobId.toString(),
+          referenceModel: 'Job',
+          metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: votedOption?.text },
+        },
+      );
+    } catch (error) {
+      console.error('[PollsService] Failed to send poll voted notification:', error);
+    }
+
+    return populatedPoll;
   }
 
   /**
@@ -165,10 +232,38 @@ export class PollsService {
     poll.status = PollStatus.APPROVED;
     await poll.save();
 
-    return this.pollModel
+    const populatedPoll = await this.pollModel
       .findById(poll._id)
       .populate('createdBy', 'name avatar')
       .lean();
+
+    // Emit WebSocket event
+    this.chatGateway.emitPollUpdate(poll.jobId.toString(), {
+      type: 'approved',
+      poll: populatedPoll,
+    });
+
+    // Send notification to pro
+    try {
+      const client = await this.userModel.findById(userId).select('name').exec();
+      const approvedOption = poll.options.find(opt => opt._id.toString() === optionId);
+      await this.notificationsService.notify(
+        project.proId.toString(),
+        NotificationType.PROJECT_POLL_APPROVED,
+        'გამოკითხვა დამტკიცდა',
+        `${client?.name || 'კლიენტმა'} დაამტკიცა გამოკითხვა: "${poll.title}"`,
+        {
+          link: `/my-jobs/${poll.jobId.toString()}`,
+          referenceId: poll.jobId.toString(),
+          referenceModel: 'Job',
+          metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: approvedOption?.text },
+        },
+      );
+    } catch (error) {
+      console.error('[PollsService] Failed to send poll approved notification:', error);
+    }
+
+    return populatedPoll;
   }
 
   /**
@@ -193,10 +288,18 @@ export class PollsService {
     poll.closedAt = new Date();
     await poll.save();
 
-    return this.pollModel
+    const populatedPoll = await this.pollModel
       .findById(poll._id)
       .populate('createdBy', 'name avatar')
       .lean();
+
+    // Emit WebSocket event
+    this.chatGateway.emitPollUpdate(poll.jobId.toString(), {
+      type: 'closed',
+      poll: populatedPoll,
+    });
+
+    return populatedPoll;
   }
 
   /**
@@ -213,6 +316,13 @@ export class PollsService {
       throw new ForbiddenException('Only the poll creator can delete it');
     }
 
+    const jobId = poll.jobId.toString();
     await this.pollModel.deleteOne({ _id: pollId });
+
+    // Emit WebSocket event
+    this.chatGateway.emitPollUpdate(jobId, {
+      type: 'deleted',
+      poll: { _id: pollId },
+    });
   }
 }

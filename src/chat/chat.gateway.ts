@@ -195,6 +195,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`project:${jobId}`).emit('projectMessage', message);
   }
 
+  // Emit poll update to project room
+  emitPollUpdate(jobId: string, data: { type: 'created' | 'voted' | 'approved' | 'closed' | 'deleted'; poll: any }) {
+    this.server.to(`project:${jobId}`).emit('projectPollUpdate', data);
+  }
+
+  // Emit materials/workspace update to project room
+  emitMaterialsUpdate(jobId: string, data: { type: 'section_added' | 'section_updated' | 'section_deleted' | 'item_added' | 'item_deleted'; section?: any; item?: any; sectionId?: string }) {
+    this.server.to(`project:${jobId}`).emit('projectMaterialsUpdate', data);
+  }
+
   // Method to emit new message to conversation participants
   emitNewMessage(conversationId: string, message: any) {
     this.server.to(`conversation:${conversationId}`).emit('newMessage', message);

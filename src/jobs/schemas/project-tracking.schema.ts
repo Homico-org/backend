@@ -240,6 +240,31 @@ export class ProjectTracking extends Document {
 
   @Prop()
   estimatedDurationUnit?: string;
+
+  // Track when each user last read messages
+  @Prop({ type: Date })
+  clientLastReadAt?: Date;
+
+  @Prop({ type: Date })
+  proLastReadAt?: Date;
+
+  // Track when each user last viewed polls
+  @Prop({ type: Date })
+  clientLastViewedPollsAt?: Date;
+
+  @Prop({ type: Date })
+  proLastViewedPollsAt?: Date;
+
+  // Track when each user last viewed materials/workspace
+  @Prop({ type: Date })
+  clientLastViewedMaterialsAt?: Date;
+
+  @Prop({ type: Date })
+  proLastViewedMaterialsAt?: Date;
+
+  // Client confirmation of completion (triggers payment)
+  @Prop({ type: Date })
+  clientConfirmedAt?: Date;
 }
 
 export const ProjectTrackingSchema = SchemaFactory.createForClass(ProjectTracking);

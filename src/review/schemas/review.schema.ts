@@ -3,8 +3,13 @@ import { Document, Types } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Review extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'ProjectRequest', required: true })
-  projectId: Types.ObjectId;
+  // Legacy field - kept for backwards compatibility
+  @Prop({ type: Types.ObjectId, ref: 'ProjectRequest' })
+  projectId?: Types.ObjectId;
+
+  // New field - reference to Job
+  @Prop({ type: Types.ObjectId, ref: 'Job' })
+  jobId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
@@ -33,4 +38,5 @@ export const ReviewSchema = SchemaFactory.createForClass(Review);
 ReviewSchema.index({ proId: 1, createdAt: -1 });
 ReviewSchema.index({ clientId: 1 });
 ReviewSchema.index({ projectId: 1 });
+ReviewSchema.index({ jobId: 1 });
 ReviewSchema.index({ rating: 1 });

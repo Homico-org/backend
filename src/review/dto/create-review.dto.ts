@@ -1,8 +1,15 @@
 import { IsMongoId, IsNumber, IsString, IsOptional, IsArray, Min, Max } from 'class-validator';
 
 export class CreateReviewDto {
+  // Legacy field - kept for backwards compatibility
   @IsMongoId()
-  projectId: string;
+  @IsOptional()
+  projectId?: string;
+
+  // New field - reference to Job
+  @IsMongoId()
+  @IsOptional()
+  jobId?: string;
 
   @IsMongoId()
   proId: string;

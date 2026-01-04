@@ -314,6 +314,18 @@ export class JobsController {
     return this.projectTrackingService.updateStage(jobId, user.userId, body.stage, body.note);
   }
 
+  @Post('projects/:jobId/confirm-completion')
+  @ApiOperation({ summary: 'Client confirms project completion and triggers payment' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Project confirmed and closed successfully' })
+  @UseGuards(JwtAuthGuard)
+  async confirmProjectCompletion(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.confirmCompletion(jobId, user.userId);
+  }
+
   @Patch('projects/:jobId/progress')
   @ApiOperation({ summary: 'Update project progress percentage' })
   @ApiBearerAuth('JWT-auth')

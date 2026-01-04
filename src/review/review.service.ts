@@ -13,10 +13,15 @@ export class ReviewService {
   ) {}
 
   async create(clientId: string, createReviewDto: CreateReviewDto): Promise<Review> {
-    const existingReview = await this.reviewModel.findOne({
-      clientId,
-      projectId: createReviewDto.projectId,
-    });
+    // Check for existing review by jobId or projectId
+    const query: any = { clientId };
+    if (createReviewDto.jobId) {
+      query.jobId = createReviewDto.jobId;
+    } else if (createReviewDto.projectId) {
+      query.projectId = createReviewDto.projectId;
+    }
+
+    const existingReview = await this.reviewModel.findOne(query);
 
     if (existingReview) {
       throw new ConflictException('Review already exists for this project');
@@ -35,6 +40,12 @@ export class ReviewService {
     );
 
     return review;
+  }
+
+  // Check if review exists for a job
+  async hasReviewForJob(clientId: string, jobId: string): Promise<boolean> {
+    const review = await this.reviewModel.findOne({ clientId, jobId });
+    return !!review;
   }
 
   async findByPro(proId: string, limit = 20, skip = 0): Promise<Review[]> {

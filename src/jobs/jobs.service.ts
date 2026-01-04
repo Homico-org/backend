@@ -732,18 +732,18 @@ export class JobsService {
       ],
     });
 
-    // Send notification to pro that their proposal was accepted
+    // Send notification to pro that they are hired
     try {
       const client = await this.userModel.findById(clientId).select('name').exec();
       await this.notificationsService.notify(
         proposal.proId.toString(),
         NotificationType.PROPOSAL_ACCEPTED,
-        'შეთავაზება მიღებულია!',
-        `${client?.name || 'კლიენტმა'} მიიღო თქვენი შეთავაზება: "${job.title}"`,
+        'თქვენ დაქირავებული ხართ!',
+        `${client?.name || 'კლიენტმა'} დაგიქირავათ პროექტზე: "${job.title}"`,
         {
-          link: `/my-proposals?proposal=${proposalId}`,
-          referenceId: proposalId,
-          referenceModel: 'Proposal',
+          link: `/my-work`,
+          referenceId: job._id.toString(),
+          referenceModel: 'Job',
           metadata: {
             jobId: job._id.toString(),
             jobTitle: job.title,
@@ -752,7 +752,7 @@ export class JobsService {
         },
       );
     } catch (error) {
-      console.error('Failed to send proposal accepted notification:', error);
+      console.error('Failed to send hired notification:', error);
     }
 
     return proposal;

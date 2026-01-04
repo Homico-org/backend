@@ -12,6 +12,14 @@ export enum NotificationType {
   // Message related
   NEW_MESSAGE = 'new_message',
 
+  // Project related
+  PROJECT_MESSAGE = 'project_message',
+  PROJECT_POLL_CREATED = 'project_poll_created',
+  PROJECT_POLL_VOTED = 'project_poll_voted',
+  PROJECT_POLL_APPROVED = 'project_poll_approved',
+  PROJECT_MATERIAL_ADDED = 'project_material_added',
+  PROJECT_STAGE_CHANGED = 'project_stage_changed',
+
   // Review related
   NEW_REVIEW = 'new_review',
 
