@@ -383,7 +383,19 @@ export class UsersService {
 
   async upgradeToPro(
     userId: string,
-    selectedCategories: string[]
+    data: {
+      selectedCategories: string[];
+      selectedSubcategories?: string[];
+      bio?: string;
+      yearsExperience?: number;
+      avatar?: string;
+      whatsapp?: string;
+      telegram?: string;
+      instagram?: string;
+      facebook?: string;
+      linkedin?: string;
+      website?: string;
+    }
   ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 
@@ -401,15 +413,45 @@ export class UsersService {
       );
     }
 
+    // Build update object with only provided fields
+    const updateData: Record<string, any> = {
+      role: "pro",
+      selectedCategories: data.selectedCategories,
+    };
+
+    if (data.selectedSubcategories?.length > 0) {
+      updateData.selectedSubcategories = data.selectedSubcategories;
+    }
+    if (data.bio) {
+      updateData.bio = data.bio;
+    }
+    if (data.yearsExperience !== undefined) {
+      updateData.yearsExperience = data.yearsExperience;
+    }
+    if (data.avatar) {
+      updateData.avatar = data.avatar;
+    }
+    if (data.whatsapp) {
+      updateData.whatsapp = data.whatsapp;
+    }
+    if (data.telegram) {
+      updateData.telegram = data.telegram;
+    }
+    if (data.instagram) {
+      updateData.instagramUrl = data.instagram;
+    }
+    if (data.facebook) {
+      updateData.facebookUrl = data.facebook;
+    }
+    if (data.linkedin) {
+      updateData.linkedinUrl = data.linkedin;
+    }
+    if (data.website) {
+      updateData.websiteUrl = data.website;
+    }
+
     const updatedUser = await this.userModel
-      .findByIdAndUpdate(
-        userId,
-        {
-          role: "pro",
-          selectedCategories,
-        },
-        { new: true }
-      )
+      .findByIdAndUpdate(userId, updateData, { new: true })
       .exec();
 
     // Log upgrade to pro
@@ -419,7 +461,8 @@ export class UsersService {
       userEmail: updatedUser.email,
       userName: updatedUser.name,
       details: {
-        selectedCategories,
+        selectedCategories: data.selectedCategories,
+        selectedSubcategories: data.selectedSubcategories,
       },
     });
 

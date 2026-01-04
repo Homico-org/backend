@@ -118,9 +118,33 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async upgradeToPro(
     @CurrentUser() user: any,
-    @Body() body: { selectedCategories: string[] },
+    @Body() body: {
+      selectedCategories: string[];
+      selectedSubcategories?: string[];
+      bio?: string;
+      yearsExperience?: number;
+      avatar?: string;
+      whatsapp?: string;
+      telegram?: string;
+      instagram?: string;
+      facebook?: string;
+      linkedin?: string;
+      website?: string;
+    },
   ) {
-    const updatedUser = await this.usersService.upgradeToPro(user.userId, body.selectedCategories);
+    const updatedUser = await this.usersService.upgradeToPro(user.userId, {
+      selectedCategories: body.selectedCategories,
+      selectedSubcategories: body.selectedSubcategories,
+      bio: body.bio,
+      yearsExperience: body.yearsExperience,
+      avatar: body.avatar,
+      whatsapp: body.whatsapp,
+      telegram: body.telegram,
+      instagram: body.instagram,
+      facebook: body.facebook,
+      linkedin: body.linkedin,
+      website: body.website,
+    });
 
     // Generate new JWT token with updated role
     const payload = {
@@ -142,10 +166,8 @@ export class UsersController {
         avatar: updatedUser.avatar,
         accountType: updatedUser.accountType,
         companyName: updatedUser.companyName,
-        selectedCategories: updatedUser.selectedCategories || updatedUser.categories,
-        selectedSubcategories: updatedUser.selectedSubcategories?.length > 0
-          ? updatedUser.selectedSubcategories
-          : updatedUser.subcategories,
+        selectedCategories: updatedUser.selectedCategories,
+        selectedSubcategories: updatedUser.selectedSubcategories,
       },
       message: 'Account upgraded to professional successfully',
     };
