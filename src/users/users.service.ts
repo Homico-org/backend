@@ -1086,6 +1086,16 @@ export class UsersService {
       updateData.isAvailable = proData.isAvailable;
     if (proData.profileType !== undefined)
       updateData.profileType = proData.profileType;
+    if (proData.customServices !== undefined)
+      updateData.customServices = proData.customServices;
+
+    // Social links
+    if (proData.whatsapp !== undefined) updateData.whatsapp = proData.whatsapp;
+    if (proData.telegram !== undefined) updateData.telegram = proData.telegram;
+    if (proData.instagramUrl !== undefined) updateData.instagramUrl = proData.instagramUrl;
+    if (proData.facebookUrl !== undefined) updateData.facebookUrl = proData.facebookUrl;
+    if (proData.linkedinUrl !== undefined) updateData.linkedinUrl = proData.linkedinUrl;
+    if (proData.websiteUrl !== undefined) updateData.websiteUrl = proData.websiteUrl;
 
     // Check if profile has required fields to be considered complete
     // Required: bio/description, categories, serviceAreas
