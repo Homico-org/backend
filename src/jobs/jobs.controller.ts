@@ -218,7 +218,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Contact revealed successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   revealContact(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.revealContact(proposalId, user.userId);
   }
@@ -228,7 +228,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal shortlisted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   shortlistProposal(
     @Param('proposalId') proposalId: string,
     @Body('hiringChoice') hiringChoice: 'homico' | 'direct',
@@ -242,7 +242,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal accepted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   acceptProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
@@ -252,7 +252,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal rejected successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   rejectProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.rejectProposal(proposalId, user.userId);
   }
@@ -262,7 +262,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal reverted to pending successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   revertToPending(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.revertProposalToPending(proposalId, user.userId);
   }
