@@ -10,8 +10,10 @@ export interface FeedItem {
   title: string;
   description?: string;
   images: string[];
+  videos?: string[];
   beforeImage?: string;
   afterImage?: string;
+  beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
   category: string;
   pro: {
     _id: string;
@@ -142,8 +144,10 @@ export class FeedService {
         title: item.title || '',
         description: item.description,
         images: item.images || (item.imageUrl ? [item.imageUrl] : []),
+        videos: item.videos || [],
         beforeImage: item.beforeImage,
         afterImage: item.afterImage,
+        beforeAfterPairs: item.beforeAfterPairs || [],
         category: item.category || proUser?.categories?.[0] || '',
         pro: {
           _id: proUser?._id?.toString() || '',
@@ -205,8 +209,10 @@ export class FeedService {
           title: project.title || '',
           description: project.description,
           images: project.images || [],
+          videos: project.videos || [],
           beforeImage: firstPair?.beforeImage,
           afterImage: firstPair?.afterImage,
+          beforeAfterPairs: project.beforeAfterPairs || [],
           category: proUser.categories?.[0] || '',
           pro: {
             _id: proUser._id?.toString() || '',

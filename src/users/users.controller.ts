@@ -130,6 +130,21 @@ export class UsersController {
       facebook?: string;
       linkedin?: string;
       website?: string;
+      portfolioProjects?: Array<{
+        id: string;
+        title: string;
+        description?: string;
+        location?: string;
+        images: string[];
+        videos?: string[];
+        beforeAfterPairs?: Array<{
+          id: string;
+          beforeImage: string;
+          afterImage: string;
+        }>;
+        isVisible?: boolean;
+        displayOrder?: number;
+      }>;
     },
   ) {
     const updatedUser = await this.usersService.upgradeToPro(user.userId, {
@@ -144,6 +159,7 @@ export class UsersController {
       facebook: body.facebook,
       linkedin: body.linkedin,
       website: body.website,
+      portfolioProjects: body.portfolioProjects,
     });
 
     // Generate new JWT token with updated role

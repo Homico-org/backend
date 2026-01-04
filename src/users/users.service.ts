@@ -395,6 +395,21 @@ export class UsersService {
       facebook?: string;
       linkedin?: string;
       website?: string;
+      portfolioProjects?: Array<{
+        id: string;
+        title: string;
+        description?: string;
+        location?: string;
+        images: string[];
+        videos?: string[];
+        beforeAfterPairs?: Array<{
+          id: string;
+          beforeImage: string;
+          afterImage: string;
+        }>;
+        isVisible?: boolean;
+        displayOrder?: number;
+      }>;
     }
   ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
@@ -448,6 +463,9 @@ export class UsersService {
     }
     if (data.website) {
       updateData.websiteUrl = data.website;
+    }
+    if (data.portfolioProjects && data.portfolioProjects.length > 0) {
+      updateData.portfolioProjects = data.portfolioProjects;
     }
 
     const updatedUser = await this.userModel
