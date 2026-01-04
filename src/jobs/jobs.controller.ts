@@ -383,6 +383,53 @@ export class JobsController {
     return this.projectTrackingService.addMessage(jobId, user.userId, body.content, body.attachments);
   }
 
+  @Post('projects/:jobId/messages/read')
+  @ApiOperation({ summary: 'Mark project messages as read' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Messages marked as read' })
+  @UseGuards(JwtAuthGuard)
+  async markMessagesAsRead(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.markMessagesAsRead(jobId, user.userId);
+  }
+
+  @Post('projects/:jobId/polls/viewed')
+  @ApiOperation({ summary: 'Mark polls as viewed' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Polls marked as viewed' })
+  @UseGuards(JwtAuthGuard)
+  async markPollsAsViewed(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.markPollsAsViewed(jobId, user.userId);
+  }
+
+  @Post('projects/:jobId/materials/viewed')
+  @ApiOperation({ summary: 'Mark materials as viewed' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Materials marked as viewed' })
+  @UseGuards(JwtAuthGuard)
+  async markMaterialsAsViewed(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.markMaterialsAsViewed(jobId, user.userId);
+  }
+
+  @Get('projects/:jobId/unread-counts')
+  @ApiOperation({ summary: 'Get unread counts for chat, polls, materials' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async getUnreadCounts(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectTrackingService.getUnreadCounts(jobId, user.userId);
+  }
+
   @Post('projects/:jobId/attachments')
   @ApiOperation({ summary: 'Add attachment to project' })
   @ApiBearerAuth('JWT-auth')
@@ -581,7 +628,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Reaction toggled' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
   async toggleReaction(
     @Param('jobId') jobId: string,
     @Param('sectionId') sectionId: string,
