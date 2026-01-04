@@ -138,6 +138,10 @@ export class User extends Document {
   @Prop()
   phoneVerifiedAt: Date;
 
+  // Pending email change (stores new email until verified)
+  @Prop()
+  pendingEmail: string;
+
   // Notification preferences
   @Prop({ type: Object, default: null })
   notificationPreferences: {

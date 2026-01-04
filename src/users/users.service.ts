@@ -406,6 +406,64 @@ export class UsersService {
     return updatedUser;
   }
 
+  async setPendingEmail(
+    userId: string,
+    email: string
+  ): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    // Check if this is the same as current email
+    if (user.email === normalizedEmail) {
+      throw new ConflictException("This is already your current email");
+    }
+
+    // Check if email is already used by another user
+    const existingUser = await this.userModel
+      .findOne({ email: normalizedEmail, _id: { $ne: userId } })
+      .exec();
+    if (existingUser) {
+      throw new ConflictException("This email is already in use");
+    }
+
+    // Set as pending email
+    await this.userModel
+      .findByIdAndUpdate(userId, { pendingEmail: normalizedEmail })
+      .exec();
+
+    return { success: true, message: "Pending email set. Please verify with OTP." };
+  }
+
+  async confirmEmailChange(userId: string): Promise<User> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (!user.pendingEmail) {
+      throw new ConflictException("No pending email to confirm");
+    }
+
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          email: user.pendingEmail,
+          pendingEmail: null,
+          isEmailVerified: true,
+          emailVerifiedAt: new Date(),
+        },
+        { new: true }
+      )
+      .exec();
+
+    return updatedUser;
+  }
+
   async findByUid(uid: number): Promise<User | null> {
     return this.userModel.findOne({ uid }).exec();
   }

@@ -82,6 +82,34 @@ export class UsersController {
     };
   }
 
+  @Post('add-email')
+  @ApiOperation({ summary: 'Add or change email address (stores as pending until verified)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Pending email set successfully' })
+  @ApiResponse({ status: 409, description: 'Email already in use' })
+  @UseGuards(JwtAuthGuard)
+  async addEmail(
+    @CurrentUser() user: any,
+    @Body() body: { email: string },
+  ) {
+    return this.usersService.setPendingEmail(user.userId, body.email);
+  }
+
+  @Post('verify-email-update')
+  @ApiOperation({ summary: 'Confirm email change after OTP verification' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Email updated successfully' })
+  @ApiResponse({ status: 409, description: 'No pending email to confirm' })
+  @UseGuards(JwtAuthGuard)
+  async verifyEmailUpdate(@CurrentUser() user: any) {
+    const updatedUser = await this.usersService.confirmEmailChange(user.userId);
+    return {
+      success: true,
+      message: 'Email updated successfully',
+      email: updatedUser.email,
+    };
+  }
+
   @Post('upgrade-to-pro')
   @ApiOperation({ summary: 'Upgrade client account to professional' })
   @ApiBearerAuth('JWT-auth')

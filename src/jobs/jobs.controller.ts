@@ -657,7 +657,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job updated successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
   updateJob(
     @Param('id') id: string,
     @CurrentUser() user: any,
