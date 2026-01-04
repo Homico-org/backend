@@ -84,6 +84,7 @@ export class JobsService {
     const skip = (page - 1) * limit;
 
     const query: any = { status: filters?.status || JobStatus.OPEN };
+    const andConditions: any[] = [];
 
     // Support filtering by multiple categories (for pro users with selected categories)
     if (filters?.categories && filters.categories.length > 0) {
@@ -92,9 +93,23 @@ export class JobsService {
       query.category = filters.category;
     }
 
-    // Filter by subcategories/skills - jobs must have at least one matching skill
+    // Filter by subcategories/skills - jobs must have at least one matching skill OR matching category
+    // This handles both new jobs (with skills array) and older jobs (with subcategory as category)
     if (filters?.subcategories && filters.subcategories.length > 0) {
-      query.skills = { $in: filters.subcategories };
+      // Build regex patterns for flexible matching (e.g., "interior" matches "interior-design")
+      const subcategoryPatterns = filters.subcategories.map(s => new RegExp(s, 'i'));
+
+      // Check skills array, category field, and allow partial matches
+      andConditions.push({
+        $or: [
+          { skills: { $in: filters.subcategories } },
+          { category: { $in: filters.subcategories } },
+          // Also match if any skill contains the subcategory (for partial matches)
+          { skills: { $elemMatch: { $in: subcategoryPatterns } } },
+          // Also match if category contains the subcategory
+          { category: { $in: subcategoryPatterns } },
+        ],
+      });
     }
 
     if (filters?.location) {
@@ -102,28 +117,32 @@ export class JobsService {
     }
 
     if (filters?.budgetMin !== undefined || filters?.budgetMax !== undefined) {
-      query.$or = [
+      const budgetOr: any[] = [
         { budgetAmount: {} },
         { budgetMax: {} },
       ];
 
       if (filters?.budgetMin !== undefined) {
-        query.$or[0].budgetAmount.$gte = filters.budgetMin;
-        query.$or[1].budgetMax.$gte = filters.budgetMin;
+        budgetOr[0].budgetAmount.$gte = filters.budgetMin;
+        budgetOr[1].budgetMax.$gte = filters.budgetMin;
       }
 
       if (filters?.budgetMax !== undefined) {
-        query.$or[0].budgetAmount.$lte = filters.budgetMax;
-        query.$or[1].budgetMax.$lte = filters.budgetMax;
+        budgetOr[0].budgetAmount.$lte = filters.budgetMax;
+        budgetOr[1].budgetMax.$lte = filters.budgetMax;
       }
+
+      andConditions.push({ $or: budgetOr });
     }
 
     if (filters?.search) {
       const searchRegex = new RegExp(filters.search, 'i');
-      query.$or = [
-        { title: searchRegex },
-        { description: searchRegex },
-      ];
+      andConditions.push({
+        $or: [
+          { title: searchRegex },
+          { description: searchRegex },
+        ],
+      });
     }
 
     // Property type filter
@@ -167,8 +186,9 @@ export class JobsService {
         query.deadline = { $gte: now, $lte: monthLater };
       } else if (filters.deadline === 'flexible') {
         // Jobs with no deadline set or deadline is null
-        query.$or = query.$or || [];
-        query.$or.push({ deadline: null }, { deadline: { $exists: false } });
+        andConditions.push({
+          $or: [{ deadline: null }, { deadline: { $exists: false } }],
+        });
       }
     }
 
@@ -189,6 +209,11 @@ export class JobsService {
         };
       }
       query._id = { $in: savedJobIds.map((id) => new Types.ObjectId(id)) };
+    }
+
+    // Apply $and conditions if any exist
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
     }
 
     // Determine sort order

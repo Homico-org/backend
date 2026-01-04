@@ -438,7 +438,7 @@ export class UsersService {
       updateData.selectedSubcategories = data.selectedSubcategories;
     }
     if (data.bio) {
-      updateData.bio = data.bio;
+      updateData.description = data.bio;
     }
     if (data.yearsExperience !== undefined) {
       updateData.yearsExperience = data.yearsExperience;
@@ -1119,10 +1119,16 @@ export class UsersService {
     if (proData.bio !== undefined) updateData.bio = proData.bio;
     if (proData.description !== undefined)
       updateData.description = proData.description;
-    if (proData.categories !== undefined)
+    if (proData.categories !== undefined) {
       updateData.categories = proData.categories;
-    if (proData.subcategories !== undefined)
+      // Also update selectedCategories for consistency
+      updateData.selectedCategories = proData.categories;
+    }
+    if (proData.subcategories !== undefined) {
       updateData.subcategories = proData.subcategories;
+      // Also update selectedSubcategories for consistency
+      updateData.selectedSubcategories = proData.subcategories;
+    }
     if (proData.yearsExperience !== undefined)
       updateData.yearsExperience = proData.yearsExperience;
     if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
