@@ -355,6 +355,14 @@ export class UsersController {
     return this.usersService.findProById(id);
   }
 
+  @Get('profile/:id')
+  @ApiOperation({ summary: 'Get public user profile by ID' })
+  @ApiResponse({ status: 200, description: 'User public profile' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getPublicProfile(@Param('id') id: string) {
+    return this.usersService.findPublicProfile(id);
+  }
+
   @Delete('me')
   @ApiOperation({ summary: 'Delete current user account' })
   @ApiBearerAuth('JWT-auth')

@@ -7,6 +7,8 @@ import {
   ProjectComment,
   ProjectAttachment,
   StageHistory,
+  ProjectHistoryEvent,
+  ProjectHistoryEventType,
 } from './schemas/project-tracking.schema';
 import { Proposal } from './schemas/proposal.schema';
 import { Job } from './schemas/job.schema';
@@ -169,6 +171,14 @@ export class ProjectTrackingService {
     }
 
     const savedProject = await project.save();
+
+    // Log to history
+    await this.addHistoryEvent(
+      jobId,
+      ProjectHistoryEventType.STAGE_CHANGED,
+      userId,
+      { fromStage: project.stageHistory.length > 1 ? project.stageHistory[project.stageHistory.length - 2]?.stage : undefined, toStage: newStage },
+    );
 
     // Send notification when stage changes
     try {
@@ -475,5 +485,148 @@ export class ProjectTrackingService {
       .exec();
 
     return projects;
+  }
+
+  // ============ HISTORY METHODS ============
+
+  // Add history event
+  async addHistoryEvent(
+    jobId: string,
+    eventType: ProjectHistoryEventType,
+    userId: string,
+    metadata?: ProjectHistoryEvent['metadata'],
+  ): Promise<void> {
+    try {
+      const project = await this.projectTrackingModel.findOne({
+        jobId: new Types.ObjectId(jobId),
+      });
+
+      if (!project) return;
+
+      const user = await this.userModel.findById(userId).select('name avatar').exec();
+      const isClient = project.clientId.toString() === userId;
+      const isPro = project.proId.toString() === userId;
+
+      const historyEvent: any = {
+        eventType,
+        userId: new Types.ObjectId(userId),
+        userName: user?.name || 'Unknown',
+        userAvatar: user?.avatar,
+        userRole: isClient ? 'client' : isPro ? 'pro' : 'system',
+        metadata,
+        createdAt: new Date(),
+      };
+
+      project.history = project.history || [];
+      project.history.push(historyEvent);
+      await project.save();
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to add history event:', error);
+    }
+  }
+
+  // Get project history
+  async getProjectHistory(
+    jobId: string,
+    userId: string,
+    options?: {
+      limit?: number;
+      offset?: number;
+      eventTypes?: ProjectHistoryEventType[];
+      userFilter?: string; // Filter by specific user
+    },
+  ): Promise<{ history: ProjectHistoryEvent[]; total: number }> {
+    const project = await this.projectTrackingModel.findOne({
+      jobId: new Types.ObjectId(jobId),
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tracking not found');
+    }
+
+    const isClient = project.clientId.toString() === userId;
+    const isPro = project.proId.toString() === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException('You are not part of this project');
+    }
+
+    let history = project.history || [];
+
+    // Filter by event types if specified
+    if (options?.eventTypes && options.eventTypes.length > 0) {
+      history = history.filter(h => options.eventTypes.includes(h.eventType));
+    }
+
+    // Filter by user if specified
+    if (options?.userFilter) {
+      history = history.filter(h => h.userId.toString() === options.userFilter);
+    }
+
+    // Sort by date descending (newest first)
+    history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = history.length;
+
+    // Apply pagination
+    if (options?.offset) {
+      history = history.slice(options.offset);
+    }
+    if (options?.limit) {
+      history = history.slice(0, options.limit);
+    }
+
+    return { history, total };
+  }
+
+  // Helper method to log stage change in history
+  async logStageChange(
+    jobId: string,
+    userId: string,
+    fromStage: ProjectStage,
+    toStage: ProjectStage,
+  ): Promise<void> {
+    await this.addHistoryEvent(
+      jobId,
+      ProjectHistoryEventType.STAGE_CHANGED,
+      userId,
+      { fromStage, toStage },
+    );
+  }
+
+  // Helper method to log poll events
+  async logPollEvent(
+    jobId: string,
+    userId: string,
+    eventType: ProjectHistoryEventType.POLL_CREATED | ProjectHistoryEventType.POLL_VOTED | ProjectHistoryEventType.POLL_CLOSED | ProjectHistoryEventType.POLL_OPTION_SELECTED,
+    pollId: string,
+    pollTitle: string,
+    optionText?: string,
+  ): Promise<void> {
+    await this.addHistoryEvent(
+      jobId,
+      eventType,
+      userId,
+      { pollId, pollTitle, optionText },
+    );
+  }
+
+  // Helper method to log resource events
+  async logResourceEvent(
+    jobId: string,
+    userId: string,
+    eventType: ProjectHistoryEventType,
+    resourceId: string,
+    resourceName: string,
+    itemId?: string,
+    itemName?: string,
+    reactionType?: string,
+  ): Promise<void> {
+    await this.addHistoryEvent(
+      jobId,
+      eventType,
+      userId,
+      { resourceId, resourceName, itemId, itemName, reactionType },
+    );
   }
 }

@@ -285,6 +285,26 @@ export class UsersService {
     return user;
   }
 
+  async findPublicProfile(id: string) {
+    const user = await this.userModel.findById(id).lean().exec();
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    // Return only public fields
+    return {
+      _id: user._id,
+      name: user.name,
+      avatar: user.avatar,
+      city: user.city,
+      role: user.role,
+      accountType: user.accountType,
+      companyName: user.companyName,
+      createdAt: (user as any).createdAt,
+    };
+  }
+
   async validatePassword(
     password: string,
     hashedPassword: string

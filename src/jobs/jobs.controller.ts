@@ -415,6 +415,27 @@ export class JobsController {
     return this.projectTrackingService.deleteAttachment(jobId, user.userId, parseInt(index, 10));
   }
 
+  @Get('projects/:jobId/history')
+  @ApiOperation({ summary: 'Get project history/activity log' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Project history' })
+  @UseGuards(JwtAuthGuard)
+  async getProjectHistory(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('eventTypes') eventTypes?: string,
+    @Query('userFilter') userFilter?: string,
+  ) {
+    return this.projectTrackingService.getProjectHistory(jobId, user.userId, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+      eventTypes: eventTypes ? eventTypes.split(',') as any : undefined,
+      userFilter,
+    });
+  }
+
   // ============== WORKSPACE ROUTES ==============
 
   @Get('projects/:jobId/workspace')

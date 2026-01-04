@@ -84,6 +84,93 @@ export class StageHistory {
 
 export const StageHistorySchema = SchemaFactory.createForClass(StageHistory);
 
+// Comprehensive history event types
+export enum ProjectHistoryEventType {
+  // Stage changes
+  STAGE_CHANGED = 'stage_changed',
+
+  // Poll events
+  POLL_CREATED = 'poll_created',
+  POLL_VOTED = 'poll_voted',
+  POLL_CLOSED = 'poll_closed',
+  POLL_OPTION_SELECTED = 'poll_option_selected',
+
+  // Resource/Material events
+  RESOURCE_ADDED = 'resource_added',
+  RESOURCE_REMOVED = 'resource_removed',
+  RESOURCE_EDITED = 'resource_edited',
+  RESOURCE_ITEM_ADDED = 'resource_item_added',
+  RESOURCE_ITEM_REMOVED = 'resource_item_removed',
+  RESOURCE_ITEM_EDITED = 'resource_item_edited',
+  RESOURCE_REACTION = 'resource_reaction',
+
+  // Attachment events
+  ATTACHMENT_ADDED = 'attachment_added',
+  ATTACHMENT_REMOVED = 'attachment_removed',
+
+  // Message events (optional, for key messages)
+  MESSAGE_SENT = 'message_sent',
+
+  // Project events
+  PROJECT_CREATED = 'project_created',
+  PROJECT_COMPLETED = 'project_completed',
+  PRICE_UPDATED = 'price_updated',
+  DEADLINE_UPDATED = 'deadline_updated',
+}
+
+@Schema({ timestamps: true })
+export class ProjectHistoryEvent {
+  @Prop({ type: String, enum: Object.values(ProjectHistoryEventType), required: true })
+  eventType: ProjectHistoryEventType;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  userId: Types.ObjectId;
+
+  @Prop({ required: true })
+  userName: string;
+
+  @Prop()
+  userAvatar?: string;
+
+  @Prop({ required: true, enum: ['client', 'pro', 'system'] })
+  userRole: 'client' | 'pro' | 'system';
+
+  @Prop({ type: Object })
+  metadata?: {
+    // For stage changes
+    fromStage?: string;
+    toStage?: string;
+
+    // For polls
+    pollId?: string;
+    pollTitle?: string;
+    optionText?: string;
+
+    // For resources
+    resourceId?: string;
+    resourceName?: string;
+    itemId?: string;
+    itemName?: string;
+    reactionType?: string;
+
+    // For attachments
+    fileName?: string;
+    fileUrl?: string;
+
+    // For price/deadline updates
+    oldValue?: string | number;
+    newValue?: string | number;
+
+    // Generic description
+    description?: string;
+  };
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectHistoryEventSchema = SchemaFactory.createForClass(ProjectHistoryEvent);
+
 @Schema({ timestamps: true })
 export class ProjectTracking extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Job', required: true, unique: true })
@@ -134,6 +221,10 @@ export class ProjectTracking extends Document {
   // Attachments
   @Prop({ type: [ProjectAttachmentSchema], default: [] })
   attachments: ProjectAttachment[];
+
+  // Comprehensive history log
+  @Prop({ type: [ProjectHistoryEventSchema], default: [] })
+  history: ProjectHistoryEvent[];
 
   // Quick notes for each stage (set by pro)
   @Prop({ type: Map, of: String })
