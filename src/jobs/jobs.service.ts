@@ -535,7 +535,7 @@ export class JobsService {
         'ახალი შეთავაზება',
         `${pro?.name || 'სპეციალისტმა'} გამოგიგზავნათ შეთავაზება: "${job.title}"`,
         {
-          link: `/my-jobs?job=${jobId}`,
+          link: `/my-jobs/${jobId}`,
           referenceId: proposal._id.toString(),
           referenceModel: 'Proposal',
           metadata: {

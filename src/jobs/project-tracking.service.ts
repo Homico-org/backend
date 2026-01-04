@@ -202,7 +202,7 @@ export class ProjectTrackingService {
         NotificationType.PROFILE_UPDATE, // Using profile_update as a generic notification type
         msg.titleKa,
         msg.messageKa,
-        { link: `/my-jobs?job=${jobId}`, referenceId: jobId, referenceModel: 'Job' }
+        { link: `/my-jobs/${jobId}`, referenceId: jobId, referenceModel: 'Job' }
       );
     } catch (error) {
       console.error('[ProjectTracking] Failed to send stage notification:', error);
