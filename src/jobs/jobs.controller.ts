@@ -309,9 +309,9 @@ export class JobsController {
   async updateProjectStage(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
-    @Body() body: { stage: ProjectStage; note?: string },
+    @Body() body: { stage: ProjectStage; note?: string; portfolioImages?: string[] },
   ) {
-    return this.projectTrackingService.updateStage(jobId, user.userId, body.stage, body.note);
+    return this.projectTrackingService.updateStage(jobId, user.userId, body.stage, body.note, body.portfolioImages);
   }
 
   @Post('projects/:jobId/confirm-completion')

@@ -173,7 +173,7 @@ export class PollsService {
       poll: populatedPoll,
     });
 
-    // Send notification to pro
+    // Send notification to pro (pro views jobs at /jobs/{id})
     try {
       const job = await this.jobModel.findById(poll.jobId).select('title').exec();
       const client = await this.userModel.findById(userId).select('name').exec();
@@ -184,7 +184,7 @@ export class PollsService {
         'კლიენტმა ხმა მისცა',
         `${client?.name || 'კლიენტმა'} ხმა მისცა გამოკითხვაში: "${poll.title}"`,
         {
-          link: `/my-jobs/${poll.jobId.toString()}`,
+          link: `/jobs/${poll.jobId.toString()}`,
           referenceId: poll.jobId.toString(),
           referenceModel: 'Job',
           metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: votedOption?.text },
@@ -243,7 +243,7 @@ export class PollsService {
       poll: populatedPoll,
     });
 
-    // Send notification to pro
+    // Send notification to pro (pro views jobs at /jobs/{id})
     try {
       const client = await this.userModel.findById(userId).select('name').exec();
       const approvedOption = poll.options.find(opt => opt._id.toString() === optionId);
@@ -253,7 +253,7 @@ export class PollsService {
         'გამოკითხვა დამტკიცდა',
         `${client?.name || 'კლიენტმა'} დაამტკიცა გამოკითხვა: "${poll.title}"`,
         {
-          link: `/my-jobs/${poll.jobId.toString()}`,
+          link: `/jobs/${poll.jobId.toString()}`,
           referenceId: poll.jobId.toString(),
           referenceModel: 'Job',
           metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: approvedOption?.text },

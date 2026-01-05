@@ -265,6 +265,14 @@ export class ProjectTracking extends Document {
   // Client confirmation of completion (triggers payment)
   @Prop({ type: Date })
   clientConfirmedAt?: Date;
+
+  // Portfolio images uploaded by pro when completing job
+  @Prop({ type: [String], default: [] })
+  portfolioImages: string[];
+
+  // Flag indicating if portfolio item was created from this job
+  @Prop({ type: Types.ObjectId, ref: 'PortfolioItem' })
+  portfolioItemId?: Types.ObjectId;
 }
 
 export const ProjectTrackingSchema = SchemaFactory.createForClass(ProjectTracking);

@@ -205,6 +205,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`project:${jobId}`).emit('projectMaterialsUpdate', data);
   }
 
+  // Emit project stage update to project room and individual users
+  emitProjectStageUpdate(jobId: string, clientId: string, proId: string, data: { stage: string; progress: number; project: any }) {
+    // Emit to project room (for users who have the project tracker card open)
+    this.server.to(`project:${jobId}`).emit('projectStageUpdate', data);
+    // Also emit to individual user rooms (for my-jobs and my-work pages)
+    this.server.to(`user:${clientId}`).emit('projectStageUpdate', { ...data, jobId });
+    this.server.to(`user:${proId}`).emit('projectStageUpdate', { ...data, jobId });
+  }
+
   // Method to emit new message to conversation participants
   emitNewMessage(conversationId: string, message: any) {
     this.server.to(`conversation:${conversationId}`).emit('newMessage', message);

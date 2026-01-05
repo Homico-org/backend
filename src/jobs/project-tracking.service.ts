@@ -16,6 +16,7 @@ import { User } from '../users/schemas/user.schema';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
+import { PortfolioService } from '../portfolio/portfolio.service';
 
 @Injectable()
 export class ProjectTrackingService {
@@ -27,6 +28,7 @@ export class ProjectTrackingService {
     @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
     private notificationsService: NotificationsService,
+    private portfolioService: PortfolioService,
   ) {}
 
   // Create project tracking when proposal is accepted
@@ -114,6 +116,7 @@ export class ProjectTrackingService {
     userId: string,
     newStage: ProjectStage,
     note?: string,
+    portfolioImages?: string[],
   ): Promise<ProjectTracking> {
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
@@ -155,6 +158,10 @@ export class ProjectTrackingService {
     } else if (newStage === ProjectStage.COMPLETED) {
       project.completedAt = now;
       project.progress = 100;
+      // Save portfolio images if provided (pro completing the job)
+      if (portfolioImages && portfolioImages.length > 0 && isPro) {
+        project.portfolioImages = portfolioImages;
+      }
     }
 
     // Auto-update progress based on stage
@@ -171,6 +178,22 @@ export class ProjectTrackingService {
     }
 
     const savedProject = await project.save();
+
+    // Emit WebSocket event for real-time stage update
+    try {
+      this.chatGateway.emitProjectStageUpdate(
+        jobId,
+        project.clientId.toString(),
+        project.proId.toString(),
+        {
+          stage: newStage,
+          progress: savedProject.progress,
+          project: savedProject,
+        }
+      );
+    } catch (error) {
+      console.error('[ProjectTracking] Failed to emit stage update:', error);
+    }
 
     // Log to history
     await this.addHistoryEvent(
@@ -275,6 +298,41 @@ export class ProjectTrackingService {
 
     // TODO: Trigger actual payment process here
     // await this.paymentService.processPayment(project);
+
+    // Create portfolio item from completed job if there are portfolio images
+    if (project.portfolioImages && project.portfolioImages.length > 0) {
+      try {
+        const job = await this.jobModel.findById(jobId)
+          .select('title description category location')
+          .exec();
+        const client = await this.userModel.findById(project.clientId)
+          .select('name avatar city')
+          .exec();
+
+        const portfolioItem = await this.portfolioService.createFromJob({
+          proId: project.proId.toString(),
+          jobId: jobId,
+          title: job?.title || 'Completed Project',
+          description: job?.description,
+          images: project.portfolioImages,
+          category: job?.category,
+          location: job?.location,
+          clientId: project.clientId.toString(),
+          clientName: client?.name,
+          clientAvatar: client?.avatar,
+          completedDate: now,
+        });
+
+        // Save reference to portfolio item
+        project.portfolioItemId = portfolioItem._id as Types.ObjectId;
+        await project.save();
+
+        console.log('[ProjectTracking] Portfolio item created:', portfolioItem._id);
+      } catch (error) {
+        console.error('[ProjectTracking] Failed to create portfolio item:', error);
+        // Don't fail the completion if portfolio creation fails
+      }
+    }
 
     return {
       success: true,

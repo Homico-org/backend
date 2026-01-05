@@ -424,10 +424,49 @@ export class JobsService {
       shortlistedCounts.map((item) => [item._id.toString(), item.count])
     );
 
+    // Get recent proposals (up to 3) for each job to show avatars
+    const recentProposals = await this.proposalModel
+      .find({
+        jobId: { $in: jobIds },
+        status: { $in: ['pending', 'shortlisted'] },
+      })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'proProfileId',
+        select: 'userId',
+        populate: {
+          path: 'userId',
+          select: 'name avatar',
+        },
+      })
+      .lean()
+      .exec();
+
+    // Group proposals by job ID (max 3 per job)
+    const recentProposalsMap = new Map<string, any[]>();
+    for (const proposal of recentProposals) {
+      const jobIdStr = proposal.jobId.toString();
+      if (!recentProposalsMap.has(jobIdStr)) {
+        recentProposalsMap.set(jobIdStr, []);
+      }
+      const jobProposals = recentProposalsMap.get(jobIdStr)!;
+      if (jobProposals.length < 3) {
+        jobProposals.push({
+          _id: proposal._id,
+          proId: {
+            name: (proposal.proProfileId as any)?.userId?.name || '',
+            avatar: (proposal.proProfileId as any)?.userId?.avatar || '',
+          },
+        });
+      }
+    }
+
     // For in_progress jobs, find the accepted proposal and get hired pro info
     const jobsWithDetails = await Promise.all(
       jobs.map(async (job) => {
-        const shortlistedCount = shortlistedCountMap.get(job._id.toString()) || 0;
+        const jobIdStr = job._id.toString();
+        const shortlistedCount = shortlistedCountMap.get(jobIdStr) || 0;
+        const jobRecentProposals = recentProposalsMap.get(jobIdStr) || [];
 
         if (job.status === 'in_progress') {
           const acceptedProposal = await this.proposalModel
@@ -447,6 +486,7 @@ export class JobsService {
             return {
               ...job,
               shortlistedCount,
+              recentProposals: jobRecentProposals,
               hiredPro: acceptedProposal.proProfileId,
             };
           }
@@ -454,6 +494,7 @@ export class JobsService {
         return {
           ...job,
           shortlistedCount,
+          recentProposals: jobRecentProposals,
         };
       })
     );
@@ -535,7 +576,7 @@ export class JobsService {
         'ახალი შეთავაზება',
         `${pro?.name || 'სპეციალისტმა'} გამოგიგზავნათ შეთავაზება: "${job.title}"`,
         {
-          link: `/my-jobs/${jobId}`,
+          link: `/my-jobs/${jobId}/proposals`,
           referenceId: proposal._id.toString(),
           referenceModel: 'Proposal',
           metadata: {
