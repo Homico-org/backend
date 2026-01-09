@@ -353,20 +353,32 @@ export class JobsService {
       const acceptedProposal = await this.proposalModel
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
-          path: 'proProfileId',
-          select: '_id userId avatar title',
+          path: 'proId',
+          select: '_id name avatar phone proProfile',
           populate: {
-            path: 'userId',
-            select: 'name avatar',
+            path: 'proProfile',
+            select: 'title avatar',
           },
         })
         .lean()
         .exec();
 
-      if (acceptedProposal?.proProfileId) {
+      if (acceptedProposal?.proId) {
+        const proUser = acceptedProposal.proId as any;
         return {
           ...job,
-          hiredPro: acceptedProposal.proProfileId,
+          hiredPro: {
+            userId: {
+              id: proUser._id?.toString(),
+              _id: proUser._id?.toString(),
+              name: proUser.name,
+              avatar: proUser.avatar || proUser.proProfile?.avatar,
+            },
+            name: proUser.name,
+            avatar: proUser.avatar || proUser.proProfile?.avatar,
+            title: proUser.proProfile?.title,
+            phone: proUser.phone,
+          },
         };
       }
     }
@@ -472,22 +484,34 @@ export class JobsService {
           const acceptedProposal = await this.proposalModel
             .findOne({ jobId: job._id, status: 'accepted' })
             .populate({
-              path: 'proProfileId',
-              select: '_id userId avatar title',
+              path: 'proId',
+              select: '_id name avatar phone proProfile',
               populate: {
-                path: 'userId',
-                select: 'name avatar',
+                path: 'proProfile',
+                select: 'title avatar',
               },
             })
             .lean()
             .exec();
 
-          if (acceptedProposal?.proProfileId) {
+          if (acceptedProposal?.proId) {
+            const proUser = acceptedProposal.proId as any;
             return {
               ...job,
               shortlistedCount,
               recentProposals: jobRecentProposals,
-              hiredPro: acceptedProposal.proProfileId,
+              hiredPro: {
+                userId: {
+                  id: proUser._id?.toString(),
+                  _id: proUser._id?.toString(),
+                  name: proUser.name,
+                  avatar: proUser.avatar || proUser.proProfile?.avatar,
+                },
+                name: proUser.name,
+                avatar: proUser.avatar || proUser.proProfile?.avatar,
+                title: proUser.proProfile?.title,
+                phone: proUser.phone,
+              },
             };
           }
         }
