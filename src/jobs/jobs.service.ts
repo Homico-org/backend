@@ -354,11 +354,7 @@ export class JobsService {
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
           path: 'proId',
-          select: '_id name avatar phone proProfile',
-          populate: {
-            path: 'proProfile',
-            select: 'title avatar',
-          },
+          select: '_id name avatar phone title',
         })
         .lean()
         .exec();
@@ -372,11 +368,11 @@ export class JobsService {
               id: proUser._id?.toString(),
               _id: proUser._id?.toString(),
               name: proUser.name,
-              avatar: proUser.avatar || proUser.proProfile?.avatar,
+              avatar: proUser.avatar,
             },
             name: proUser.name,
-            avatar: proUser.avatar || proUser.proProfile?.avatar,
-            title: proUser.proProfile?.title,
+            avatar: proUser.avatar,
+            title: proUser.title,
             phone: proUser.phone,
           },
         };
@@ -485,11 +481,7 @@ export class JobsService {
             .findOne({ jobId: job._id, status: 'accepted' })
             .populate({
               path: 'proId',
-              select: '_id name avatar phone proProfile',
-              populate: {
-                path: 'proProfile',
-                select: 'title avatar',
-              },
+              select: '_id name avatar phone title',
             })
             .lean()
             .exec();
@@ -505,11 +497,11 @@ export class JobsService {
                   id: proUser._id?.toString(),
                   _id: proUser._id?.toString(),
                   name: proUser.name,
-                  avatar: proUser.avatar || proUser.proProfile?.avatar,
+                  avatar: proUser.avatar,
                 },
                 name: proUser.name,
-                avatar: proUser.avatar || proUser.proProfile?.avatar,
-                title: proUser.proProfile?.title,
+                avatar: proUser.avatar,
+                title: proUser.title,
                 phone: proUser.phone,
               },
             };
