@@ -350,6 +350,8 @@ export class JobsService {
 
     // For in_progress jobs, find the accepted proposal and get hired pro info
     if (job.status === 'in_progress') {
+      console.log('[findOne] Job is in_progress, looking for accepted proposal for job:', job._id);
+      
       const acceptedProposal = await this.proposalModel
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
@@ -359,8 +361,12 @@ export class JobsService {
         .lean()
         .exec();
 
+      console.log('[findOne] acceptedProposal found:', !!acceptedProposal);
+      console.log('[findOne] acceptedProposal.proId:', acceptedProposal?.proId);
+
       if (acceptedProposal?.proId) {
         const proUser = acceptedProposal.proId as any;
+        console.log('[findOne] Returning hiredPro:', proUser.name);
         return {
           ...job,
           hiredPro: {
