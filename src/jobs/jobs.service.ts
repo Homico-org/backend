@@ -348,10 +348,8 @@ export class JobsService {
       }
     }
 
-    // For in_progress jobs, find the accepted proposal and get hired pro info
-    if (job.status === 'in_progress') {
-      console.log('[findOne] Job is in_progress, looking for accepted proposal for job:', job._id);
-      
+    // For in_progress or completed jobs, find the accepted proposal and get hired pro info
+    if (job.status === 'in_progress' || job.status === 'completed') {
       const acceptedProposal = await this.proposalModel
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
@@ -361,12 +359,8 @@ export class JobsService {
         .lean()
         .exec();
 
-      console.log('[findOne] acceptedProposal found:', !!acceptedProposal);
-      console.log('[findOne] acceptedProposal.proId:', acceptedProposal?.proId);
-
       if (acceptedProposal?.proId) {
         const proUser = acceptedProposal.proId as any;
-        console.log('[findOne] Returning hiredPro:', proUser.name);
         return {
           ...job,
           hiredPro: {
@@ -475,14 +469,14 @@ export class JobsService {
       }
     }
 
-    // For in_progress jobs, find the accepted proposal and get hired pro info
+    // For in_progress or completed jobs, find the accepted proposal and get hired pro info
     const jobsWithDetails = await Promise.all(
       jobs.map(async (job) => {
         const jobIdStr = job._id.toString();
         const shortlistedCount = shortlistedCountMap.get(jobIdStr) || 0;
         const jobRecentProposals = recentProposalsMap.get(jobIdStr) || [];
 
-        if (job.status === 'in_progress') {
+        if (job.status === 'in_progress' || job.status === 'completed') {
           const acceptedProposal = await this.proposalModel
             .findOne({ jobId: job._id, status: 'accepted' })
             .populate({
