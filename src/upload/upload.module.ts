@@ -32,11 +32,25 @@ import { UploadService } from './upload.service';
             cloudinary: cloudinary,
             params: async (req, file) => {
               const isVideo = file.mimetype.startsWith('video/');
+              const isDocument = [
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'text/plain',
+              ].includes(file.mimetype);
+              
+              // Determine resource type: video, raw (for documents), or image
+              let resourceType: 'video' | 'raw' | 'image' = 'image';
+              if (isVideo) resourceType = 'video';
+              if (isDocument) resourceType = 'raw';
+              
               return {
                 folder: 'homico',
-                resource_type: isVideo ? 'video' : 'image',
+                resource_type: resourceType,
                 public_id: uuidv4(),
-                allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm'],
+                allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
               };
             },
           });
@@ -48,18 +62,27 @@ import { UploadService } from './upload.service';
             },
             fileFilter: (req, file, callback) => {
               const allowedMimes = [
+                // Images
                 'image/jpeg',
                 'image/png',
                 'image/gif',
                 'image/webp',
+                // Videos
                 'video/mp4',
                 'video/quicktime',
                 'video/webm',
+                // Documents
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'text/plain',
               ];
               if (allowedMimes.includes(file.mimetype)) {
                 callback(null, true);
               } else {
-                callback(new Error('Invalid file type'), false);
+                callback(new Error(`Invalid file type: ${file.mimetype}. Allowed: images, videos, PDF, Word, Excel.`), false);
               }
             },
           };
@@ -86,18 +109,27 @@ import { UploadService } from './upload.service';
           },
           fileFilter: (req, file, callback) => {
             const allowedMimes = [
+              // Images
               'image/jpeg',
               'image/png',
               'image/gif',
               'image/webp',
+              // Videos
               'video/mp4',
               'video/quicktime',
               'video/webm',
+              // Documents
+              'application/pdf',
+              'application/msword',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.ms-excel',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'text/plain',
             ];
             if (allowedMimes.includes(file.mimetype)) {
               callback(null, true);
             } else {
-              callback(new Error('Invalid file type'), false);
+              callback(new Error(`Invalid file type: ${file.mimetype}. Allowed: images, videos, PDF, Word, Excel.`), false);
             }
           },
         };

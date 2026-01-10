@@ -1,22 +1,22 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import {
-  ProjectTracking,
-  ProjectStage,
-  ProjectComment,
-  ProjectAttachment,
-  StageHistory,
-  ProjectHistoryEvent,
-  ProjectHistoryEventType,
-} from './schemas/project-tracking.schema';
-import { Proposal } from './schemas/proposal.schema';
-import { Job } from './schemas/job.schema';
-import { User } from '../users/schemas/user.schema';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { PortfolioService } from '../portfolio/portfolio.service';
+import { User } from '../users/schemas/user.schema';
+import { Job } from './schemas/job.schema';
+import {
+    ProjectAttachment,
+    ProjectComment,
+    ProjectHistoryEvent,
+    ProjectHistoryEventType,
+    ProjectStage,
+    ProjectTracking,
+    StageHistory,
+} from './schemas/project-tracking.schema';
+import { Proposal } from './schemas/proposal.schema';
 
 @Injectable()
 export class ProjectTrackingService {
@@ -272,6 +272,12 @@ export class ProjectTrackingService {
     // Update the job status to completed
     await this.jobModel.findByIdAndUpdate(jobId, { status: 'completed' });
 
+    // Increment the pro's completedJobs counter
+    await this.userModel.findByIdAndUpdate(
+      project.proId,
+      { $inc: { completedJobs: 1 } }
+    );
+
     await project.save();
 
     // Log to history
@@ -309,6 +315,7 @@ export class ProjectTrackingService {
           .select('name avatar city')
           .exec();
 
+        // Create in PortfolioItem collection (for feed/browse)
         const portfolioItem = await this.portfolioService.createFromJob({
           proId: project.proId.toString(),
           jobId: jobId,
@@ -327,7 +334,25 @@ export class ProjectTrackingService {
         project.portfolioItemId = portfolioItem._id as Types.ObjectId;
         await project.save();
 
-        console.log('[ProjectTracking] Portfolio item created:', portfolioItem._id);
+        // Also add to pro's embedded portfolioProjects array (for pro profile page)
+        await this.userModel.findByIdAndUpdate(
+          project.proId,
+          {
+            $push: {
+              portfolioProjects: {
+                id: portfolioItem._id.toString(),
+                title: job?.title || 'Completed Project',
+                description: job?.description || '',
+                images: project.portfolioImages,
+                location: job?.location,
+                jobId: jobId,
+                source: 'homico',
+              }
+            }
+          }
+        );
+
+        console.log('[ProjectTracking] Portfolio item created and added to pro profile:', portfolioItem._id);
       } catch (error) {
         console.error('[ProjectTracking] Failed to create portfolio item:', error);
         // Don't fail the completion if portfolio creation fails

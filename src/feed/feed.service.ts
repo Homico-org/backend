@@ -5,7 +5,7 @@ import { LikesService } from '../likes/likes.service';
 import { LikeTargetType } from '../likes/schemas/like.schema';
 
 export interface FeedItem {
-  _id: string;
+  id: string;
   type: 'portfolio' | 'completion' | 'before_after' | 'pro_highlight';
   title: string;
   description?: string;
@@ -16,7 +16,7 @@ export interface FeedItem {
   beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
   category: string;
   pro: {
-    _id: string;
+    id: string;
     name: string;
     avatar?: string;
     rating: number;
@@ -139,7 +139,7 @@ export class FeedService {
       const isVerified = item.source === 'homico' || !!item.jobId;
 
       return {
-        _id: itemId,
+        id: itemId,
         type,
         title: item.title || '',
         description: item.description,
@@ -150,7 +150,7 @@ export class FeedService {
         beforeAfterPairs: item.beforeAfterPairs || [],
         category: item.category || proUser?.categories?.[0] || '',
         pro: {
-          _id: proUser?._id?.toString() || '',
+          id: proUser?._id?.toString() || '',
           name: proUser?.name || 'Professional',
           avatar: proUser?.avatar,
           rating: proUser?.avgRating || 0,
@@ -201,7 +201,7 @@ export class FeedService {
         const isVerified = project.source === 'homico' || !!project.jobId;
 
         embeddedFeedItems.push({
-          _id: projectId,
+          id: projectId,
           // For embedded projects, store the actual like target (the pro user)
           likeTargetType: hasValidObjectId ? 'portfolio_item' : 'pro_profile',
           likeTargetId: hasValidObjectId ? projectIdString : proUser._id.toString(),
@@ -215,7 +215,7 @@ export class FeedService {
           beforeAfterPairs: project.beforeAfterPairs || [],
           category: proUser.categories?.[0] || '',
           pro: {
-            _id: proUser._id?.toString() || '',
+            id: proUser._id?.toString() || '',
             name: proUser.name || 'Professional',
             avatar: proUser.avatar,
             rating: proUser.avgRating || 0,
@@ -262,11 +262,11 @@ export class FeedService {
     const itemToLikeTarget: Record<string, { type: LikeTargetType; id: string }> = {};
 
     for (const item of paginatedItems) {
-      const likeTargetId = (item as any).likeTargetId || item._id;
+      const likeTargetId = (item as any).likeTargetId || item.id;
       const likeTargetType = (item as any).likeTargetType || 'portfolio_item';
 
       if (Types.ObjectId.isValid(likeTargetId) && likeTargetId.length === 24) {
-        itemToLikeTarget[item._id] = {
+        itemToLikeTarget[item.id] = {
           type: likeTargetType === 'pro_profile' ? LikeTargetType.PRO_PROFILE : LikeTargetType.PORTFOLIO_ITEM,
           id: likeTargetId,
         };
@@ -320,8 +320,8 @@ export class FeedService {
 
     // Apply like counts to items using their mapped like targets
     const feedItems: FeedItem[] = paginatedItems.map(({ sortDate, ...item }) => {
-      const likeTarget = itemToLikeTarget[item._id];
-      const likeTargetId = likeTarget?.id || item._id;
+      const likeTarget = itemToLikeTarget[item.id];
+      const likeTargetId = likeTarget?.id || item.id;
 
       return {
         ...item,
@@ -367,13 +367,13 @@ export class FeedService {
       .lean();
 
     return pros.map((pro) => ({
-      _id: pro._id.toString(),
+      id: pro._id.toString(),
       type: 'pro_highlight',
       title: pro.title || 'Professional',
       images: pro.avatar ? [pro.avatar] : [],
       category: pro.categories?.[0] || '',
       pro: {
-        _id: pro._id.toString(),
+        id: pro._id.toString(),
         name: pro.name || 'Professional',
         avatar: pro.avatar,
         rating: pro.avgRating || 0,
