@@ -21,11 +21,12 @@ export class ReviewController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
   create(
     @CurrentUser() user: any,
     @Body() createReviewDto: CreateReviewDto,
   ) {
+    // Any user who posted a job can leave a review for the hired pro
     return this.reviewService.create(user.userId, createReviewDto);
   }
 
@@ -40,8 +41,9 @@ export class ReviewController {
 
   @Get('my-reviews')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
   findByClient(@CurrentUser() user: any) {
+    // Any user who posted jobs can see their reviews
     return this.reviewService.findByClient(user.userId);
   }
 

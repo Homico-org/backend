@@ -440,12 +440,8 @@ export class JobsService {
       })
       .sort({ createdAt: -1 })
       .populate({
-        path: 'proProfileId',
-        select: 'userId',
-        populate: {
-          path: 'userId',
-          select: 'name avatar',
-        },
+        path: 'proId',
+        select: 'name avatar',
       })
       .lean()
       .exec();
@@ -459,11 +455,12 @@ export class JobsService {
       }
       const jobProposals = recentProposalsMap.get(jobIdStr)!;
       if (jobProposals.length < 3) {
+        const proUser = proposal.proId as any;
         jobProposals.push({
           _id: proposal._id,
           proId: {
-            name: (proposal.proProfileId as any)?.userId?.name || '',
-            avatar: (proposal.proProfileId as any)?.userId?.avatar || '',
+            name: proUser?.name || '',
+            avatar: proUser?.avatar || '',
           },
         });
       }

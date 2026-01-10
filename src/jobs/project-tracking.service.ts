@@ -709,7 +709,8 @@ export class ProjectTrackingService {
       const job = await this.jobModel.findById(jobId).select('title').exec();
       const senderName = user?.name || (isClient ? 'კლიენტი' : 'სპეციალისტი');
       const messagePreview = content && content.length > 50 ? content.substring(0, 50) + '...' : content || 'ფაილი გაიგზავნა';
-      const link = isClient ? `/my-jobs/${jobId}` : `/jobs/${jobId}`;
+      // Both clients and pros use /jobs/{id} route - add #chat to scroll to chat section
+      const link = `/jobs/${jobId}#chat`;
 
       await this.notificationsService.notify(
         recipientId,

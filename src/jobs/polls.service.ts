@@ -184,7 +184,7 @@ export class PollsService {
         'კლიენტმა ხმა მისცა',
         `${client?.name || 'კლიენტმა'} ხმა მისცა გამოკითხვაში: "${poll.title}"`,
         {
-          link: `/jobs/${poll.jobId.toString()}`,
+          link: `/jobs/${poll.jobId.toString()}#polls`,
           referenceId: poll.jobId.toString(),
           referenceModel: 'Job',
           metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: votedOption?.text },
