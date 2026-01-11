@@ -1,0 +1,119 @@
+# ===========================================
+# PRODUCTION ENVIRONMENT
+# Domain: homico.ge
+# ===========================================
+services:
+  # Production Backend API (NestJS)
+  # Custom domain: api.homico.ge
+  - type: web
+    name: homico-backend
+    env: node
+    region: frankfurt
+    repo: https://github.com/Homico-org/backend
+    branch: main
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        value: info@homico.ge
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SID
+        sync: false
+
+  # Production Frontend App (Next.js)
+  # Custom domain: homico.ge
+  - type: web
+    name: homico-frontend
+    env: node
+    region: frankfurt
+    repo: https://github.com/Homico-org/frontend
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.homico.ge
+      - key: NEXT_PUBLIC_LANDING_URL
+        value: https://homico.ge
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_MVP_MODE
+        value: "true"
+
+# ===========================================
+# DEVELOPMENT ENVIRONMENT
+# Domain: dev.homico.ge
+# ===========================================
+
+  # Dev Backend API (NestJS)
+  # Custom domain: api.dev.homico.ge
+  - type: web
+    name: homico-backend-dev
+    env: node
+    region: frankfurt
+    repo: https://github.com/Homico-org/backend
+    branch: dev
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        value: info@homico.ge
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SID
+        sync: false
+
+  # Dev Frontend App (Next.js)
+  # Custom domain: dev.homico.ge
+  - type: web
+    name: homico-frontend-dev
+    env: node
+    region: frankfurt
+    repo: https://github.com/Homico-org/frontend
+    branch: dev
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: NEXT_PUBLIC_ENV
+        value: development
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.dev.homico.ge
+      - key: NEXT_PUBLIC_LANDING_URL
+        value: https://dev.homico.ge
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
