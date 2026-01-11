@@ -43,16 +43,36 @@ export class SmsService {
     }
   }
 
-  async sendOtp(phoneNumber: string, _code: string, _channel: OtpChannelType = 'sms'): Promise<SendOtpResult> {
+  async sendOtp(phoneNumber: string, _code: string, channel: OtpChannelType = 'sms'): Promise<SendOtpResult> {
     // Format the phone number (ensure it has + prefix)
     const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
     if (!this.isConfigured) {
-      this.logger.log(`[DEV MODE] SMS OTP for ${formattedNumber}: (code managed by Prelude in production)`);
+      this.logger.log(`[DEV MODE] ${channel.toUpperCase()} OTP for ${formattedNumber}: (code managed by Prelude in production)`);
       return { success: true };
     }
 
     try {
+      // Build request body with optional WhatsApp dispatch
+      const requestBody: {
+        target: { type: string; value: string };
+        dispatch?: { type: string };
+      } = {
+        target: {
+          type: 'phone_number',
+          value: formattedNumber,
+        },
+      };
+
+      // Add dispatch configuration for WhatsApp
+      if (channel === 'whatsapp') {
+        requestBody.dispatch = {
+          type: 'whatsapp',
+        };
+      }
+
+      this.logger.log(`Sending OTP via ${channel} to ${formattedNumber}`);
+
       // Use Prelude Verify API to send OTP
       const response = await fetch(`${this.baseUrl}/verification`, {
         method: 'POST',
@@ -60,12 +80,7 @@ export class SmsService {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          target: {
-            type: 'phone_number',
-            value: formattedNumber,
-          },
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
