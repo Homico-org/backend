@@ -15,16 +15,18 @@ export interface SendOtpResult {
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
   private readonly ubillApiKey: string;
+  private readonly ubillBrandId: number;
   private readonly preludeApiKey: string;
-  private readonly ubillBaseUrl = 'https://api.ubill.ge/v1';
+  private readonly ubillBaseUrl = 'https://api.ubill.dev/v1';
   private readonly preludeBaseUrl = 'https://api.prelude.dev/v2';
 
   constructor(private configService: ConfigService) {
     this.ubillApiKey = this.configService.get<string>('UBILL_API_KEY') || '';
+    this.ubillBrandId = parseInt(this.configService.get<string>('UBILL_BRAND_ID') || '0', 10);
     this.preludeApiKey = this.configService.get<string>('PRELUDE_API_KEY') || '';
 
-    if (this.ubillApiKey) {
-      this.logger.log('UBill.ge SMS service configured (for Georgian +995 numbers)');
+    if (this.ubillApiKey && this.ubillBrandId) {
+      this.logger.log(`UBill SMS service configured (brandID: ${this.ubillBrandId}) for Georgian +995 numbers`);
     }
     if (this.preludeApiKey) {
       this.logger.log('Prelude Verify service configured (for international numbers)');
@@ -42,11 +44,11 @@ export class SmsService {
   private getProviderForNumber(phoneNumber: string): SmsProvider {
     const isGeorgianNumber = phoneNumber.startsWith('+995') || phoneNumber.startsWith('995');
 
-    if (isGeorgianNumber && this.ubillApiKey) {
+    if (isGeorgianNumber && this.ubillApiKey && this.ubillBrandId) {
       return 'ubill';
     } else if (!isGeorgianNumber && this.preludeApiKey) {
       return 'prelude';
-    } else if (this.ubillApiKey) {
+    } else if (this.ubillApiKey && this.ubillBrandId) {
       // Fallback: UBill for all if only UBill is configured
       return 'ubill';
     } else if (this.preludeApiKey) {
@@ -54,6 +56,16 @@ export class SmsService {
       return 'prelude';
     }
     return 'none';
+  }
+
+  /**
+   * Strips phone number to just digits (no + or 00 prefix)
+   * UBill requires: 995XXXXXXXXX format
+   */
+  private formatPhoneForUbill(phoneNumber: string): number {
+    // Remove + and any leading zeros
+    let cleaned = phoneNumber.replace(/^\+/, '').replace(/^00/, '');
+    return parseInt(cleaned, 10);
   }
 
   private getErrorMessage(errorCode: string, errorMessage: string): string {
@@ -92,38 +104,51 @@ export class SmsService {
     }
   }
 
-  // UBill.ge SMS Provider (for Georgian +995 numbers)
+  // UBill SMS Provider (for Georgian +995 numbers)
+  // API Docs: https://ubill.ge
   private async sendOtpViaUbill(phoneNumber: string, code: string, channel: OtpChannelType): Promise<SendOtpResult> {
     try {
-      this.logger.log(`Sending OTP via UBill ${channel} to ${phoneNumber}`);
+      const ubillNumber = this.formatPhoneForUbill(phoneNumber);
+      this.logger.log(`Sending OTP via UBill ${channel} to ${ubillNumber} (original: ${phoneNumber})`);
 
-      // UBill SMS API
+      const requestBody = {
+        brandID: this.ubillBrandId,
+        numbers: [ubillNumber],
+        text: `თქვენი Homico დამადასტურებელი კოდია: ${code}`,
+        stopList: false,
+      };
+
+      this.logger.debug(`UBill request: ${JSON.stringify(requestBody)}`);
+
       const response = await fetch(`${this.ubillBaseUrl}/sms/send`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.ubillApiKey}`,
+          'key': this.ubillApiKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          to: phoneNumber,
-          message: `Your Homico verification code is: ${code}`,
-          // For WhatsApp, UBill might use different endpoint or parameter
-          ...(channel === 'whatsapp' && { channel: 'whatsapp' }),
-        }),
+        body: JSON.stringify(requestBody),
       });
 
+      const responseText = await response.text();
+      this.logger.debug(`UBill response status: ${response.status}, body: ${responseText}`);
+
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        data = { raw: responseText };
+      }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        this.logger.error(`UBill: Failed to send OTP to ${phoneNumber}: ${response.status} - ${JSON.stringify(errorData)}`);
+        this.logger.error(`UBill: Failed to send OTP to ${phoneNumber}: ${response.status} - ${responseText}`);
         return {
           success: false,
-          error: this.getErrorMessage(errorData.code || errorData.error_code, errorData.message || errorData.error),
-          errorCode: errorData.code || errorData.error_code,
+          error: this.getErrorMessage(data.code || data.error_code, data.message || data.error || responseText),
+          errorCode: data.code || data.error_code,
         };
       }
 
-      const data = await response.json();
-      this.logger.log(`UBill: OTP sent successfully to ${phoneNumber}, message_id: ${data.id || data.message_id}`);
+      this.logger.log(`UBill: OTP sent successfully to ${phoneNumber}, response: ${JSON.stringify(data)}`);
       return { success: true };
     } catch (error: any) {
       this.logger.error(`UBill: Failed to send OTP to ${phoneNumber}: ${error?.message || error}`);
