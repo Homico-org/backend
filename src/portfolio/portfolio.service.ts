@@ -27,9 +27,19 @@ export class PortfolioService {
   ) {}
 
   async create(proId: string, createPortfolioItemDto: CreatePortfolioItemDto): Promise<PortfolioItem> {
+    // Set imageUrl from first image if not provided
+    let imageUrl = createPortfolioItemDto.imageUrl;
+    if (!imageUrl && createPortfolioItemDto.images && createPortfolioItemDto.images.length > 0) {
+      imageUrl = createPortfolioItemDto.images[0];
+    }
+    if (!imageUrl && createPortfolioItemDto.beforeAfter && createPortfolioItemDto.beforeAfter.length > 0) {
+      imageUrl = createPortfolioItemDto.beforeAfter[0].after || createPortfolioItemDto.beforeAfter[0].before;
+    }
+
     const item = new this.portfolioItemModel({
       proId: new Types.ObjectId(proId),
       ...createPortfolioItemDto,
+      imageUrl: imageUrl || '',
     });
     return item.save();
   }

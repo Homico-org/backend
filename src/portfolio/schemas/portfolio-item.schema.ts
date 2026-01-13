@@ -28,11 +28,17 @@ export class PortfolioItem extends Document {
   @Prop()
   description: string;
 
-  @Prop({ required: true })
+  @Prop()
   imageUrl: string;
 
   @Prop({ type: [String], default: [] })
   images: string[];
+
+  @Prop({ type: [String], default: [] })
+  videos: string[];
+
+  @Prop({ type: [{ before: String, after: String }], default: [] })
+  beforeAfter: { before: string; after: string }[];
 
   @Prop({ type: [String], default: [] })
   tags: string[];
