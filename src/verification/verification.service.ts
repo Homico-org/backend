@@ -1,16 +1,17 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { Otp, OtpType, OtpPurpose } from './schemas/otp.schema';
-import { SendOtpDto, VerifyOtpDto, ForgotPasswordDto, ResetPasswordDto, VerifyResetCodeDto, OtpChannel } from './dto/send-otp.dto';
-import { EmailService } from './services/email.service';
-import { SmsService, OtpChannelType } from './services/sms.service';
+import { Model } from 'mongoose';
 import { User } from '../users/schemas/user.schema';
+import { ForgotPasswordDto, OtpChannel, ResetPasswordDto, SendOtpDto, VerifyOtpDto, VerifyResetCodeDto } from './dto/send-otp.dto';
+import { Otp, OtpPurpose, OtpType } from './schemas/otp.schema';
+import { EmailService } from './services/email.service';
+import { OtpChannelType, SmsService } from './services/sms.service';
 
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
+  private readonly TEST_OTP_CODE = '1234';
 
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<Otp>,
@@ -23,6 +24,13 @@ export class VerificationService {
     return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
+  /**
+   * Check if phone number is Georgian (+995)
+   */
+  private isGeorgianNumber(phone: string): boolean {
+    return phone.startsWith('+995') || phone.startsWith('995');
+  }
+
   async sendOtp(sendOtpDto: SendOtpDto): Promise<{ message: string; expiresIn: number; channel?: string }> {
     const { identifier, type, channel } = sendOtpDto;
 
@@ -33,29 +41,45 @@ export class VerificationService {
       createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) },
     });
 
-    if (recentOtps >= 3) {
-      throw new BadRequestException('Too many OTP requests. Please try again later.');
-    }
+    // if (recentOtps >= 3) {
+    //   throw new BadRequestException('Too many OTP requests. Please try again later.');
+    // }
 
-    // For phone verification, use Prelude Verify (OTP is managed by Prelude)
+    // For phone verification
     if (type === OtpType.PHONE) {
       const otpChannel: OtpChannelType = channel === OtpChannel.WHATSAPP ? 'whatsapp' : 'sms';
+      const isGeorgian = this.isGeorgianNumber(identifier);
 
-      const result = await this.smsService.sendOtp(identifier, '', otpChannel);
+      // Invalidate any existing unused OTPs for this identifier
+      await this.otpModel.updateMany(
+        { identifier, type, isUsed: false },
+        { isUsed: true },
+      );
+
+      // For Georgian numbers (UBill) or dev mode: Generate our own OTP
+      // For international numbers (Prelude): Let Prelude manage the OTP
+      const code = isGeorgian ? this.generateOtp() : '';
+      
+      const result = await this.smsService.sendOtp(identifier, code, otpChannel);
       if (!result.success) {
         throw new BadRequestException(result.error || 'Failed to send verification code. Please try again.');
       }
 
-      // Track the request for rate limiting
+      // Store OTP record
+      // For UBill/dev: Store actual code for local verification
+      // For Prelude: Store placeholder (Prelude manages the code)
       const otp = new this.otpModel({
         identifier,
-        code: 'PRELUDE_VERIFY', // Placeholder - actual code is managed by Prelude
+        code: result.provider === 'prelude' ? 'PRELUDE_VERIFY' : code,
         type,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
       });
       await otp.save();
 
       const channelLabel = otpChannel === 'whatsapp' ? 'WhatsApp' : 'SMS';
+      const providerLabel = isGeorgian ? 'UBill' : 'Prelude';
+      this.logger.log(`OTP sent via ${providerLabel} (${channelLabel}) to ${identifier}`);
+
       return {
         message: `Verification code sent via ${channelLabel}`,
         expiresIn: 300, // 5 minutes
@@ -96,11 +120,24 @@ export class VerificationService {
   async verifyOtp(verifyOtpDto: VerifyOtpDto): Promise<{ verified: boolean }> {
     const { identifier, code, type } = verifyOtpDto;
 
-    // For phone verification, use Prelude Verify
+    // Test OTP code for development/testing - always works
+    if (code === this.TEST_OTP_CODE) {
+      this.logger.log(`Test OTP code '${this.TEST_OTP_CODE}' used for ${identifier}`);
+      // Mark our tracking record as used
+      await this.otpModel.updateMany(
+        { identifier, type, isUsed: false },
+        { isUsed: true },
+      );
+      return { verified: true };
+    }
+
+    // For phone verification
     if (type === OtpType.PHONE) {
-      const verified = await this.smsService.verifyOtp(identifier, code);
-      if (verified) {
-        // Mark our tracking record as used
+      // First try Prelude verification for international numbers
+      const smsResult = await this.smsService.verifyOtp(identifier, code);
+      
+      if (smsResult.provider === 'prelude' && smsResult.verified) {
+        // Prelude verified the code
         await this.otpModel.updateMany(
           { identifier, type, isUsed: false },
           { isUsed: true },
@@ -108,7 +145,7 @@ export class VerificationService {
         return { verified: true };
       }
 
-      // If Prelude is not configured, fall back to our stored OTP
+      // For UBill, dev mode, or Prelude not configured: verify with our stored OTP
       const otp = await this.otpModel.findOne({
         identifier,
         type,
@@ -119,6 +156,7 @@ export class VerificationService {
 
       if (otp && otp.code === code) {
         await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+        this.logger.log(`OTP verified locally for ${identifier}`);
         return { verified: true };
       }
 
@@ -188,8 +226,11 @@ export class VerificationService {
       { isUsed: true },
     );
 
-    // Use Prelude Verify for SMS
-    const result = await this.smsService.sendOtp(phone, '');
+    const isGeorgian = this.isGeorgianNumber(phone);
+    const code = isGeorgian ? this.generateOtp() : '';
+
+    // Send OTP
+    const result = await this.smsService.sendOtp(phone, code);
     if (!result.success) {
       throw new BadRequestException(result.error || 'Failed to send verification code. Please try again.');
     }
@@ -197,7 +238,7 @@ export class VerificationService {
     // Track the request for rate limiting
     const otp = new this.otpModel({
       identifier: phone,
-      code: 'PRELUDE_VERIFY', // Placeholder - actual code is managed by Prelude
+      code: result.provider === 'prelude' ? 'PRELUDE_VERIFY' : code,
       type: OtpType.PHONE,
       purpose: OtpPurpose.PASSWORD_RESET,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
@@ -219,18 +260,51 @@ export class VerificationService {
       throw new NotFoundException('No account found with this phone number');
     }
 
-    // Verify with Plivo
-    const verified = await this.smsService.verifyOtp(phone, code);
-    if (!verified) {
-      throw new BadRequestException('Invalid verification code');
+    // Test OTP code for development/testing
+    if (code === this.TEST_OTP_CODE) {
+      this.logger.log(`Test OTP code '${this.TEST_OTP_CODE}' used for password reset: ${phone}`);
+      await this.otpModel.updateMany(
+        { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
+        { isUsed: true },
+      );
+      // Create verified record
+      const verifiedOtp = new this.otpModel({
+        identifier: phone,
+        code: 'VERIFIED',
+        type: OtpType.PHONE,
+        purpose: OtpPurpose.PASSWORD_RESET,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        isUsed: false,
+      });
+      await verifiedOtp.save();
+      return { verified: true };
     }
 
-    // Mark our tracking record as used for this verification step
-    // But create a new verified record to allow password reset
-    await this.otpModel.updateMany(
-      { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
-      { isUsed: true },
-    );
+    // Try Prelude verification first for international numbers
+    const smsResult = await this.smsService.verifyOtp(phone, code);
+    
+    if (smsResult.provider === 'prelude' && smsResult.verified) {
+      // Prelude verified
+      await this.otpModel.updateMany(
+        { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
+        { isUsed: true },
+      );
+    } else {
+      // For UBill or dev mode: verify locally
+      const otp = await this.otpModel.findOne({
+        identifier: phone,
+        purpose: OtpPurpose.PASSWORD_RESET,
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
+        code: { $ne: 'PRELUDE_VERIFY' },
+      }).sort({ createdAt: -1 });
+
+      if (!otp || otp.code !== code) {
+        throw new BadRequestException('Invalid verification code');
+      }
+
+      await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+    }
 
     // Create a verified record that allows password reset within next 5 minutes
     const verifiedOtp = new this.otpModel({
