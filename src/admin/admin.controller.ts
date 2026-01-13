@@ -1,11 +1,11 @@
-import { Controller, Get, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { AdminService } from './admin.service';
+import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { ActivityType, LoggerService } from '../common/logger';
 import { UserRole } from '../users/schemas/user.schema';
-import { LoggerService, ActivityType } from '../common/logger';
+import { AdminService } from './admin.service';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -231,5 +231,60 @@ export class AdminController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );
+  }
+
+  // ============== PENDING PROFESSIONALS APPROVAL ==============
+
+  @Get('pending-pros')
+  @ApiOperation({ summary: 'Get pending professionals awaiting approval' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by name, email, phone, or city' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: pending, approved, rejected, all' })
+  @ApiResponse({ status: 200, description: 'Paginated pending professionals list' })
+  getPendingPros(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: 'pending' | 'approved' | 'rejected' | 'all',
+  ) {
+    return this.adminService.getPendingPros({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Get('pending-pros/stats')
+  @ApiOperation({ summary: 'Get pending professionals statistics' })
+  @ApiResponse({ status: 200, description: 'Pending pros statistics' })
+  getPendingProsStats() {
+    return this.adminService.getPendingProsStats();
+  }
+
+  @Patch('pros/:id/approve')
+  @ApiOperation({ summary: 'Approve a professional profile' })
+  @ApiResponse({ status: 200, description: 'Professional approved successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async approvePro(
+    @Param('id') proId: string,
+    @Req() req: any,
+  ) {
+    const adminId = req.user?.id || req.user?._id;
+    return this.adminService.approvePro(proId, adminId);
+  }
+
+  @Patch('pros/:id/reject')
+  @ApiOperation({ summary: 'Reject a professional profile' })
+  @ApiResponse({ status: 200, description: 'Professional rejected successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async rejectPro(
+    @Param('id') proId: string,
+    @Body('reason') reason: string,
+    @Req() req: any,
+  ) {
+    const adminId = req.user?.id || req.user?._id;
+    return this.adminService.rejectPro(proId, adminId, reason);
   }
 }

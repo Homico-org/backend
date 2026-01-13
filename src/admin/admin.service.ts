@@ -26,6 +26,10 @@ interface ReportListOptions extends PaginationOptions {
   type?: string;
 }
 
+interface PendingProsOptions extends PaginationOptions {
+  status?: 'pending' | 'approved' | 'rejected' | 'all';
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -501,5 +505,137 @@ export class AdminService {
       },
       { $sort: { _id: 1 } },
     ]);
+  }
+
+  // ============== PENDING PROFESSIONALS MANAGEMENT ==============
+
+  async getPendingPros(options: PendingProsOptions) {
+    const { page, limit, search, status = 'pending' } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<User> = {
+      role: 'pro',
+    };
+
+    // Filter by approval status
+    if (status === 'pending') {
+      query.$or = [
+        { isAdminApproved: false },
+        { isAdminApproved: { $exists: false } },
+      ];
+    } else if (status === 'approved') {
+      query.isAdminApproved = true;
+    } else if (status === 'rejected') {
+      query.isAdminApproved = false;
+      query.adminRejectionReason = { $exists: true, $ne: '' };
+    }
+
+    if (search) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { city: { $regex: search, $options: 'i' } },
+        ],
+      });
+    }
+
+    const [users, total] = await Promise.all([
+      this.userModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted isAdminApproved adminRejectionReason createdAt portfolioProjects')
+        .lean(),
+      this.userModel.countDocuments(query),
+    ]);
+
+    return {
+      users,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getPendingProsStats() {
+    const [pending, approved, rejected, total] = await Promise.all([
+      this.userModel.countDocuments({
+        role: 'pro',
+        $or: [
+          { isAdminApproved: false, adminRejectionReason: { $exists: false } },
+          { isAdminApproved: { $exists: false } },
+        ],
+      }),
+      this.userModel.countDocuments({ role: 'pro', isAdminApproved: true }),
+      this.userModel.countDocuments({
+        role: 'pro',
+        isAdminApproved: false,
+        adminRejectionReason: { $exists: true, $ne: '' },
+      }),
+      this.userModel.countDocuments({ role: 'pro' }),
+    ]);
+
+    return { pending, approved, rejected, total };
+  }
+
+  async approvePro(proId: string, adminId: string): Promise<User> {
+    const user = await this.userModel.findById(proId);
+    if (!user) {
+      throw new Error('Professional not found');
+    }
+    if (user.role !== 'pro') {
+      throw new Error('User is not a professional');
+    }
+
+    user.isAdminApproved = true;
+    user.adminApprovedAt = new Date();
+    user.adminApprovedBy = adminId;
+    user.adminRejectionReason = undefined;
+
+    await user.save();
+
+    // Create notification for the pro
+    await this.notificationModel.create({
+      userId: proId,
+      type: 'profile_approved',
+      title: 'Profile Approved',
+      message: 'Your professional profile has been approved! You are now visible to clients.',
+      isRead: false,
+      createdAt: new Date(),
+    });
+
+    return user;
+  }
+
+  async rejectPro(proId: string, adminId: string, reason: string): Promise<User> {
+    const user = await this.userModel.findById(proId);
+    if (!user) {
+      throw new Error('Professional not found');
+    }
+    if (user.role !== 'pro') {
+      throw new Error('User is not a professional');
+    }
+
+    user.isAdminApproved = false;
+    user.adminRejectionReason = reason;
+
+    await user.save();
+
+    // Create notification for the pro
+    await this.notificationModel.create({
+      userId: proId,
+      type: 'profile_rejected',
+      title: 'Profile Needs Updates',
+      message: `Your profile was not approved. Reason: ${reason}`,
+      isRead: false,
+      createdAt: new Date(),
+    });
+
+    return user;
   }
 }

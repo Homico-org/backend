@@ -15,6 +15,23 @@ class BeforeAfterPairDto {
   afterImage: string;
 }
 
+class SelectedServiceDto {
+  @IsString()
+  key: string;
+
+  @IsString()
+  categoryKey: string;
+
+  @IsString()
+  name: string;
+
+  @IsString()
+  nameKa: string;
+
+  @IsString()
+  experience: string; // '0-1', '1-3', '3-5', '5-10', '10+'
+}
+
 class PortfolioProjectDto {
   @IsString()
   @IsOptional()
@@ -108,6 +125,15 @@ export class UpdateProfileDto {
   @IsString({ each: true })
   @IsOptional()
   subcategories?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Selected services with experience level per service',
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SelectedServiceDto)
+  @IsOptional()
+  selectedServices?: SelectedServiceDto[];
 
   @ApiPropertyOptional({ description: 'Years of experience' })
   @IsNumber()

@@ -940,7 +940,7 @@ export class UsersService {
     // Build query - only role=pro
     // Include pros where isAvailable is true OR not set (for backwards compatibility)
     // Exclude deactivated profiles
-    // Only show pros with completed profiles
+    // Only show pros with completed profiles AND approved by admin
     const query: any = {
       role: "pro",
       $and: [
@@ -968,6 +968,14 @@ export class UsersService {
                 },
               ],
             },
+          ],
+        },
+        // Only show admin-approved professionals
+        {
+          $or: [
+            { isAdminApproved: true },
+            // For backwards compatibility: show existing pros who don't have this field yet
+            { isAdminApproved: { $exists: false } },
           ],
         },
       ],
@@ -1151,6 +1159,30 @@ export class UsersService {
       updateData.subcategories = proData.subcategories;
       // Also update selectedSubcategories for consistency
       updateData.selectedSubcategories = proData.subcategories;
+    }
+    if (proData.selectedServices !== undefined) {
+      updateData.selectedServices = proData.selectedServices;
+      // Also derive subcategories and selectedSubcategories from selectedServices for backwards compatibility
+      const subcategoryKeys = proData.selectedServices.map(s => s.key);
+      if (subcategoryKeys.length > 0) {
+        updateData.subcategories = subcategoryKeys;
+        updateData.selectedSubcategories = subcategoryKeys;
+      }
+      // Derive max yearsExperience from selectedServices
+      const experienceToYears: Record<string, number> = {
+        '0-1': 1,
+        '1-3': 3,
+        '3-5': 5,
+        '5-10': 10,
+        '10+': 15,
+      };
+      const maxExperience = Math.max(
+        ...proData.selectedServices.map(s => experienceToYears[s.experience] || 0),
+        0
+      );
+      if (maxExperience > 0) {
+        updateData.yearsExperience = maxExperience;
+      }
     }
     if (proData.yearsExperience !== undefined)
       updateData.yearsExperience = proData.yearsExperience;

@@ -125,6 +125,25 @@ export class User extends Document {
   @Prop({ type: [String], default: [] })
   selectedSubcategories: string[];
 
+  // Selected services with experience level per service
+  @Prop({
+    type: [{
+      key: String,         // Subcategory key
+      categoryKey: String, // Parent category key
+      name: String,        // English name
+      nameKa: String,      // Georgian name
+      experience: String,  // Experience level: '0-1', '1-3', '3-5', '5-10', '10+'
+    }],
+    default: []
+  })
+  selectedServices: {
+    key: string;
+    categoryKey: string;
+    name: string;
+    nameKa: string;
+    experience: string;
+  }[];
+
   // Verification fields
   @Prop({ default: false })
   isEmailVerified: boolean;
@@ -363,6 +382,19 @@ export class User extends Document {
   @Prop({ default: false })
   isProfileCompleted: boolean;
 
+  // Admin approval status (pro profiles require admin approval before being visible)
+  @Prop({ default: false })
+  isAdminApproved: boolean;
+
+  @Prop()
+  adminApprovedAt: Date;
+
+  @Prop()
+  adminApprovedBy: string;  // Admin user ID who approved
+
+  @Prop()
+  adminRejectionReason: string;
+
   // Pro Profile Deactivation (temporary pause)
   @Prop({ default: false })
   isProfileDeactivated: boolean;
@@ -392,3 +424,4 @@ UserSchema.index({ companyId: 1 });
 UserSchema.index({ companyName: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
+UserSchema.index({ isAdminApproved: 1, role: 1 });
