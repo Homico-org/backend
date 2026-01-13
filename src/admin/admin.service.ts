@@ -6,6 +6,7 @@ import { Job } from '../jobs/schemas/job.schema';
 import { Proposal } from '../jobs/schemas/proposal.schema';
 import { SupportTicket } from '../support/schemas/support-ticket.schema';
 import { Notification } from '../notifications/schemas/notification.schema';
+import { SmsService } from '../verification/services/sms.service';
 
 interface PaginationOptions {
   page: number;
@@ -38,6 +39,7 @@ export class AdminService {
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
+    private readonly smsService: SmsService,
   ) {}
 
   // ============== PAGINATED LIST METHODS ==============
@@ -609,6 +611,12 @@ export class AdminService {
       createdAt: new Date(),
     });
 
+    // Send SMS notification if user has a phone number
+    if (user.phone) {
+      const smsMessage = `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. ახლა კლიენტებს შეუძლიათ თქვენი ნახვა. homico.ge`;
+      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+    }
+
     return user;
   }
 
@@ -635,6 +643,12 @@ export class AdminService {
       isRead: false,
       createdAt: new Date(),
     });
+
+    // Send SMS notification if user has a phone number
+    if (user.phone) {
+      const smsMessage = `თქვენი Homico პროფილი საჭიროებს განახლებას. გთხოვთ შეამოწმოთ შეტყობინებები აპლიკაციაში. homico.ge`;
+      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+    }
 
     return user;
   }

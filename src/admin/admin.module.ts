@@ -7,6 +7,7 @@ import { Job, JobSchema } from '../jobs/schemas/job.schema';
 import { Proposal, ProposalSchema } from '../jobs/schemas/proposal.schema';
 import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-ticket.schema';
 import { Notification, NotificationSchema } from '../notifications/schemas/notification.schema';
+import { VerificationModule } from '../verification/verification.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { Notification, NotificationSchema } from '../notifications/schemas/notif
       { name: SupportTicket.name, schema: SupportTicketSchema },
       { name: Notification.name, schema: NotificationSchema },
     ]),
+    VerificationModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

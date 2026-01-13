@@ -272,4 +272,54 @@ export class SmsService {
       return false;
     }
   }
+
+  /**
+   * Send a notification SMS (non-OTP) to a phone number
+   * Currently only supports UBill (Georgian numbers)
+   */
+  async sendNotificationSms(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
+    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    const provider = this.getProviderForNumber(formattedNumber);
+
+    if (provider === 'none' || provider === 'prelude') {
+      // Prelude only supports OTP, log notification instead
+      this.logger.log(`[DEV MODE] Notification SMS to ${formattedNumber}: ${message}`);
+      return { success: true };
+    }
+
+    try {
+      const ubillNumber = this.formatPhoneForUbill(formattedNumber);
+      this.logger.log(`Sending notification SMS via UBill to ${ubillNumber}`);
+
+      const requestBody = {
+        brandID: this.ubillBrandId,
+        numbers: [ubillNumber],
+        text: message,
+        stopList: false,
+      };
+
+      const response = await fetch(`${this.ubillBaseUrl}/sms/send`, {
+        method: 'POST',
+        headers: {
+          'key': this.ubillApiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+      this.logger.debug(`UBill notification response: ${response.status}, body: ${responseText}`);
+
+      if (!response.ok) {
+        this.logger.error(`UBill notification failed: ${response.status} - ${responseText}`);
+        return { success: false, error: 'Failed to send notification SMS' };
+      }
+
+      this.logger.log(`Notification SMS sent successfully to ${formattedNumber}`);
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`Failed to send notification SMS to ${formattedNumber}: ${error?.message || error}`);
+      return { success: false, error: error?.message || 'Unknown error' };
+    }
+  }
 }
