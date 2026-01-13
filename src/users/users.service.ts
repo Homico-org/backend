@@ -1034,13 +1034,36 @@ export class UsersService {
     }
 
     const total = await this.userModel.countDocuments(query).exec();
-    const data = await this.userModel
+    const users = await this.userModel
       .find(query)
       .select("-password")
       .sort(sortObj)
       .skip(skip)
       .limit(limit)
       .exec();
+
+    // Get portfolio counts from PortfolioItem collection for all users
+    const userIds = users.map((u) => u._id);
+    const portfolioCounts = await this.portfolioItemModel.aggregate([
+      { $match: { proId: { $in: userIds } } },
+      { $group: { _id: "$proId", count: { $sum: 1 } } },
+    ]);
+
+    // Create a map of userId -> portfolioCount
+    const portfolioCountMap = new Map<string, number>();
+    portfolioCounts.forEach((item) => {
+      portfolioCountMap.set(item._id.toString(), item.count);
+    });
+
+    // Add portfolioItemCount to each user
+    const data = users.map((user) => {
+      const userObj = user.toObject() as any;
+      const portfolioItemCount = portfolioCountMap.get(user._id.toString()) || 0;
+      // Use the max of embedded portfolioProjects and separate PortfolioItem count
+      const embeddedCount = userObj.portfolioProjects?.length || 0;
+      userObj.portfolioItemCount = Math.max(portfolioItemCount, embeddedCount);
+      return userObj;
+    });
 
     const totalPages = Math.ceil(total / limit);
 
