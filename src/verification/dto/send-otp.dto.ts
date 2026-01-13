@@ -101,13 +101,6 @@ export class ResetPasswordDto {
   phone: string;
 
   @ApiProperty({
-    description: 'OTP code received',
-    example: '123456',
-  })
-  @IsString()
-  code: string;
-
-  @ApiProperty({
     description: 'New password',
     example: 'newSecurePassword123',
   })
