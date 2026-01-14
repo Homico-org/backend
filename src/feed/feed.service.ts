@@ -21,6 +21,7 @@ export interface FeedItem {
     avatar?: string;
     rating: number;
     title?: string;
+    bio?: string;
   };
   client?: {
     name?: string;
