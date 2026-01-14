@@ -33,6 +33,16 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async getProfile(@CurrentUser() user: any) {
     const userData = await this.usersService.findById(user.userId);
+    // Derive subcategories from selectedServices if available
+    let derivedSubcategories: string[] = [];
+    if (userData.selectedServices?.length > 0) {
+      derivedSubcategories = userData.selectedServices.map((s: any) => s.key);
+    } else if (userData.selectedSubcategories?.length > 0) {
+      derivedSubcategories = userData.selectedSubcategories;
+    } else if (userData.subcategories?.length > 0) {
+      derivedSubcategories = userData.subcategories;
+    }
+
     return {
       id: userData._id,
       uid: userData.uid,
@@ -44,11 +54,11 @@ export class UsersController {
       avatar: userData.avatar,
       accountType: userData.accountType,
       companyName: userData.companyName,
+      isProfileCompleted: userData.isProfileCompleted,
       selectedCategories: userData.selectedCategories || userData.categories,
-      // For pro users, subcategories are stored in 'subcategories' field
-      selectedSubcategories: userData.selectedSubcategories?.length > 0
-        ? userData.selectedSubcategories
-        : userData.subcategories,
+      // For pro users, derive subcategories from selectedServices if available
+      selectedSubcategories: derivedSubcategories,
+      selectedServices: userData.selectedServices,
       // Include verification status for pro users
       ...(userData.role === 'pro' ? { verificationStatus: userData.verificationStatus || 'pending' } : {}),
     };

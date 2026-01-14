@@ -60,6 +60,7 @@ export class FeedService {
 
   async getFeed(options: {
     category?: string;
+    subcategories?: string[];
     page?: number;
     limit?: number;
     userId?: string;
@@ -68,13 +69,17 @@ export class FeedService {
     search?: string;
     sort?: string;
   }): Promise<FeedResponse> {
-    const { category, page = 1, limit = 12, userId, location, minRating, search, sort } = options;
+    const { category, subcategories, page = 1, limit = 12, userId, location, minRating, search, sort } = options;
     const skip = (page - 1) * limit;
 
     // Build query for portfolio items from PortfolioItem collection
     const portfolioItemQuery: any = { status: 'completed' };
     if (category) {
       portfolioItemQuery.category = category;
+    }
+    if (subcategories && subcategories.length > 0) {
+      // Filter by any of the user's subcategories
+      portfolioItemQuery.subcategory = { $in: subcategories };
     }
     if (location) {
       portfolioItemQuery.location = new RegExp(location, 'i');
@@ -97,11 +102,26 @@ export class FeedService {
     if (category) {
       proUserQuery.categories = category;
     }
+    if (subcategories && subcategories.length > 0) {
+      // Filter by any of the user's subcategories - check in subcategories array or selectedServices.key
+      proUserQuery.$or = [
+        { subcategories: { $in: subcategories } },
+        { 'selectedServices.key': { $in: subcategories } },
+      ];
+    }
     if (minRating) {
       proUserQuery.avgRating = { $gte: minRating };
     }
     if (location) {
-      proUserQuery.city = new RegExp(location, 'i');
+      // Check both city and serviceAreas for location match
+      const locationRegex = new RegExp(location, 'i');
+      proUserQuery.$and = proUserQuery.$and || [];
+      proUserQuery.$and.push({
+        $or: [
+          { city: locationRegex },
+          { serviceAreas: locationRegex },
+        ],
+      });
     }
 
     // Fetch both portfolio items and pro user embedded projects

@@ -550,7 +550,7 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted isAdminApproved adminRejectionReason createdAt portfolioProjects uid')
+        .select('_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted isAdminApproved adminRejectionReason createdAt portfolioProjects')
         .lean(),
       this.userModel.countDocuments(query),
     ]);

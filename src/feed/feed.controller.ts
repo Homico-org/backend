@@ -1,6 +1,5 @@
-import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Request } from '@nestjs/common';
 import { FeedService } from './feed.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @Controller('feed')
 export class FeedController {
@@ -9,6 +8,7 @@ export class FeedController {
   @Get()
   async getFeed(
     @Query('category') category?: string,
+    @Query('subcategories') subcategories?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '12',
     @Query('location') location?: string,
@@ -20,8 +20,12 @@ export class FeedController {
     // Extract user ID if authenticated (optional)
     const userId = req?.user?.sub;
 
+    // Parse comma-separated subcategories into array
+    const subcategoryList = subcategories ? subcategories.split(',').filter(s => s.trim()) : undefined;
+
     return this.feedService.getFeed({
       category,
+      subcategories: subcategoryList,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
       userId,

@@ -27,6 +27,10 @@ export enum NotificationType {
   ACCOUNT_VERIFIED = 'account_verified',
   PROFILE_UPDATE = 'profile_update',
   SYSTEM_ANNOUNCEMENT = 'system_announcement',
+  
+  // Admin actions
+  PROFILE_APPROVED = 'profile_approved',
+  PROFILE_REJECTED = 'profile_rejected',
 }
 
 @Schema({ timestamps: true })
