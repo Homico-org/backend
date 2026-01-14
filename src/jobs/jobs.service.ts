@@ -348,8 +348,49 @@ export class JobsService {
       }
     }
 
-    // For in_progress or completed jobs, find the accepted proposal and get hired pro info
+    // Ensure subcategory is set (for backward compatibility with jobs that only have skills)
+    const jobWithSubcategory = {
+      ...job,
+      subcategory: (job as any).subcategory || ((job as any).skills && (job as any).skills[0]) || undefined,
+    };
+
+    // For in_progress or completed jobs, get hired pro info
     if (job.status === 'in_progress' || job.status === 'completed') {
+      // First try to use hiredProId directly from the job (more reliable)
+      const hiredProIdToUse = (job as any).hiredProId;
+      
+      if (hiredProIdToUse) {
+        const proUser = await this.userModel
+          .findById(hiredProIdToUse)
+          .select('_id uid name avatar phone title')
+          .lean()
+          .exec();
+        
+        if (proUser) {
+          const proId = proUser._id?.toString();
+          return {
+            ...jobWithSubcategory,
+            hiredPro: {
+              id: proId,
+              _id: proId,
+              uid: (proUser as any).uid,
+              userId: {
+                id: proId,
+                _id: proId,
+                uid: (proUser as any).uid,
+                name: (proUser as any).name,
+                avatar: (proUser as any).avatar,
+              },
+              name: (proUser as any).name,
+              avatar: (proUser as any).avatar,
+              title: (proUser as any).title,
+              phone: (proUser as any).phone,
+            },
+          };
+        }
+      }
+      
+      // Fallback: find accepted proposal (for backward compatibility with jobs created before hiredProId was added)
       const acceptedProposal = await this.proposalModel
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
@@ -363,7 +404,7 @@ export class JobsService {
         const proUser = acceptedProposal.proId as any;
         const proId = proUser._id?.toString();
         return {
-          ...job,
+          ...jobWithSubcategory,
           hiredPro: {
             id: proId,
             _id: proId,
@@ -384,7 +425,7 @@ export class JobsService {
       }
     }
 
-    return job;
+    return jobWithSubcategory;
   }
 
   async findMyJobs(clientId: string, status?: string): Promise<any[]> {
@@ -471,14 +512,55 @@ export class JobsService {
       }
     }
 
-    // For in_progress or completed jobs, find the accepted proposal and get hired pro info
+    // For in_progress or completed jobs, get hired pro info
     const jobsWithDetails = await Promise.all(
       jobs.map(async (job) => {
         const jobIdStr = job._id.toString();
         const shortlistedCount = shortlistedCountMap.get(jobIdStr) || 0;
         const jobRecentProposals = recentProposalsMap.get(jobIdStr) || [];
+        
+        // Ensure subcategory is set (for backward compatibility with jobs that only have skills)
+        const subcategory = (job as any).subcategory || ((job as any).skills && (job as any).skills[0]) || undefined;
 
         if (job.status === 'in_progress' || job.status === 'completed') {
+          // First try to use hiredProId directly from the job (more reliable)
+          const hiredProIdToUse = (job as any).hiredProId;
+          
+          if (hiredProIdToUse) {
+            const proUser = await this.userModel
+              .findById(hiredProIdToUse)
+              .select('_id uid name avatar phone title')
+              .lean()
+              .exec();
+            
+            if (proUser) {
+              const proId = proUser._id?.toString();
+              return {
+                ...job,
+                subcategory,
+                shortlistedCount,
+                recentProposals: jobRecentProposals,
+                hiredPro: {
+                  id: proId,
+                  _id: proId,
+                  uid: (proUser as any).uid,
+                  userId: {
+                    id: proId,
+                    _id: proId,
+                    uid: (proUser as any).uid,
+                    name: (proUser as any).name,
+                    avatar: (proUser as any).avatar,
+                  },
+                  name: (proUser as any).name,
+                  avatar: (proUser as any).avatar,
+                  title: (proUser as any).title,
+                  phone: (proUser as any).phone,
+                },
+              };
+            }
+          }
+          
+          // Fallback: find accepted proposal (for backward compatibility)
           const acceptedProposal = await this.proposalModel
             .findOne({ jobId: job._id, status: 'accepted' })
             .populate({
@@ -493,6 +575,7 @@ export class JobsService {
             const proId = proUser._id?.toString();
             return {
               ...job,
+              subcategory,
               shortlistedCount,
               recentProposals: jobRecentProposals,
               hiredPro: {
@@ -516,6 +599,7 @@ export class JobsService {
         }
         return {
           ...job,
+          subcategory,
           shortlistedCount,
           recentProposals: jobRecentProposals,
         };
@@ -536,7 +620,35 @@ export class JobsService {
       throw new ForbiddenException('თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების განახლება');
     }
 
-    return this.jobModel.findByIdAndUpdate(id, updateData, { new: true }).exec();
+    // Support "clearing" optional fields (ex: cadastralId) by sending null or empty string.
+    // - undefined: leave unchanged
+    // - null / "": unset in Mongo
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, 1> = {};
+
+    Object.entries(updateData || {}).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (value === null) {
+        $unset[key] = 1;
+        return;
+      }
+      if (typeof value === 'string' && value.trim() === '') {
+        $unset[key] = 1;
+        return;
+      }
+      $set[key] = value;
+    });
+
+    const mongoUpdate: any = {};
+    if (Object.keys($set).length > 0) mongoUpdate.$set = $set;
+    if (Object.keys($unset).length > 0) mongoUpdate.$unset = $unset;
+
+    // If nothing to update, return the current job
+    if (Object.keys(mongoUpdate).length === 0) {
+      return job.toObject() as any;
+    }
+
+    return this.jobModel.findByIdAndUpdate(id, mongoUpdate, { new: true }).exec();
   }
 
   async deleteJob(id: string, clientId: string): Promise<void> {
@@ -770,9 +882,10 @@ export class JobsService {
     proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
     await proposal.save();
 
-    // Update job status
+    // Update job status and set hiredProId
     await this.jobModel.findByIdAndUpdate(job._id, {
       status: JobStatus.IN_PROGRESS,
+      hiredProId: proposal.proId,
     });
 
     // Create project tracking for this job
