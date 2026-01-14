@@ -49,6 +49,9 @@ export class Job extends Document {
   @Prop({ required: true })
   category: string;
 
+  @Prop({ type: String })
+  subcategory: string;
+
   @Prop({ type: [String], default: [] })
   skills: string[];
 
@@ -184,6 +187,10 @@ export class Job extends Document {
     default: JobStatus.OPEN
   })
   status: JobStatus;
+
+  // The hired professional's user ID (set when a proposal is accepted)
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  hiredProId: Types.ObjectId;
 
   @Prop({ type: Date })
   expiresAt: Date;

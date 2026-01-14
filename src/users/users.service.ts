@@ -925,12 +925,22 @@ export class UsersService {
       query.avgRating = { $gte: filters.minRating };
     }
 
-    if (filters?.minPrice !== undefined) {
-      query.basePrice = { ...query.basePrice, $gte: filters.minPrice };
-    }
-
-    if (filters?.maxPrice !== undefined) {
-      query.basePrice = { ...query.basePrice, $lte: filters.maxPrice };
+    // Price filter should work for different pricing models:
+    // - fixed/from/hourly/etc: basePrice (maxPrice may be missing or equal)
+    // - project_based range: basePrice..maxPrice
+    // We match pros whose price range overlaps the requested range:
+    // proMax >= filterMin AND proMin <= filterMax
+    if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
+      const proMinExpr = { $ifNull: ["$basePrice", 0] };
+      const proMaxExpr = { $ifNull: ["$maxPrice", proMinExpr] };
+      const exprAnd: any[] = [];
+      if (filters?.minPrice !== undefined) {
+        exprAnd.push({ $gte: [proMaxExpr, filters.minPrice] });
+      }
+      if (filters?.maxPrice !== undefined) {
+        exprAnd.push({ $lte: [proMinExpr, filters.maxPrice] });
+      }
+      query.$expr = exprAnd.length > 1 ? { $and: exprAnd } : exprAnd[0];
     }
 
     if (filters?.companyIds && filters.companyIds.length > 0) {

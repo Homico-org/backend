@@ -40,6 +40,11 @@ export class CreateJobDto {
   @IsNotEmpty()
   category: string;
 
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  subcategory?: string;
+
   @ApiProperty({ required: false })
   @IsArray()
   @IsOptional()
