@@ -3,7 +3,6 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
-import { GoogleRegisterDto } from './dto/google-register.dto';
 import { UsersService } from '../users/users.service';
 
 @ApiTags('Authentication')
@@ -28,14 +27,6 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
-  }
-
-  @Post('google-register')
-  @ApiOperation({ summary: 'Register or login with Google' })
-  @ApiResponse({ status: 201, description: 'User successfully registered/logged in with Google' })
-  @ApiResponse({ status: 409, description: 'User already exists with this email or phone' })
-  async googleRegister(@Body() googleRegisterDto: GoogleRegisterDto) {
-    return this.authService.googleRegister(googleRegisterDto);
   }
 
   @Get('demo-accounts')

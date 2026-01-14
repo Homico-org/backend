@@ -354,19 +354,24 @@ export class JobsService {
         .findOne({ jobId: job._id, status: 'accepted' })
         .populate({
           path: 'proId',
-          select: '_id name avatar phone title',
+          select: '_id uid name avatar phone title',
         })
         .lean()
         .exec();
 
       if (acceptedProposal?.proId) {
         const proUser = acceptedProposal.proId as any;
+        const proId = proUser._id?.toString();
         return {
           ...job,
           hiredPro: {
+            id: proId,
+            _id: proId,
+            uid: proUser.uid,
             userId: {
-              id: proUser._id?.toString(),
-              _id: proUser._id?.toString(),
+              id: proId,
+              _id: proId,
+              uid: proUser.uid,
               name: proUser.name,
               avatar: proUser.avatar,
             },
@@ -478,21 +483,26 @@ export class JobsService {
             .findOne({ jobId: job._id, status: 'accepted' })
             .populate({
               path: 'proId',
-              select: '_id name avatar phone title',
+              select: '_id uid name avatar phone title',
             })
             .lean()
             .exec();
 
           if (acceptedProposal?.proId) {
             const proUser = acceptedProposal.proId as any;
+            const proId = proUser._id?.toString();
             return {
               ...job,
               shortlistedCount,
               recentProposals: jobRecentProposals,
               hiredPro: {
+                id: proId,
+                _id: proId,
+                uid: proUser.uid,
                 userId: {
-                  id: proUser._id?.toString(),
-                  _id: proUser._id?.toString(),
+                  id: proId,
+                  _id: proId,
+                  uid: proUser.uid,
                   name: proUser.name,
                   avatar: proUser.avatar,
                 },

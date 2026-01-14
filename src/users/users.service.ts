@@ -172,109 +172,6 @@ export class UsersService {
     return null;
   }
 
-  async findByGoogleId(googleId: string): Promise<User | null> {
-    return this.userModel.findOne({ googleId }).exec();
-  }
-
-  async createGoogleUser(data: {
-    googleId: string;
-    email: string;
-    name: string;
-    phone: string;
-    password?: string;
-    avatar?: string;
-    role?: string;
-    city?: string;
-    selectedCategories?: string[];
-    selectedSubcategories?: string[];
-    customServices?: string[];
-    portfolioProjects?: Array<{
-      title: string;
-      description?: string;
-      images: string[];
-    }>;
-    isPhoneVerified?: boolean;
-  }): Promise<User> {
-    // Check if user with same email or phone already exists
-    if (data.email) {
-      const existingByEmail = await this.userModel.findOne({
-        email: data.email,
-      });
-      if (existingByEmail) {
-        throw new ConflictException("User with this email already exists");
-      }
-    }
-
-    if (data.phone) {
-      const existingByPhone = await this.userModel.findOne({
-        phone: data.phone,
-      });
-      if (existingByPhone) {
-        throw new ConflictException(
-          "User with this phone number already exists"
-        );
-      }
-    }
-
-    // Check if googleId already exists
-    const existingByGoogleId = await this.userModel.findOne({
-      googleId: data.googleId,
-    });
-    if (existingByGoogleId) {
-      throw new ConflictException(
-        "User with this Google account already exists"
-      );
-    }
-
-    const uid = await this.generateNextUid();
-
-    // Hash password if provided
-    const hashedPassword = data.password
-      ? await bcrypt.hash(data.password, 10)
-      : undefined;
-
-    const user = new this.userModel({
-      uid,
-      googleId: data.googleId,
-      email: data.email,
-      name: data.name,
-      phone: data.phone,
-      password: hashedPassword,
-      avatar: data.avatar,
-      role: data.role || "client",
-      city: data.city,
-      selectedCategories: data.selectedCategories || [],
-      selectedSubcategories: data.selectedSubcategories || [],
-      customServices: data.customServices || [],
-      portfolioProjects: data.portfolioProjects || [],
-      isPhoneVerified: data.isPhoneVerified || false,
-      phoneVerifiedAt: data.isPhoneVerified ? new Date() : undefined,
-      isEmailVerified: true, // Google emails are verified
-      emailVerifiedAt: new Date(),
-    });
-
-    const savedUser = await user.save();
-
-    // Create portfolio items in the portfolio collection if provided
-    if (data.portfolioProjects && data.portfolioProjects.length > 0) {
-      const portfolioItems = data.portfolioProjects.map((project, index) => ({
-        proId: savedUser._id,
-        title: project.title || `Project ${index + 1}`,
-        description: project.description || "",
-        imageUrl: project.images[0] || "",
-        images: project.images || [],
-        source: "external",
-        status: "completed",
-        projectType: "project",
-        displayOrder: index,
-      }));
-
-      await this.portfolioItemModel.insertMany(portfolioItems);
-    }
-
-    return savedUser;
-  }
-
   async findById(id: string): Promise<User> {
     const user = await this.userModel.findById(id).exec();
 
@@ -312,14 +209,39 @@ export class UsersService {
     return bcrypt.compare(password, hashedPassword);
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean }> {
+    const user = await this.userModel.findById(userId).select('+password').exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user has a password (might be OAuth user)
+    if (!user.password) {
+      throw new BadRequestException('Cannot change password for OAuth accounts');
+    }
+
+    // Validate current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      throw new ConflictException('Current password is incorrect');
+    }
+
+    // Hash new password and update
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    await this.userModel.findByIdAndUpdate(userId, { password: hashedNewPassword });
+
+    return { success: true };
+  }
+
   async updateLastLogin(userId: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(userId, {
       lastLoginAt: new Date(),
     });
-  }
-
-  async updateGoogleId(userId: string, googleId: string): Promise<void> {
-    await this.userModel.findByIdAndUpdate(userId, { googleId });
   }
 
   async update(userId: string, updateData: Partial<User>): Promise<User> {

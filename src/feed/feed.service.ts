@@ -131,13 +131,13 @@ export class FeedService {
         .sort({ createdAt: -1 })
         .populate({
           path: 'proId',
-          select: 'name title avgRating avatar categories isAdminApproved',
+          select: 'name title bio avgRating avatar categories isAdminApproved',
           match: { isAdminApproved: true }, // Only populate if pro is approved
         })
         .lean(),
       this.userModel
         .find(proUserQuery)
-        .select('name title avgRating avatar categories portfolioProjects updatedAt')
+        .select('name title bio avgRating avatar categories portfolioProjects updatedAt')
         .lean(),
       this.portfolioModel.countDocuments(portfolioItemQuery),
     ]);
@@ -177,6 +177,7 @@ export class FeedService {
           avatar: proUser?.avatar,
           rating: proUser?.avgRating || 0,
           title: proUser?.title,
+          bio: proUser?.bio,
         },
         client: item.clientName
           ? {
@@ -242,6 +243,7 @@ export class FeedService {
             avatar: proUser.avatar,
             rating: proUser.avgRating || 0,
             title: proUser.title,
+            bio: proUser.bio,
           },
           likeCount: 0,
           isLiked: false,
@@ -386,7 +388,7 @@ export class FeedService {
       .find(query)
       .sort({ avgRating: -1, totalReviews: -1 })
       .limit(limit)
-      .select('name avatar title categories avgRating createdAt')
+      .select('name avatar title bio categories avgRating createdAt')
       .lean();
 
     return pros.map((pro) => ({
