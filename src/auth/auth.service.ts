@@ -13,19 +13,21 @@ export class AuthService {
     private readonly logger: LoggerService,
   ) {}
 
-  async register(createUserDto: CreateUserDto) {
+  async register(createUserDto: CreateUserDto, requestMeta?: { ip?: string; userAgent?: string }) {
     const user = await this.usersService.create(createUserDto);
 
     // Log registration
     this.logger.logActivity({
       type: ActivityType.USER_REGISTER,
       userId: user._id.toString(),
-      userEmail: user.email,
+      userEmail: user.email || user.phone || 'unknown',
       userName: user.name,
+      ip: requestMeta?.ip,
+      userAgent: requestMeta?.userAgent,
       details: {
         role: user.role,
         phone: user.phone,
-        registrationMethod: 'email',
+        registrationMethod: user.phone ? 'phone' : 'email',
       },
     });
 
@@ -55,7 +57,7 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, requestMeta?: { ip?: string; userAgent?: string }) {
     // Find user by email or phone
     const user = await this.usersService.findByEmailOrPhone(loginDto.identifier);
 
@@ -80,14 +82,18 @@ export class AuthService {
     await this.usersService.updateLastLogin(user._id.toString());
 
     // Log login
+    const loginMethod = loginDto.identifier?.includes('@') ? 'email' : 'phone';
     this.logger.logActivity({
       type: ActivityType.USER_LOGIN,
       userId: user._id.toString(),
-      userEmail: user.email,
+      userEmail: user.email || user.phone || 'unknown',
       userName: user.name,
+      ip: requestMeta?.ip,
+      userAgent: requestMeta?.userAgent,
       details: {
         role: user.role,
-        loginMethod: 'email',
+        loginMethod,
+        identifier: loginDto.identifier,
       },
     });
 

@@ -267,7 +267,11 @@ export class AdminService {
       this.userModel.countDocuments({ createdAt: { $gte: startOfWeek } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfMonth } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
-      this.userModel.countDocuments({ role: 'pro', verificationStatus: 'verified' }),
+      // "Verified pros" in product terms = admin-approved professionals (keep backward-compat with verificationStatus)
+      this.userModel.countDocuments({
+        role: 'pro',
+        $or: [{ isAdminApproved: true }, { verificationStatus: 'verified' }],
+      }),
     ]);
 
     // Job stats
@@ -419,10 +423,29 @@ export class AdminService {
 
   async getActivityTimeline(limit: number = 20) {
     const [recentUsers, recentJobs, recentProposals, recentTickets] = await Promise.all([
-      this.userModel.find().sort({ createdAt: -1 }).limit(limit).select('name role createdAt').lean(),
-      this.jobModel.find().sort({ createdAt: -1 }).limit(limit).populate('clientId', 'name').select('title status createdAt').lean(),
-      this.proposalModel.find().sort({ createdAt: -1 }).limit(limit).populate('proId', 'name').populate('jobId', 'title').select('status createdAt').lean(),
-      this.ticketModel.find().sort({ createdAt: -1 }).limit(limit).populate('userId', 'name').select('subject status createdAt').lean(),
+      this.userModel.find().sort({ createdAt: -1 }).limit(limit).select('_id uid name role createdAt').lean(),
+      this.jobModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('clientId', 'name')
+        .select('_id title category status createdAt')
+        .lean(),
+      this.proposalModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('proId', 'name')
+        .populate('jobId', 'title category')
+        .select('_id status createdAt')
+        .lean(),
+      this.ticketModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('userId', 'name')
+        .select('_id subject status createdAt')
+        .lean(),
     ]);
 
     // Combine and sort by date
@@ -440,6 +463,7 @@ export class AdminService {
 
   async getJobsByCategory() {
     return this.jobModel.aggregate([
+      { $match: { category: { $type: 'string', $ne: '' } } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
@@ -448,7 +472,7 @@ export class AdminService {
 
   async getJobsByLocation() {
     return this.jobModel.aggregate([
-      { $match: { location: { $exists: true, $ne: '' } } },
+      { $match: { location: { $type: 'string', $ne: '' } } },
       { $group: { _id: '$location', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
