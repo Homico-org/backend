@@ -1,3 +1,32 @@
+name: Deploy
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy (dev)
+    if: github.ref == 'refs/heads/dev' && secrets.RENDER_DEPLOY_HOOK_URL_DEV != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook (dev)
+        run: |
+          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL_DEV }}"
+
+  deploy-main:
+    name: Deploy (main)
+    if: github.ref == 'refs/heads/main' && secrets.RENDER_DEPLOY_HOOK_URL_MAIN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook (main)
+        run: |
+          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL_MAIN }}"
+
 name: Deploy Backend
 
 on:
