@@ -9,49 +9,33 @@ permissions:
   contents: read
 
 jobs:
-  deploy-dev:
-    name: Deploy (dev)
-    if: github.ref == 'refs/heads/dev' && secrets.RENDER_DEPLOY_HOOK_URL_DEV != ''
+  deploy:
+    name: Trigger Render Deploy Hook
     runs-on: ubuntu-latest
+
     steps:
-      - name: Trigger Render deploy hook (dev)
+      - name: Resolve deploy hook URL
+        id: resolve
+        shell: bash
         run: |
-          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL_DEV }}"
+          if [ "${GITHUB_REF}" = "refs/heads/dev" ]; then
+            URL="${{ secrets.RENDER_DEPLOY_HOOK_URL_DEV }}"
+            if [ -z "${URL}" ]; then URL="${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_DEV }}"; fi
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            URL="${{ secrets.RENDER_DEPLOY_HOOK_URL_MAIN }}"
+            if [ -z "${URL}" ]; then URL="${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_PROD }}"; fi
+          else
+            URL=""
+          fi
 
-  deploy-main:
-    name: Deploy (main)
-    if: github.ref == 'refs/heads/main' && secrets.RENDER_DEPLOY_HOOK_URL_MAIN != ''
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Render deploy hook (main)
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger deploy
+        if: steps.resolve.outputs.url != ''
         run: |
-          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL_MAIN }}"
+          curl -fsSL -X POST "${{ steps.resolve.outputs.url }}"
 
-name: Deploy Backend
-
-on:
-  push:
-    branches:
-      - main
-      - dev
-
-jobs:
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    name: Deploy to Production
-    steps:
-      - name: Trigger Render Deploy
+      - name: Skip (no deploy hook configured)
+        if: steps.resolve.outputs.url == ''
         run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_PROD }}"
-          echo "Triggered production backend deployment"
-
-  deploy-development:
-    if: github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    name: Deploy to Development
-    steps:
-      - name: Trigger Render Deploy
-        run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND_DEV }}"
-          echo "Triggered development backend deployment"
+          echo "No Render deploy hook secret configured for this branch; skipping deploy."
