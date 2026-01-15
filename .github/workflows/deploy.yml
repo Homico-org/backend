@@ -33,7 +33,19 @@ jobs:
       - name: Trigger deploy
         if: steps.resolve.outputs.url != ''
         run: |
-          curl -fsSL -X POST "${{ steps.resolve.outputs.url }}"
+          set -euo pipefail
+          URL="${{ steps.resolve.outputs.url }}"
+
+          # Render deploy hooks may return 409 when a deploy is already in progress/queued.
+          # Treat 2xx and 409 as success.
+          http_code="$(curl -sS -o /tmp/render_deploy_response.txt -w "%{http_code}" -X POST "${URL}" || true)"
+          if [[ "${http_code}" =~ ^2[0-9]{2}$ || "${http_code}" == "409" ]]; then
+            echo "Deploy hook accepted (HTTP ${http_code})."
+          else
+            echo "Deploy hook failed (HTTP ${http_code}). Response:"
+            cat /tmp/render_deploy_response.txt || true
+            exit 1
+          fi
 
       - name: Skip (no deploy hook configured)
         if: steps.resolve.outputs.url == ''
