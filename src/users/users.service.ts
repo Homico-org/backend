@@ -1076,6 +1076,7 @@ export class UsersService {
 
     // Update the pro-specific fields on the user document
     const updateData: any = {};
+    const unsetData: Record<string, any> = {};
 
     // Pro profile fields
     if (proData.title !== undefined) updateData.title = proData.title;
@@ -1119,11 +1120,14 @@ export class UsersService {
     if (proData.yearsExperience !== undefined)
       updateData.yearsExperience = proData.yearsExperience;
     if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
-    if (proData.pricingModel !== undefined)
-      updateData.pricingModel = proData.pricingModel;
-    if (proData.basePrice !== undefined)
-      updateData.basePrice = proData.basePrice;
-    if (proData.maxPrice !== undefined) updateData.maxPrice = proData.maxPrice;
+    if (proData.pricingModel !== undefined) updateData.pricingModel = proData.pricingModel;
+
+    // Pricing numbers: allow explicit unsetting when client sends null (e.g., "by agreement")
+    if (proData.basePrice === null) unsetData.basePrice = '';
+    else if (proData.basePrice !== undefined) updateData.basePrice = proData.basePrice;
+
+    if (proData.maxPrice === null) unsetData.maxPrice = '';
+    else if (proData.maxPrice !== undefined) updateData.maxPrice = proData.maxPrice;
     if (proData.serviceAreas !== undefined)
       updateData.serviceAreas = proData.serviceAreas;
     if (proData.portfolioProjects !== undefined)
@@ -1164,8 +1168,12 @@ export class UsersService {
       updateData.isProfileCompleted = true;
     }
 
+    const mongoUpdate: any = {};
+    if (Object.keys(updateData).length > 0) mongoUpdate.$set = updateData;
+    if (Object.keys(unsetData).length > 0) mongoUpdate.$unset = unsetData;
+
     const updatedUser = await this.userModel
-      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
+      .findByIdAndUpdate(userId, mongoUpdate, { new: true })
       .select("-password")
       .exec();
 
