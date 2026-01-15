@@ -34,9 +34,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      # Avoid `npm run lint` because this repo's script uses `--fix` (CI should be read-only)
-      - name: Lint (no-fix)
-        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+      - name: Lint
+        run: npm run lint
 
       - name: Build
         run: npm run build
