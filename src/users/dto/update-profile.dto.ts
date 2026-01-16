@@ -147,7 +147,10 @@ export class UpdateProfileDto {
   @IsOptional()
   serviceAreas?: string[];
 
-  @ApiPropertyOptional({ description: 'Pricing model', enum: PricingModel })
+  @ApiPropertyOptional({
+    description: 'Pricing model (fixed | range | byAgreement)',
+    enum: Object.values(PricingModel),
+  })
   @IsEnum(PricingModel)
   @IsOptional()
   pricingModel?: PricingModel;

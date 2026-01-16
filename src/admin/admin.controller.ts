@@ -190,6 +190,7 @@ export class AdminController {
     @Query('type') type?: string,
     @Query('userId') userId?: string,
     @Query('userEmail') userEmail?: string,
+    @Query('q') q?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
@@ -199,6 +200,7 @@ export class AdminController {
       type,
       userId,
       userEmail,
+      q,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
     });

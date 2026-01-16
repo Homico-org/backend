@@ -163,18 +163,32 @@ export class LoggerService implements NestLoggerService, OnModuleInit {
     type?: string;
     userId?: string;
     userEmail?: string;
+    q?: string;
     startDate?: Date;
     endDate?: Date;
     page?: number;
     limit?: number;
   }): Promise<{ logs: ActivityLog[]; total: number; page: number; pages: number }> {
-    const { type, userId, userEmail, startDate, endDate, page = 1, limit = 50 } = options;
+    const { type, userId, userEmail, q, startDate, endDate, page = 1, limit = 50 } = options;
 
     const query: any = {};
 
     if (type) query.type = type;
     if (userId) query.userId = userId;
     if (userEmail) query.userEmail = { $regex: userEmail, $options: 'i' };
+    if (q) {
+      const qTrim = q.trim();
+      if (qTrim) {
+        query.$or = [
+          { userEmail: { $regex: qTrim, $options: 'i' } },
+          { userName: { $regex: qTrim, $options: 'i' } },
+          { userId: { $regex: qTrim, $options: 'i' } },
+          { targetId: { $regex: qTrim, $options: 'i' } },
+          { targetType: { $regex: qTrim, $options: 'i' } },
+          { type: { $regex: qTrim, $options: 'i' } },
+        ];
+      }
+    }
     if (startDate || endDate) {
       query.timestamp = {};
       if (startDate) query.timestamp.$gte = startDate;

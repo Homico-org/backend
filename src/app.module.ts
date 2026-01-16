@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { accessSync, constants } from 'fs';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -28,9 +29,21 @@ import { LoggerModule } from './common/logger';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    // In some environments (CI/sandboxes), reading `.env` can be disallowed.
+    // Treat env file loading as best-effort and fall back to process.env.
+    (() => {
+      const envPath = join(process.cwd(), '.env');
+      let ignoreEnvFile = false;
+      try {
+        accessSync(envPath, constants.R_OK);
+      } catch {
+        ignoreEnvFile = true;
+      }
+      return ConfigModule.forRoot({
+        isGlobal: true,
+        ...(ignoreEnvFile ? { ignoreEnvFile: true } : { envFilePath: envPath }),
+      });
+    })(),
     ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
@@ -38,9 +51,17 @@ import { LoggerModule } from './common/logger';
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI'),
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const uri =
+          configService.get<string>('MONGODB_URI') ||
+          (process.env.NODE_ENV === 'production'
+            ? undefined
+            : 'mongodb://127.0.0.1:27017/homico');
+        if (!uri) {
+          throw new Error('MONGODB_URI is required in production');
+        }
+        return { uri };
+      },
       inject: [ConfigService],
     }),
     AuthModule,

@@ -1045,9 +1045,44 @@ export class UsersService {
         .exec();
     }
 
+    // Backward compatibility / data recovery:
+    // Some legacy users may have pro fields filled but role not updated to "pro".
+    // Treat as pro if they have meaningful pro data.
+    if (!user) {
+      if (isNumericUid) {
+        user = await this.userModel
+          .findOne({ uid: numericId })
+          .select("-password")
+          .exec();
+      } else if (Types.ObjectId.isValid(id)) {
+        user = await this.userModel
+          .findOne({ _id: id })
+          .select("-password")
+          .exec();
+      }
+
+      const looksLikePro =
+        !!user &&
+        (user.role === "pro" ||
+          (Array.isArray((user as any).categories) &&
+            (user as any).categories.length > 0) ||
+          (Array.isArray((user as any).selectedCategories) &&
+            (user as any).selectedCategories.length > 0));
+
+      if (!looksLikePro) {
+        user = null;
+      }
+    }
+
     if (!user) {
       throw new NotFoundException("Pro profile not found");
     }
+
+    // Best-effort views increment: never block profile reads on write errors
+    this.userModel
+      .updateOne({ _id: user._id }, { $inc: { profileViewCount: 1 } })
+      .exec()
+      .catch(() => {});
 
     return user;
   }
@@ -1120,7 +1155,48 @@ export class UsersService {
     if (proData.yearsExperience !== undefined)
       updateData.yearsExperience = proData.yearsExperience;
     if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
-    if (proData.pricingModel !== undefined) updateData.pricingModel = proData.pricingModel;
+    // Pricing model: only allow fixed | range | byAgreement (normalize legacy values)
+    if (proData.pricingModel !== undefined) {
+      const incoming = proData.pricingModel;
+      const base = proData.basePrice;
+      const max = proData.maxPrice;
+
+      const hasBase = typeof base === 'number' ? base > 0 : base !== null && base !== undefined && Number(base) > 0;
+      const hasMax = typeof max === 'number' ? max > 0 : max !== null && max !== undefined && Number(max) > 0;
+
+      let normalized: 'fixed' | 'range' | 'byAgreement' = 'byAgreement';
+      if (incoming === 'byAgreement' || incoming === 'hourly') {
+        normalized = 'byAgreement';
+      } else if (incoming === 'range') {
+        normalized = (hasBase && hasMax) ? 'range' : (hasBase || hasMax) ? 'fixed' : 'byAgreement';
+      } else if (incoming === 'fixed') {
+        normalized = (hasBase || hasMax) ? 'fixed' : 'byAgreement';
+      } else {
+        // Legacy or unknown: infer from numbers
+        if (hasBase && hasMax && Number(max) !== Number(base)) normalized = 'range';
+        else if (hasBase || hasMax) normalized = 'fixed';
+        else normalized = 'byAgreement';
+      }
+
+      updateData.pricingModel = normalized;
+
+      // If by agreement, force-clear any prices
+      if (normalized === 'byAgreement') {
+        unsetData.basePrice = '';
+        unsetData.maxPrice = '';
+      }
+
+      // If fixed, ensure old range maxPrice doesn't linger (otherwise UI will still show range)
+      if (normalized === 'fixed') {
+        // If client didn't explicitly set a maxPrice, unset it.
+        // If they did set it, collapse it to basePrice to keep "fixed" semantics.
+        if (proData.maxPrice === undefined || proData.maxPrice === null) {
+          unsetData.maxPrice = '';
+        } else if (hasBase) {
+          updateData.maxPrice = Number(base);
+        }
+      }
+    }
 
     // Pricing numbers: allow explicit unsetting when client sends null (e.g., "by agreement")
     if (proData.basePrice === null) unsetData.basePrice = '';
@@ -1189,6 +1265,36 @@ export class UsersService {
       userName: updatedUser.name,
       details: {
         updatedFields: Object.keys(updateData),
+        unsetFields: Object.keys(unsetData),
+        before: (() => {
+          const fields = Array.from(
+            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+          );
+          const snapshot: Record<string, any> = {};
+          for (const field of fields) snapshot[field] = (user as any)?.[field];
+          return snapshot;
+        })(),
+        after: (() => {
+          const fields = Array.from(
+            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+          );
+          const snapshot: Record<string, any> = {};
+          for (const field of fields) snapshot[field] = (updatedUser as any)?.[field];
+          return snapshot;
+        })(),
+        changes: (() => {
+          const fields = Array.from(
+            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+          );
+          const diffs: Array<{ field: string; from: any; to: any }> = [];
+          for (const field of fields) {
+            const fromVal = (user as any)?.[field];
+            const toVal = (updatedUser as any)?.[field];
+            const same = JSON.stringify(fromVal) === JSON.stringify(toVal);
+            if (!same) diffs.push({ field, from: fromVal, to: toVal });
+          }
+          return diffs;
+        })(),
       },
     });
 
