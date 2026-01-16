@@ -189,6 +189,11 @@ export class SupportService {
     if (messageIdsToUpdate.length > 0) {
       this.chatGateway.emitSupportMessageStatus(ticketId, messageIdsToUpdate, 'read');
     }
+
+    // Also emit a ticket update so UIs can immediately clear unread indicators without refetching
+    await ticket.populate('userId', 'name email avatar role');
+    await ticket.populate('assignedTo', 'name email avatar');
+    this.chatGateway.emitSupportTicketUpdate(ticketId, ticket);
   }
 
   async markAsDelivered(ticketId: string, userId: string, isAdmin = false): Promise<void> {

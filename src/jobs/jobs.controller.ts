@@ -136,6 +136,7 @@ export class JobsController {
       deadline,
       savedOnly: savedOnly === 'true',
       userId: user?.userId,
+      userRole: user?.role,
     });
   }
 

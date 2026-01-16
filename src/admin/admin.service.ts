@@ -406,7 +406,8 @@ export class AdminService {
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate('clientId', 'name email avatar')
-      .select('title category location status budgetAmount budgetType createdAt proposalCount')
+      // Explicitly include _id so admin UI can link to /jobs/:id reliably
+      .select('_id title category location status budgetAmount budgetType createdAt proposalCount')
       .lean();
   }
 

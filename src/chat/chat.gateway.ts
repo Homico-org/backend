@@ -267,6 +267,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  // Emit support ticket update (no new message) to admin room, ticket room, and ticket owner
+  emitSupportTicketUpdate(ticketId: string, ticket: any) {
+    this.server.to(`support:${ticketId}`).emit('supportTicketUpdate', {
+      ticketId,
+      ticket,
+    });
+
+    this.server.to('admin:support').emit('supportTicketUpdate', {
+      ticketId,
+      ticket,
+    });
+
+    if (ticket.userId) {
+      this.server.to(`user:${ticket.userId.toString()}`).emit('supportTicketUpdate', {
+        ticketId,
+        ticket,
+      });
+    }
+  }
+
   // Emit support message status update
   emitSupportMessageStatus(ticketId: string, messageIds: string[], status: string) {
     this.server.to(`support:${ticketId}`).emit('supportMessageStatusUpdate', {

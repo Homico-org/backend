@@ -14,7 +14,10 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        // Dev-friendly fallback; production must explicitly configure JWT_SECRET
+        secret:
+          configService.get<string>('JWT_SECRET') ||
+          (process.env.NODE_ENV === 'production' ? undefined : 'dev-jwt-secret'),
         signOptions: {
           expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '7d',
         },

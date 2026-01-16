@@ -69,6 +69,7 @@ export class JobsService {
     deadline?: string;
     savedOnly?: boolean;
     userId?: string;
+    userRole?: string;
   }): Promise<{
     data: Job[];
     pagination: {
@@ -83,7 +84,15 @@ export class JobsService {
     const limit = filters?.limit || 10;
     const skip = (page - 1) * limit;
 
-    const query: any = { status: filters?.status || JobStatus.OPEN };
+    const isAdmin = filters?.userRole === 'admin';
+    const query: any = {};
+    // By default, the public browse should show OPEN jobs.
+    // Exception: admins can browse ALL jobs unless an explicit status is provided.
+    if (filters?.status) {
+      query.status = filters.status;
+    } else if (!isAdmin) {
+      query.status = JobStatus.OPEN;
+    }
     const andConditions: any[] = [];
 
     // Support filtering by multiple categories (for pro users with selected categories)

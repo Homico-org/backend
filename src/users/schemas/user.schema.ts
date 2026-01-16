@@ -14,6 +14,12 @@ export enum AccountType {
 }
 
 export enum PricingModel {
+  // New canonical values (product requirement)
+  FIXED = 'fixed',
+  RANGE = 'range',
+  BY_AGREEMENT = 'byAgreement',
+
+  // Legacy values (backward compatibility; will be normalized on read/write)
   HOURLY = 'hourly',
   DAILY = 'daily',
   SQM = 'sqm',
@@ -238,6 +244,9 @@ export class User extends Document {
   totalReviews: number;
 
   @Prop({ default: 0 })
+  profileViewCount: number;
+
+  @Prop({ default: 0 })
   completedJobs: number;
 
   @Prop({ default: 0 })
@@ -410,6 +419,54 @@ export class User extends Document {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+function normalizePricingModel(
+  pricingModel: any,
+  basePrice: any,
+  maxPrice: any,
+): 'fixed' | 'range' | 'byAgreement' {
+  // Explicit byAgreement / legacy hourly => byAgreement
+  if (pricingModel === 'byAgreement' || pricingModel === 'hourly') return 'byAgreement';
+
+  const base = typeof basePrice === 'number' ? basePrice : basePrice ? Number(basePrice) : null;
+  const max = typeof maxPrice === 'number' ? maxPrice : maxPrice ? Number(maxPrice) : null;
+
+  const hasBase = base !== null && !Number.isNaN(base) && base > 0;
+  const hasMax = max !== null && !Number.isNaN(max) && max > 0;
+
+  // If we have both and they differ, it's a range
+  if (hasBase && hasMax && max !== base) return 'range';
+
+  // If we have any numeric price at all, treat as fixed
+  if (hasBase || hasMax) return 'fixed';
+
+  return 'byAgreement';
+}
+
+// Normalize pricing model for all API responses
+UserSchema.set('toJSON', {
+  virtuals: true,
+  transform: (_doc: any, ret: any) => {
+    const normalized = normalizePricingModel(ret.pricingModel, ret.basePrice, ret.maxPrice);
+    ret.pricingModel = normalized;
+    if (normalized === 'byAgreement') {
+      delete ret.basePrice;
+      delete ret.maxPrice;
+    } else if (normalized === 'fixed') {
+      // Collapse to a single price when possible
+      if (ret.basePrice == null && ret.maxPrice != null) ret.basePrice = ret.maxPrice;
+      if (ret.maxPrice == null && ret.basePrice != null) ret.maxPrice = ret.basePrice;
+    }
+    return ret;
+  },
+});
+
+// Normalize pricing model when writing
+UserSchema.path('pricingModel').set(function (value: any) {
+  // `this` is the mongoose document; basePrice/maxPrice may be set separately
+  const normalized = normalizePricingModel(value, (this as any).basePrice, (this as any).maxPrice);
+  return normalized;
+});
 
 UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });
