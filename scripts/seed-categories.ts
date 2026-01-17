@@ -432,6 +432,24 @@ const CATEGORIES = [
         isActive: true,
         sortOrder: 12,
         children: []
+      },
+      {
+        key: 'it-support',
+        name: 'IT Support',
+        nameKa: 'IT მხარდაჭერა',
+        icon: 'it-support',
+        isActive: true,
+        sortOrder: 13,
+        children: []
+      },
+      {
+        key: 'network-admin',
+        name: 'Network Administration',
+        nameKa: 'ქსელის ადმინისტრირება',
+        icon: 'network',
+        isActive: true,
+        sortOrder: 14,
+        children: []
       }
     ]
   }
