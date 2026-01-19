@@ -16,6 +16,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ChatModule } from '../chat/chat.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
+import { VerificationModule } from '../verification/verification.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
     NotificationsModule,
     forwardRef(() => ChatModule),
     PortfolioModule,
+    VerificationModule,
   ],
   controllers: [JobsController],
   providers: [JobsService, JobsTasksService, ProjectTrackingService, WorkspaceService, PollsService],

@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { User } from '../users/schemas/user.schema';
+import { SmsService } from '../verification/services/sms.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { Job, JobPropertyType, JobStatus, JobView } from './schemas/job.schema';
@@ -21,6 +22,7 @@ export class JobsService {
     @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
     @InjectModel(User.name) private userModel: Model<User>,
     private notificationsService: NotificationsService,
+    private smsService: SmsService,
   ) {}
 
   // Jobs CRUD
@@ -1372,29 +1374,60 @@ export class JobsService {
     // Get client info for notification
     const client = await this.userModel.findById(userId).select('name avatar').exec();
 
+    // Get pro users for phone numbers and preferences
+    const proUsers = await this.userModel
+      .find({ _id: { $in: newProIds.map(id => new Types.ObjectId(id)) } })
+      .select('phone notificationPreferences')
+      .exec();
+
+    // Create a map of proId -> user data
+    const proUserMap = new Map(
+      proUsers.map(u => [u._id.toString(), { phone: u.phone, prefs: u.notificationPreferences }])
+    );
+
     // Add new pros to invitedPros array
     await this.jobModel.findByIdAndUpdate(jobId, {
       $addToSet: { invitedPros: { $each: newProIds.map(id => new Types.ObjectId(id)) } },
     });
 
-    // Send notifications to each invited pro
+    // Send notifications to each invited pro (using notify() for real-time push)
     for (const proId of newProIds) {
-      await this.notificationsService.create({
-        userId: proId,
-        type: NotificationType.JOB_INVITATION,
-        title: 'You have been invited to a job',
-        message: `${client?.name || 'A client'} has invited you to submit a proposal for "${job.title}"`,
-        link: `/jobs/${job._id.toString()}`,
-        referenceId: job._id.toString(),
-        referenceModel: 'Job',
-        metadata: {
-          jobId: job._id.toString(),
-          jobTitle: job.title,
-          clientId: userId,
-          clientName: client?.name,
-          clientAvatar: client?.avatar,
+      // In-app notification
+      await this.notificationsService.notify(
+        proId,
+        NotificationType.JOB_INVITATION,
+        'You have been invited to a job',
+        `${client?.name || 'A client'} has invited you to submit a proposal for "${job.title}"`,
+        {
+          link: `/jobs/${job._id.toString()}`,
+          referenceId: job._id.toString(),
+          referenceModel: 'Job',
+          metadata: {
+            jobId: job._id.toString(),
+            jobTitle: job.title,
+            clientId: userId,
+            clientName: client?.name,
+            clientAvatar: client?.avatar,
+          },
         },
-      });
+      );
+
+      // SMS notification
+      const proData = proUserMap.get(proId);
+      if (proData?.phone) {
+        // Check if SMS notifications are enabled (default to true if not set)
+        const smsEnabled = proData.prefs?.sms?.enabled !== false;
+        const smsProposals = proData.prefs?.sms?.proposals !== false;
+        
+        if (smsEnabled && smsProposals) {
+          const smsMessage = `Homico: ${client?.name || 'კლიენტმა'} გეპატიჟებათ სამუშაოზე "${job.title}". იხილეთ: homico.ge/jobs/${job._id.toString()}`;
+          try {
+            await this.smsService.sendNotificationSms(proData.phone, smsMessage);
+          } catch (error) {
+            console.error(`Failed to send SMS to pro ${proId}:`, error);
+          }
+        }
+      }
     }
 
     return { success: true, invitedCount: newProIds.length };
