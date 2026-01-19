@@ -217,6 +217,10 @@ export class Job extends Document {
 
   @Prop({ type: Number, default: 0 })
   viewCount: number;
+
+  // Professionals who have been invited to this job
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  invitedPros: Types.ObjectId[];
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
