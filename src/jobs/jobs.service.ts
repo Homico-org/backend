@@ -1420,7 +1420,24 @@ export class JobsService {
         const smsProposals = proData.prefs?.sms?.proposals !== false;
         
         if (smsEnabled && smsProposals) {
-          const smsMessage = `Homico: ${client?.name || 'კლიენტმა'} გეპატიჟებათ სამუშაოზე "${job.title}". იხილეთ: homico.ge/jobs/${job._id.toString()}`;
+          const jobUrl = `https://www.homico.ge/jobs/${job._id.toString()}`;
+          
+          // Build budget string
+          let budgetStr = '';
+          if (job.budgetType === 'fixed' && (job.budgetAmount || job.budgetMin)) {
+            budgetStr = `${job.budgetAmount || job.budgetMin}₾`;
+          } else if (job.budgetType === 'range' && job.budgetMin && job.budgetMax) {
+            budgetStr = `${job.budgetMin}-${job.budgetMax}₾`;
+          } else if (job.budgetType === 'per_sqm' && job.pricePerUnit) {
+            budgetStr = `${job.pricePerUnit}₾/მ²`;
+          }
+          
+          // Build SMS message with details
+          let smsMessage = `${client?.name || 'კლიენტი'} გეპატიჟებათ სამუშაოზე: "${job.title}"`;
+          if (job.location) smsMessage += `, ${job.location}`;
+          if (budgetStr) smsMessage += `, ${budgetStr}`;
+          smsMessage += `. ${jobUrl}`;
+          
           try {
             await this.smsService.sendNotificationSms(proData.phone, smsMessage);
           } catch (error) {
