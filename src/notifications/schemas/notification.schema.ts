@@ -8,6 +8,7 @@ export enum NotificationType {
   PROPOSAL_REJECTED = 'proposal_rejected',
   JOB_COMPLETED = 'job_completed',
   JOB_CANCELLED = 'job_cancelled',
+  JOB_INVITATION = 'job_invitation',
 
   // Message related
   NEW_MESSAGE = 'new_message',

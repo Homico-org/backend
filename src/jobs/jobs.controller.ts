@@ -1,32 +1,32 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   Put,
-  Patch,
-  Delete,
-  Body,
-  Param,
   Query,
-  UseGuards,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { JobsService } from './jobs.service';
-import { ProjectTrackingService } from './project-tracking.service';
-import { WorkspaceService } from './workspace.service';
-import { PollsService } from './polls.service';
-import { CreateJobDto } from './dto/create-job.dto';
-import { WorkspaceItemType, ReactionType } from './schemas/workspace.schema';
-import { CreateProposalDto } from './dto/create-proposal.dto';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
-import { JobStatus, JobPropertyType } from './schemas/job.schema';
+import { CreateJobDto } from './dto/create-job.dto';
+import { CreateProposalDto } from './dto/create-proposal.dto';
+import { JobsService } from './jobs.service';
+import { PollsService } from './polls.service';
+import { ProjectTrackingService } from './project-tracking.service';
+import { JobPropertyType, JobStatus } from './schemas/job.schema';
 import { ProjectStage } from './schemas/project-tracking.schema';
+import { ReactionType, WorkspaceItemType } from './schemas/workspace.schema';
+import { WorkspaceService } from './workspace.service';
 
 @ApiTags('Jobs')
 @Controller('jobs')
@@ -136,7 +136,6 @@ export class JobsController {
       deadline,
       savedOnly: savedOnly === 'true',
       userId: user?.userId,
-      userRole: user?.role,
     });
   }
 
@@ -713,6 +712,30 @@ export class JobsController {
     @Body() body: { sectionIds: string[] },
   ) {
     return this.workspaceService.reorderSections(jobId, user.userId, body.sectionIds);
+  }
+
+  // ============== JOB INVITATION ROUTES ==============
+
+  @Get(':jobId/invited-pros')
+  @ApiOperation({ summary: 'Get list of already invited pros for a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of invited pro IDs' })
+  @UseGuards(JwtAuthGuard)
+  getInvitedPros(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.getInvitedPros(jobId, user.userId);
+  }
+
+  @Post(':jobId/invite')
+  @ApiOperation({ summary: 'Invite professionals to a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Professionals invited successfully' })
+  @UseGuards(JwtAuthGuard)
+  invitePros(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() body: { proIds: string[] },
+  ) {
+    return this.jobsService.invitePros(jobId, user.userId, body.proIds);
   }
 
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============

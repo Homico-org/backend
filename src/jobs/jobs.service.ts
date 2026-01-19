@@ -69,7 +69,6 @@ export class JobsService {
     deadline?: string;
     savedOnly?: boolean;
     userId?: string;
-    userRole?: string;
   }): Promise<{
     data: Job[];
     pagination: {
@@ -84,13 +83,12 @@ export class JobsService {
     const limit = filters?.limit || 10;
     const skip = (page - 1) * limit;
 
-    const isAdmin = filters?.userRole === 'admin';
     const query: any = {};
-    // By default, the public browse should show OPEN jobs.
-    // Exception: admins can browse ALL jobs unless an explicit status is provided.
+    // By default, the public browse should show OPEN jobs only.
+    // Admins can see all jobs in the admin panel, but browse page shows only open jobs.
     if (filters?.status) {
       query.status = filters.status;
-    } else if (!isAdmin) {
+    } else {
       query.status = JobStatus.OPEN;
     }
     const andConditions: any[] = [];
@@ -1323,5 +1321,82 @@ export class JobsService {
     );
 
     return result.modifiedCount;
+  }
+
+  // Get list of already invited pros for a job
+  async getInvitedPros(jobId: string, userId: string): Promise<{ id: string }[]> {
+    const job = await this.jobModel.findById(jobId).select('clientId invitedPros').exec();
+    
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // Only job owner can see invited pros
+    if (job.clientId.toString() !== userId) {
+      throw new ForbiddenException('Only job owner can view invited professionals');
+    }
+
+    const invitedPros = job.invitedPros || [];
+    return invitedPros.map(proId => ({ id: proId.toString() }));
+  }
+
+  // Invite professionals to a job
+  async invitePros(
+    jobId: string,
+    userId: string,
+    proIds: string[],
+  ): Promise<{ success: boolean; invitedCount: number }> {
+    const job = await this.jobModel.findById(jobId).exec();
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    // Only job owner can invite pros
+    if (job.clientId.toString() !== userId) {
+      throw new ForbiddenException('Only job owner can invite professionals');
+    }
+
+    // Get existing invited pros to avoid duplicates
+    const existingInvitedIds = new Set(
+      (job.invitedPros || []).map(id => id.toString())
+    );
+
+    // Filter out already invited pros
+    const newProIds = proIds.filter(id => !existingInvitedIds.has(id));
+
+    if (newProIds.length === 0) {
+      return { success: true, invitedCount: 0 };
+    }
+
+    // Get client info for notification
+    const client = await this.userModel.findById(userId).select('name avatar').exec();
+
+    // Add new pros to invitedPros array
+    await this.jobModel.findByIdAndUpdate(jobId, {
+      $addToSet: { invitedPros: { $each: newProIds.map(id => new Types.ObjectId(id)) } },
+    });
+
+    // Send notifications to each invited pro
+    for (const proId of newProIds) {
+      await this.notificationsService.create({
+        userId: proId,
+        type: NotificationType.JOB_INVITATION,
+        title: 'You have been invited to a job',
+        message: `${client?.name || 'A client'} has invited you to submit a proposal for "${job.title}"`,
+        link: `/jobs/${job._id.toString()}`,
+        referenceId: job._id.toString(),
+        referenceModel: 'Job',
+        metadata: {
+          jobId: job._id.toString(),
+          jobTitle: job.title,
+          clientId: userId,
+          clientName: client?.name,
+          clientAvatar: client?.avatar,
+        },
+      });
+    }
+
+    return { success: true, invitedCount: newProIds.length };
   }
 }
