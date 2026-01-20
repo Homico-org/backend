@@ -383,12 +383,14 @@ export class UsersController {
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-indexed)' })
   @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
   @ApiQuery({ name: 'companyIds', required: false, description: 'Comma-separated company IDs to filter by' })
+  @ApiQuery({ name: 'subcategories', required: false, description: 'Comma-separated subcategory keys' })
   @ApiResponse({ status: 200, description: 'Paginated list of pro users' })
   @UseGuards(OptionalJwtAuthGuard)
   findAllPros(
     @CurrentUser() user: any,
     @Query('category') category?: string,
     @Query('subcategory') subcategory?: string,
+    @Query('subcategories') subcategories?: string,
     @Query('serviceArea') serviceArea?: string,
     @Query('minRating') minRating?: string,
     @Query('minPrice') minPrice?: string,
@@ -402,6 +404,7 @@ export class UsersController {
     return this.usersService.findAllPros({
       category,
       subcategory,
+      subcategories,
       serviceArea,
       minRating: minRating ? parseFloat(minRating) : undefined,
       minPrice: minPrice ? parseFloat(minPrice) : undefined,

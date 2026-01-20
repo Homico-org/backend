@@ -813,6 +813,7 @@ export class UsersService {
   async findAllPros(filters?: {
     category?: string;
     subcategory?: string;
+    subcategories?: string; // comma-separated list of subcategories
     serviceArea?: string;
     minRating?: number;
     minPrice?: number;
@@ -913,7 +914,13 @@ export class UsersService {
       query.categories = filters.category;
     }
 
-    if (filters?.subcategory) {
+    // Handle multiple subcategories (comma-separated) or single subcategory
+    if (filters?.subcategories) {
+      const subcatArray = filters.subcategories.split(',').map(s => s.trim()).filter(Boolean);
+      if (subcatArray.length > 0) {
+        query.subcategories = { $in: subcatArray };
+      }
+    } else if (filters?.subcategory) {
       query.subcategories = filters.subcategory;
     }
 
