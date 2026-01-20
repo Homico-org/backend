@@ -1087,16 +1087,23 @@ export class UsersService {
     return user;
   }
 
-  async updateRating(userId: string, newRating: number): Promise<void> {
+  async updateRating(userId: string, newRating: number, weight: number = 1): Promise<void> {
     const user = await this.findById(userId);
-    const totalReviews = (user.totalReviews || 0) + 1;
+    const currentTotalReviews = user.totalReviews || 0;
     const currentRating = user.avgRating || 0;
-    const avgRating =
-      (currentRating * (user.totalReviews || 0) + newRating) / totalReviews;
+    
+    // Weight affects how much this review contributes to the average
+    // weight=1 for Homico reviews, weight=0.7 for external reviews
+    const weightedNewRating = newRating * weight;
+    const totalWeight = currentTotalReviews + weight;
+    
+    const avgRating = totalWeight > 0
+      ? (currentRating * currentTotalReviews + weightedNewRating) / totalWeight
+      : newRating;
 
     await this.userModel.findByIdAndUpdate(userId, {
       avgRating,
-      totalReviews,
+      totalReviews: currentTotalReviews + 1,
     });
   }
 
