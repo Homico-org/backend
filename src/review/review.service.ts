@@ -58,11 +58,11 @@ export class ReviewService {
 
   async findByPro(proId: string, limit = 20, skip = 0): Promise<Review[]> {
     return this.reviewModel
-      .find({ proId })
+      .find({ proId: new Types.ObjectId(proId) })
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
-      .populate('clientId', 'name avatar')
+      .populate('clientId', '_id name avatar')
       .exec();
   }
 
@@ -77,7 +77,7 @@ export class ReviewService {
   async findOne(id: string): Promise<Review> {
     const review = await this.reviewModel
       .findById(id)
-      .populate('clientId', 'name avatar')
+      .populate('clientId', '_id name avatar')
       .populate('proId')
       .exec();
 
