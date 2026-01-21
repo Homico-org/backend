@@ -179,6 +179,24 @@ export class ReviewService {
       phone?: string; // For clients who need to verify their phone
     },
   ): Promise<Review> {
+    // Monthly limit: authenticated users can submit max 5 external reviews per month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const externalReviewsThisMonth = await this.reviewModel.countDocuments({
+      clientId: new Types.ObjectId(reviewerId),
+      source: ReviewSource.EXTERNAL,
+      createdAt: { $gte: startOfMonth },
+    });
+
+    const MAX_EXTERNAL_REVIEWS_PER_MONTH = 5;
+    if (externalReviewsThisMonth >= MAX_EXTERNAL_REVIEWS_PER_MONTH) {
+      throw new ForbiddenException(
+        `Monthly external review limit reached. You can submit ${MAX_EXTERNAL_REVIEWS_PER_MONTH} external reviews per month.`,
+      );
+    }
+
     // Check if pro exists
     const pro = await this.usersService.findById(proId);
     if (!pro) {

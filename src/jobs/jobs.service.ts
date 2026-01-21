@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { User } from '../users/schemas/user.schema';
+import { UserRole } from '../users/schemas/user.schema';
 import { SmsService } from '../verification/services/sms.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
@@ -1371,8 +1372,28 @@ export class JobsService {
       return { success: true, invitedCount: 0 };
     }
 
-    // Get client info for notification
-    const client = await this.userModel.findById(userId).select('name avatar').exec();
+    // Get inviter info for notification + role-based limits
+    const client = await this.userModel.findById(userId).select('name avatar role').exec();
+
+    // Monthly limit: PRO users can invite at most 5 pros per month (start-of-month window)
+    if (client?.role === UserRole.PRO) {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const sentThisMonth = await this.notificationsService.countJobInvitationsSentByUser(
+        userId,
+        startOfMonth,
+      );
+
+      const MAX_INVITES_PER_MONTH = 5;
+      if (sentThisMonth + newProIds.length > MAX_INVITES_PER_MONTH) {
+        const remaining = Math.max(0, MAX_INVITES_PER_MONTH - sentThisMonth);
+        throw new ForbiddenException(
+          `Monthly invite limit reached. You can invite ${MAX_INVITES_PER_MONTH} pros per month. Remaining: ${remaining}`,
+        );
+      }
+    }
 
     // Get pro users for phone numbers and preferences
     const proUsers = await this.userModel

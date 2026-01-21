@@ -143,6 +143,18 @@ export class NotificationsService {
     );
   }
 
+  /**
+   * Count job invitation notifications created since a given date for a specific inviter (job owner).
+   * Note: invitations are stored as notifications per invited pro, with metadata.clientId set.
+   */
+  async countJobInvitationsSentByUser(userId: string, since: Date): Promise<number> {
+    return this.notificationModel.countDocuments({
+      type: NotificationType.JOB_INVITATION,
+      'metadata.clientId': userId,
+      createdAt: { $gte: since },
+    });
+  }
+
   // Broadcast system announcement to all users
   async broadcastAnnouncement(
     title: string,
