@@ -1169,7 +1169,7 @@ export class UsersService {
     if (proData.yearsExperience !== undefined)
       updateData.yearsExperience = proData.yearsExperience;
     if (proData.avatar !== undefined) updateData.avatar = proData.avatar;
-    // Pricing model: only allow fixed | range | byAgreement (normalize legacy values)
+    // Pricing model: allow fixed | range | byAgreement | per_sqm (normalize legacy values)
     if (proData.pricingModel !== undefined) {
       const incoming = proData.pricingModel;
       const base = proData.basePrice;
@@ -1178,9 +1178,11 @@ export class UsersService {
       const hasBase = typeof base === 'number' ? base > 0 : base !== null && base !== undefined && Number(base) > 0;
       const hasMax = typeof max === 'number' ? max > 0 : max !== null && max !== undefined && Number(max) > 0;
 
-      let normalized: 'fixed' | 'range' | 'byAgreement' = 'byAgreement';
+      let normalized: 'fixed' | 'range' | 'byAgreement' | 'per_sqm' = 'byAgreement';
       if (incoming === 'byAgreement' || incoming === 'hourly') {
         normalized = 'byAgreement';
+      } else if (incoming === 'per_sqm' || incoming === 'sqm') {
+        normalized = (hasBase || hasMax) ? 'per_sqm' : 'byAgreement';
       } else if (incoming === 'range') {
         normalized = (hasBase && hasMax) ? 'range' : (hasBase || hasMax) ? 'fixed' : 'byAgreement';
       } else if (incoming === 'fixed') {
@@ -1209,6 +1211,12 @@ export class UsersService {
         } else if (hasBase) {
           updateData.maxPrice = Number(base);
         }
+      }
+
+      // If per_sqm, ensure maxPrice doesn't linger
+      if (normalized === 'per_sqm') {
+        unsetData.maxPrice = '';
+        delete updateData.maxPrice;
       }
     }
 
