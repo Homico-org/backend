@@ -18,6 +18,7 @@ export enum PricingModel {
   FIXED = 'fixed',
   RANGE = 'range',
   BY_AGREEMENT = 'byAgreement',
+  PER_SQUARE_METER = 'per_sqm',
 
   // Legacy values (backward compatibility; will be normalized on read/write)
   HOURLY = 'hourly',
@@ -424,7 +425,7 @@ function normalizePricingModel(
   pricingModel: any,
   basePrice: any,
   maxPrice: any,
-): 'fixed' | 'range' | 'byAgreement' {
+): 'fixed' | 'range' | 'byAgreement' | 'per_sqm' {
   // Explicit byAgreement / legacy hourly => byAgreement
   if (pricingModel === 'byAgreement' || pricingModel === 'hourly') return 'byAgreement';
 
@@ -433,6 +434,11 @@ function normalizePricingModel(
 
   const hasBase = base !== null && !Number.isNaN(base) && base > 0;
   const hasMax = max !== null && !Number.isNaN(max) && max > 0;
+
+  // Per-square-meter pricing (new canonical or legacy sqm)
+  if (pricingModel === 'per_sqm' || pricingModel === 'sqm') {
+    return (hasBase || hasMax) ? 'per_sqm' : 'byAgreement';
+  }
 
   // If we have both and they differ, it's a range
   if (hasBase && hasMax && max !== base) return 'range';
@@ -451,6 +457,10 @@ UserSchema.set('toJSON', {
     ret.pricingModel = normalized;
     if (normalized === 'byAgreement') {
       delete ret.basePrice;
+      delete ret.maxPrice;
+    } else if (normalized === 'per_sqm') {
+      // Per m² uses a single numeric price (basePrice). Ensure maxPrice doesn't linger.
+      if (ret.basePrice == null && ret.maxPrice != null) ret.basePrice = ret.maxPrice;
       delete ret.maxPrice;
     } else if (normalized === 'fixed') {
       // Collapse to a single price when possible
