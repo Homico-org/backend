@@ -5,6 +5,7 @@ import { MessageController } from './message.controller';
 import { Message, MessageSchema } from './schemas/message.schema';
 import { ConversationModule } from '../conversation/conversation.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { VerificationModule } from '../verification/verification.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       { name: User.name, schema: UserSchema },
     ]),
     ConversationModule,
+    VerificationModule,
   ],
   controllers: [MessageController],
   providers: [MessageService],
