@@ -6,6 +6,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { ConversationService } from '../conversation/conversation.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { User } from '../users/schemas/user.schema';
+import { SmsService } from '../verification/services/sms.service';
 
 @Injectable()
 export class MessageService {
@@ -14,6 +15,7 @@ export class MessageService {
     @InjectModel(User.name) private userModel: Model<User>,
     private conversationService: ConversationService,
     private chatGateway: ChatGateway,
+    private smsService: SmsService,
   ) {}
 
   async create(senderId: string, senderRole: string, createMessageDto: CreateMessageDto): Promise<Message> {
@@ -63,6 +65,43 @@ export class MessageService {
           lastMessage: createMessageDto.content.substring(0, 100),
           lastMessageAt: new Date(),
         });
+
+        // SMS notification for new messages (if enabled)
+        try {
+          const recipient = await this.userModel
+            .findById(recipientUserId)
+            .select('phone notificationPreferences')
+            .lean();
+
+          const phone = (recipient as any)?.phone as string | undefined;
+          const prefs = (recipient as any)?.notificationPreferences as any | undefined;
+          const smsEnabled = prefs?.sms?.enabled !== false;
+          const smsMessages = prefs?.sms?.messages !== false;
+
+          if (phone && smsEnabled && smsMessages) {
+            const sender = await this.userModel
+              .findById(senderId)
+              .select('name')
+              .lean();
+            const senderName = (sender as any)?.name || 'Homico';
+
+            const snippet = (createMessageDto.content || '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 80);
+
+            const url = `https://www.homico.ge/messages?recipient=${senderId}`;
+            const smsText = snippet
+              ? `${senderName}: "${snippet}" ${url}`
+              : `${senderName} sent you a message on Homico. ${url}`;
+
+            await this.smsService.sendNotificationSms(phone, smsText);
+          }
+        } catch (e) {
+          // Don't fail message sending if SMS fails
+          // eslint-disable-next-line no-console
+          console.error('Failed to send message SMS notification:', e);
+        }
       }
     }
 
