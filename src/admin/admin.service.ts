@@ -620,6 +620,7 @@ export class AdminService {
     }
 
     user.isAdminApproved = true;
+    user.isProfileCompleted = true; // Admin approval means profile is complete
     user.adminApprovedAt = new Date();
     user.adminApprovedBy = adminId;
     user.adminRejectionReason = undefined;
