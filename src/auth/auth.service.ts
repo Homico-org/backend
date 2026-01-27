@@ -53,7 +53,7 @@ export class AuthService {
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
         isProfileCompleted: user.isProfileCompleted ?? false,
-        isAdminApproved: user.isAdminApproved ?? false,
+        verificationStatus: user.verificationStatus || 'pending',
       },
     };
   }
@@ -120,7 +120,7 @@ export class AuthService {
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
         isProfileCompleted: user.isProfileCompleted ?? false,
-        isAdminApproved: user.isAdminApproved ?? false,
+        verificationStatus: user.verificationStatus || 'pending',
       },
     };
   }
