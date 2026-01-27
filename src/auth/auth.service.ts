@@ -53,6 +53,7 @@ export class AuthService {
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
         isProfileCompleted: user.isProfileCompleted ?? false,
+        isAdminApproved: user.isAdminApproved ?? false,
       },
     };
   }
@@ -119,6 +120,7 @@ export class AuthService {
         accountType: user.accountType || 'individual',
         companyName: user.companyName,
         isProfileCompleted: user.isProfileCompleted ?? false,
+        isAdminApproved: user.isAdminApproved ?? false,
       },
     };
   }
