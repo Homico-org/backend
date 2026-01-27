@@ -621,6 +621,7 @@ export class AdminService {
 
     user.isAdminApproved = true;
     user.isProfileCompleted = true; // Admin approval means profile is complete
+    user.verificationStatus = 'verified'; // Admin approval = verified status
     user.adminApprovedAt = new Date();
     user.adminApprovedBy = adminId;
     user.adminRejectionReason = undefined;
