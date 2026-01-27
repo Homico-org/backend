@@ -199,6 +199,15 @@ const CATEGORIES = [
         isActive: true,
         sortOrder: 7,
         children: []
+      },
+      {
+        key: 'iron',
+        name: 'Ironwork',
+        nameKa: 'რკინის სამუშაოები',
+        icon: 'iron',
+        isActive: true,
+        sortOrder: 8,
+        children: []
       }
     ]
   },
