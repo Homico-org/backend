@@ -38,11 +38,11 @@ export class JobsService {
       clientId: new Types.ObjectId(clientId),
       title: createJobDto.title,
       createdAt: { $gte: recentDuplicateCheck },
-    }).lean().exec();
+    }).exec();
 
     if (existingJob) {
       // Return the existing job instead of creating a duplicate
-      return existingJob as Job;
+      return existingJob;
     }
 
     // Set expiration date to 30 days from now
