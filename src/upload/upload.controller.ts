@@ -47,12 +47,12 @@ export class UploadController {
       },
     },
   })
-  uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
     try {
-      return this.uploadService.getFileInfo(file);
+      return await this.uploadService.getFileInfo(file);
     } catch (error) {
       this.logger.error('Upload failed:', error);
       throw new InternalServerErrorException('Failed to process uploaded file');
@@ -74,11 +74,11 @@ export class UploadController {
       },
     },
   })
-  uploadFilePublic(@UploadedFile() file: Express.Multer.File) {
+  async uploadFilePublic(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.uploadService.getFileInfo(file);
+    return await this.uploadService.getFileInfo(file);
   }
 
   @Post('avatar')
@@ -96,7 +96,7 @@ export class UploadController {
       },
     },
   })
-  uploadAvatar(@UploadedFile() file: Express.Multer.File) {
+  async uploadAvatar(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
@@ -104,7 +104,7 @@ export class UploadController {
     if (!file.mimetype.startsWith('image/')) {
       throw new BadRequestException('File must be an image');
     }
-    return this.uploadService.getFileInfo(file);
+    return await this.uploadService.getFileInfo(file);
   }
 
   @Post('multiple')
@@ -127,11 +127,11 @@ export class UploadController {
       },
     },
   })
-  uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[]) {
+  async uploadMultipleFiles(@UploadedFiles() files: Express.Multer.File[]) {
     if (!files || files.length === 0) {
       throw new BadRequestException('No files uploaded');
     }
-    return files.map((file) => this.uploadService.getFileInfo(file));
+    return await Promise.all(files.map((file) => this.uploadService.getFileInfo(file)));
   }
 
   @Delete(':filename')

@@ -683,6 +683,17 @@ export class JobsService {
     proProfileId: string,
     createProposalDto: CreateProposalDto,
   ): Promise<Proposal> {
+    // Check if pro is verified
+    const proUser = await this.userModel.findById(proId).select('verificationStatus isAdminApproved').exec();
+    if (!proUser) {
+      throw new NotFoundException('მომხმარებელი ვერ მოიძებნა');
+    }
+
+    // Only verified professionals can send proposals
+    if (proUser.verificationStatus !== 'verified') {
+      throw new ForbiddenException('წინადადების გასაგზავნად საჭიროა პროფილის ვერიფიკაცია. გთხოვთ გაიაროთ ვერიფიკაცია პარამეტრებში.');
+    }
+
     // Check if job exists
     const job = await this.jobModel.findById(jobId);
     if (!job) {

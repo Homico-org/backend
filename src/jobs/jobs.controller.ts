@@ -20,7 +20,9 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
+import { CreateJobCommentDto, UpdateJobCommentDto, MarkInterestingDto } from './dto/job-comment.dto';
 import { JobsService } from './jobs.service';
+import { JobCommentsService } from './job-comments.service';
 import { PollsService } from './polls.service';
 import { ProjectTrackingService } from './project-tracking.service';
 import { JobPropertyType, JobStatus } from './schemas/job.schema';
@@ -33,6 +35,7 @@ import { WorkspaceService } from './workspace.service';
 export class JobsController {
   constructor(
     private readonly jobsService: JobsService,
+    private readonly jobCommentsService: JobCommentsService,
     private readonly projectTrackingService: ProjectTrackingService,
     private readonly workspaceService: WorkspaceService,
     private readonly pollsService: PollsService,
@@ -937,5 +940,74 @@ export class JobsController {
   async deletePoll(@Param('pollId') pollId: string, @CurrentUser() user: any) {
     await this.pollsService.delete(pollId, user.userId);
     return { success: true };
+  }
+
+  // ============== JOB COMMENTS (Interest Board) ==============
+
+  @Get(':jobId/comments')
+  @ApiOperation({ summary: 'Get all comments for a job' })
+  @ApiResponse({ status: 200, description: 'List of comments with nested replies' })
+  @UseGuards(OptionalJwtAuthGuard)
+  async getJobComments(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobCommentsService.getJobComments(jobId, user?.userId);
+  }
+
+  @Post(':jobId/comments')
+  @ApiOperation({ summary: 'Create a comment on a job (express interest)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Comment created successfully' })
+  @UseGuards(JwtAuthGuard)
+  async createJobComment(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+    @Body() dto: CreateJobCommentDto,
+  ) {
+    return this.jobCommentsService.createComment(jobId, user.userId, user.role, dto);
+  }
+
+  @Get(':jobId/comments/has-commented')
+  @ApiOperation({ summary: 'Check if current user has commented on a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Returns whether user has commented' })
+  @UseGuards(JwtAuthGuard)
+  async hasUserCommented(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    const hasCommented = await this.jobCommentsService.hasUserCommented(jobId, user.userId);
+    return { hasCommented };
+  }
+
+  @Patch('comments/:commentId')
+  @ApiOperation({ summary: 'Update a comment (author only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Comment updated successfully' })
+  @UseGuards(JwtAuthGuard)
+  async updateJobComment(
+    @Param('commentId') commentId: string,
+    @CurrentUser() user: any,
+    @Body() dto: UpdateJobCommentDto,
+  ) {
+    return this.jobCommentsService.updateComment(commentId, user.userId, dto);
+  }
+
+  @Delete('comments/:commentId')
+  @ApiOperation({ summary: 'Delete a comment (author or job owner only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Comment deleted successfully' })
+  @UseGuards(JwtAuthGuard)
+  async deleteJobComment(@Param('commentId') commentId: string, @CurrentUser() user: any) {
+    await this.jobCommentsService.deleteComment(commentId, user.userId);
+    return { success: true };
+  }
+
+  @Post('comments/:commentId/mark-interesting')
+  @ApiOperation({ summary: 'Mark/unmark a professional as interesting (job owner only)' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Professional marked as interesting' })
+  @UseGuards(JwtAuthGuard)
+  async markAsInteresting(
+    @Param('commentId') commentId: string,
+    @CurrentUser() user: any,
+    @Body() dto: MarkInterestingDto,
+  ) {
+    return this.jobCommentsService.markAsInteresting(commentId, user.userId, dto.isInteresting);
   }
 }
