@@ -32,6 +32,7 @@ import { UploadService } from './upload.service';
             cloudinary: cloudinary,
             params: async (req, file) => {
               const isVideo = file.mimetype.startsWith('video/');
+              const isImage = file.mimetype.startsWith('image/');
               const isDocument = [
                 'application/pdf',
                 'application/msword',
@@ -40,18 +41,38 @@ import { UploadService } from './upload.service';
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'text/plain',
               ].includes(file.mimetype);
-              
+
               // Determine resource type: video, raw (for documents), or image
               let resourceType: 'video' | 'raw' | 'image' = 'image';
               if (isVideo) resourceType = 'video';
               if (isDocument) resourceType = 'raw';
-              
-              return {
+
+              // Base params
+              const params: Record<string, unknown> = {
                 folder: 'homico',
                 resource_type: resourceType,
                 public_id: uuidv4(),
                 allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
               };
+
+              // Add image optimization for images
+              if (isImage) {
+                params.transformation = [
+                  { quality: 'auto:good', fetch_format: 'auto' }
+                ];
+                // Generate optimized versions immediately (eager transformations)
+                params.eager = [
+                  // Job card size
+                  { width: 600, height: 375, crop: 'fill', quality: 'auto:good', fetch_format: 'auto' },
+                  // Thumbnail size
+                  { width: 300, height: 188, crop: 'fill', quality: 'auto:good', fetch_format: 'auto' },
+                  // Avatar sizes
+                  { width: 100, height: 100, crop: 'fill', gravity: 'face', quality: 'auto:good', fetch_format: 'auto' },
+                ];
+                params.eager_async = true; // Generate in background
+              }
+
+              return params;
             },
           });
 

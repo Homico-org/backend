@@ -48,6 +48,18 @@ import { LoggerModule } from './common/logger';
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
+      serveStaticOptions: {
+        // Cache images for 1 year (immutable content-addressed files)
+        maxAge: 31536000000, // 1 year in milliseconds
+        immutable: true,
+        // Set proper headers for caching
+        setHeaders: (res, path) => {
+          // Add cache headers for all static files
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          // Add Vary header for proper CDN caching
+          res.setHeader('Vary', 'Accept-Encoding');
+        },
+      },
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
