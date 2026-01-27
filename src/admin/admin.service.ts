@@ -679,4 +679,33 @@ export class AdminService {
 
     return user;
   }
+
+  // ============== MIGRATIONS ==============
+
+  async syncVerificationStatus(): Promise<{ updated: number; users: string[] }> {
+    // Find all users who have isAdminApproved=true but verificationStatus is not 'verified'
+    const usersToUpdate = await this.userModel.find({
+      isAdminApproved: true,
+      verificationStatus: { $ne: 'verified' },
+    }).select('_id name email');
+
+    const userIds = usersToUpdate.map(u => u._id.toString());
+    const userNames = usersToUpdate.map(u => `${u.name} (${u.email})`);
+
+    // Update all matching users
+    const result = await this.userModel.updateMany(
+      {
+        isAdminApproved: true,
+        verificationStatus: { $ne: 'verified' },
+      },
+      {
+        $set: { verificationStatus: 'verified' },
+      },
+    );
+
+    return {
+      updated: result.modifiedCount,
+      users: userNames,
+    };
+  }
 }

@@ -289,4 +289,13 @@ export class AdminController {
     const adminId = req.user?.id || req.user?._id;
     return this.adminService.rejectPro(proId, adminId, reason);
   }
+
+  // ============== MIGRATIONS ==============
+
+  @Patch('migrate/sync-verification-status')
+  @ApiOperation({ summary: 'Sync verificationStatus for all previously approved users' })
+  @ApiResponse({ status: 200, description: 'Migration completed successfully' })
+  async syncVerificationStatus() {
+    return this.adminService.syncVerificationStatus();
+  }
 }
