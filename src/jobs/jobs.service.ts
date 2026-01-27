@@ -30,6 +30,21 @@ export class JobsService {
   async createJob(clientId: string, createJobDto: CreateJobDto): Promise<Job> {
     const { Types } = require('mongoose');
 
+    // Prevent duplicate job creation within 30 seconds (same user, same title)
+    const recentDuplicateCheck = new Date();
+    recentDuplicateCheck.setSeconds(recentDuplicateCheck.getSeconds() - 30);
+
+    const existingJob = await this.jobModel.findOne({
+      clientId: new Types.ObjectId(clientId),
+      title: createJobDto.title,
+      createdAt: { $gte: recentDuplicateCheck },
+    }).exec();
+
+    if (existingJob) {
+      // Return the existing job instead of creating a duplicate
+      return existingJob;
+    }
+
     // Set expiration date to 30 days from now
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
