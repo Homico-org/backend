@@ -894,14 +894,8 @@ export class UsersService {
             },
           ],
         },
-        // Only show admin-approved professionals
-        {
-          $or: [
-            { isAdminApproved: true },
-            // For backwards compatibility: show existing pros who don't have this field yet
-            { isAdminApproved: { $exists: false } },
-          ],
-        },
+        // Only show verified professionals
+        { verificationStatus: 'verified' },
       ],
     };
 

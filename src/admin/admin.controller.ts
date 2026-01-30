@@ -290,6 +290,19 @@ export class AdminController {
     return this.adminService.rejectPro(proId, adminId, reason);
   }
 
+  @Patch('pros/:id/verification')
+  @ApiOperation({ summary: 'Update professional verification status and notes' })
+  @ApiResponse({ status: 200, description: 'Verification status updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async updateVerification(
+    @Param('id') proId: string,
+    @Body() body: { status: string; notes?: string; notifyUser?: boolean },
+    @Req() req: any,
+  ) {
+    const adminId = req.user?.id || req.user?._id;
+    return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
+  }
+
   // ============== MIGRATIONS ==============
 
   @Patch('migrate/sync-verification-status')

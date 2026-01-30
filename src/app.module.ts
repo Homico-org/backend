@@ -26,6 +26,7 @@ import { LikesModule } from './likes/likes.module';
 import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
 import { LoggerModule } from './common/logger';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { LoggerModule } from './common/logger';
     FeedModule,
     ChatModule,
     LoggerModule,
+    AiModule,
   ],
 })
 export class AppModule {}

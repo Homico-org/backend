@@ -97,7 +97,7 @@ export class FeedService {
     // Build query for pro users with portfolioProjects
     const proUserQuery: any = {
       role: 'pro',
-      isAdminApproved: true, // Only show projects from approved pros
+      verificationStatus: 'verified',
       'portfolioProjects.0': { $exists: true }, // Has at least one portfolio project
     };
     if (category) {
@@ -132,8 +132,8 @@ export class FeedService {
         .sort({ createdAt: -1 })
         .populate({
           path: 'proId',
-          select: 'name title bio avgRating avatar categories isAdminApproved',
-          match: { isAdminApproved: true }, // Only populate if pro is approved
+          select: 'name title bio avgRating avatar categories verificationStatus',
+          match: { verificationStatus: 'verified' },
         })
         .lean(),
       this.userModel
@@ -390,7 +390,6 @@ export class FeedService {
 
     const query: any = {
       role: 'pro',
-      isAdminApproved: true, // Only show approved pros
       verificationStatus: 'verified',
       status: 'active',
     };

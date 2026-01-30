@@ -1,12 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
-import { User } from '../users/schemas/user.schema';
-import { Job } from '../jobs/schemas/job.schema';
-import { Proposal } from '../jobs/schemas/proposal.schema';
-import { SupportTicket } from '../support/schemas/support-ticket.schema';
-import { Notification } from '../notifications/schemas/notification.schema';
-import { SmsService } from '../verification/services/sms.service';
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { FilterQuery, Model } from "mongoose";
+import { Job } from "../jobs/schemas/job.schema";
+import { Proposal } from "../jobs/schemas/proposal.schema";
+import { Notification } from "../notifications/schemas/notification.schema";
+import { SupportTicket } from "../support/schemas/support-ticket.schema";
+import { User } from "../users/schemas/user.schema";
+import { SmsService } from "../verification/services/sms.service";
 
 interface PaginationOptions {
   page: number;
@@ -28,7 +28,7 @@ interface ReportListOptions extends PaginationOptions {
 }
 
 interface PendingProsOptions extends PaginationOptions {
-  status?: 'pending' | 'approved' | 'rejected' | 'all';
+  status?: "pending" | "approved" | "rejected" | "all";
 }
 
 @Injectable()
@@ -38,7 +38,8 @@ export class AdminService {
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
-    @InjectModel(Notification.name) private notificationModel: Model<Notification>,
+    @InjectModel(Notification.name)
+    private notificationModel: Model<Notification>,
     private readonly smsService: SmsService,
   ) {}
 
@@ -52,13 +53,13 @@ export class AdminService {
 
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
       ];
     }
 
-    if (role && role !== 'all') {
+    if (role && role !== "all") {
       query.role = role;
     }
 
@@ -68,7 +69,9 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('name email phone role avatar city isActive createdAt lastLoginAt verificationStatus')
+        .select(
+          "name email phone role avatar city isActive createdAt lastLoginAt verificationStatus",
+        )
         .lean(),
       this.userModel.countDocuments(query),
     ]);
@@ -76,7 +79,7 @@ export class AdminService {
     // Transform users for frontend compatibility
     const transformedUsers = users.map((user: any) => ({
       ...user,
-      isVerified: user.verificationStatus === 'verified',
+      isVerified: user.verificationStatus === "verified",
       isSuspended: !user.isActive,
       location: user.city,
     }));
@@ -98,13 +101,13 @@ export class AdminService {
 
     if (search) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { category: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { title: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
-    if (status && status !== 'all') {
+    if (status && status !== "all") {
       query.status = status;
     }
 
@@ -114,8 +117,10 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('clientId', 'name email avatar')
-        .select('title description category subcategory status budgetAmount budgetType location proposalCount createdAt')
+        .populate("clientId", "name email avatar")
+        .select(
+          "title description category subcategory status budgetAmount budgetType location proposalCount createdAt",
+        )
         .lean(),
       this.jobModel.countDocuments(query),
     ]);
@@ -149,23 +154,23 @@ export class AdminService {
 
     if (search) {
       query.$or = [
-        { subject: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { subject: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
-    if (status && status !== 'all') {
+    if (status && status !== "all") {
       // Map report status to ticket status
       const statusMap: Record<string, string> = {
-        pending: 'open',
-        investigating: 'in_progress',
-        resolved: 'resolved',
-        dismissed: 'closed',
+        pending: "open",
+        investigating: "in_progress",
+        resolved: "resolved",
+        dismissed: "closed",
       };
       query.status = statusMap[status] || status;
     }
 
-    if (type && type !== 'all') {
+    if (type && type !== "all") {
       query.category = type;
     }
 
@@ -175,7 +180,7 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('userId', 'name email avatar')
+        .populate("userId", "name email avatar")
         .lean(),
       this.ticketModel.countDocuments(query),
     ]);
@@ -183,11 +188,11 @@ export class AdminService {
     // Transform tickets to report format for frontend
     const reports = tickets.map((ticket: any) => ({
       _id: ticket._id,
-      type: ticket.category || 'user',
+      type: ticket.category || "user",
       reason: ticket.subject,
-      description: ticket.messages?.[0]?.content || '',
+      description: ticket.messages?.[0]?.content || "",
       status: this.mapTicketStatusToReportStatus(ticket.status),
-      priority: ticket.priority || 'medium',
+      priority: ticket.priority || "medium",
       reporterId: ticket.userId,
       createdAt: ticket.createdAt,
       updatedAt: ticket.updatedAt,
@@ -204,25 +209,25 @@ export class AdminService {
 
   private mapTicketStatusToReportStatus(ticketStatus: string): string {
     const statusMap: Record<string, string> = {
-      open: 'pending',
-      in_progress: 'investigating',
-      resolved: 'resolved',
-      closed: 'dismissed',
+      open: "pending",
+      in_progress: "investigating",
+      resolved: "resolved",
+      closed: "dismissed",
     };
-    return statusMap[ticketStatus] || 'pending';
+    return statusMap[ticketStatus] || "pending";
   }
 
   async getReportStats() {
     const [total, open, inProgress, resolved, closed] = await Promise.all([
       this.ticketModel.countDocuments(),
-      this.ticketModel.countDocuments({ status: 'open' }),
-      this.ticketModel.countDocuments({ status: 'in_progress' }),
-      this.ticketModel.countDocuments({ status: 'resolved' }),
-      this.ticketModel.countDocuments({ status: 'closed' }),
+      this.ticketModel.countDocuments({ status: "open" }),
+      this.ticketModel.countDocuments({ status: "in_progress" }),
+      this.ticketModel.countDocuments({ status: "resolved" }),
+      this.ticketModel.countDocuments({ status: "closed" }),
     ]);
 
     // Count high priority as "urgent"
-    const urgent = await this.ticketModel.countDocuments({ priority: 'high' });
+    const urgent = await this.ticketModel.countDocuments({ priority: "high" });
 
     return {
       total,
@@ -238,7 +243,11 @@ export class AdminService {
 
   async getDashboardStats() {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - 7);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -259,18 +268,20 @@ export class AdminService {
       verifiedPros,
     ] = await Promise.all([
       this.userModel.countDocuments(),
-      this.userModel.countDocuments({ role: 'client' }),
-      this.userModel.countDocuments({ role: 'pro' }),
-      this.userModel.countDocuments({ role: 'company' }),
-      this.userModel.countDocuments({ role: 'admin' }),
+      this.userModel.countDocuments({ role: "client" }),
+      this.userModel.countDocuments({ role: "pro" }),
+      this.userModel.countDocuments({ role: "company" }),
+      this.userModel.countDocuments({ role: "admin" }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfToday } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfWeek } }),
       this.userModel.countDocuments({ createdAt: { $gte: startOfMonth } }),
-      this.userModel.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
-      // "Verified pros" in product terms = admin-approved professionals (keep backward-compat with verificationStatus)
       this.userModel.countDocuments({
-        role: 'pro',
-        $or: [{ isAdminApproved: true }, { verificationStatus: 'verified' }],
+        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
+      }),
+      // "Verified pros" = professionals with verified status
+      this.userModel.countDocuments({
+        role: "pro",
+        verificationStatus: "verified",
       }),
     ]);
 
@@ -287,14 +298,16 @@ export class AdminService {
       jobsLastMonth,
     ] = await Promise.all([
       this.jobModel.countDocuments(),
-      this.jobModel.countDocuments({ status: 'open' }),
-      this.jobModel.countDocuments({ status: 'in_progress' }),
-      this.jobModel.countDocuments({ status: 'completed' }),
-      this.jobModel.countDocuments({ status: 'cancelled' }),
+      this.jobModel.countDocuments({ status: "open" }),
+      this.jobModel.countDocuments({ status: "in_progress" }),
+      this.jobModel.countDocuments({ status: "completed" }),
+      this.jobModel.countDocuments({ status: "cancelled" }),
       this.jobModel.countDocuments({ createdAt: { $gte: startOfToday } }),
       this.jobModel.countDocuments({ createdAt: { $gte: startOfWeek } }),
       this.jobModel.countDocuments({ createdAt: { $gte: startOfMonth } }),
-      this.jobModel.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
+      this.jobModel.countDocuments({
+        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
+      }),
     ]);
 
     // Proposal stats
@@ -308,9 +321,9 @@ export class AdminService {
       proposalsThisMonth,
     ] = await Promise.all([
       this.proposalModel.countDocuments(),
-      this.proposalModel.countDocuments({ status: 'pending' }),
-      this.proposalModel.countDocuments({ status: 'accepted' }),
-      this.proposalModel.countDocuments({ status: 'rejected' }),
+      this.proposalModel.countDocuments({ status: "pending" }),
+      this.proposalModel.countDocuments({ status: "accepted" }),
+      this.proposalModel.countDocuments({ status: "rejected" }),
       this.proposalModel.countDocuments({ createdAt: { $gte: startOfToday } }),
       this.proposalModel.countDocuments({ createdAt: { $gte: startOfWeek } }),
       this.proposalModel.countDocuments({ createdAt: { $gte: startOfMonth } }),
@@ -325,25 +338,32 @@ export class AdminService {
       unreadTickets,
     ] = await Promise.all([
       this.ticketModel.countDocuments(),
-      this.ticketModel.countDocuments({ status: 'open' }),
-      this.ticketModel.countDocuments({ status: 'in_progress' }),
-      this.ticketModel.countDocuments({ status: 'resolved' }),
+      this.ticketModel.countDocuments({ status: "open" }),
+      this.ticketModel.countDocuments({ status: "in_progress" }),
+      this.ticketModel.countDocuments({ status: "resolved" }),
       this.ticketModel.countDocuments({ hasUnreadUserMessages: true }),
     ]);
 
     // Calculate growth percentages
-    const userGrowth = usersLastMonth > 0
-      ? Math.round(((usersThisMonth - usersLastMonth) / usersLastMonth) * 100)
-      : usersThisMonth > 0 ? 100 : 0;
+    const userGrowth =
+      usersLastMonth > 0
+        ? Math.round(((usersThisMonth - usersLastMonth) / usersLastMonth) * 100)
+        : usersThisMonth > 0
+          ? 100
+          : 0;
 
-    const jobGrowth = jobsLastMonth > 0
-      ? Math.round(((jobsThisMonth - jobsLastMonth) / jobsLastMonth) * 100)
-      : jobsThisMonth > 0 ? 100 : 0;
+    const jobGrowth =
+      jobsLastMonth > 0
+        ? Math.round(((jobsThisMonth - jobsLastMonth) / jobsLastMonth) * 100)
+        : jobsThisMonth > 0
+          ? 100
+          : 0;
 
     // Calculate acceptance rate
-    const acceptanceRate = totalProposals > 0
-      ? Math.round((acceptedProposals / totalProposals) * 100)
-      : 0;
+    const acceptanceRate =
+      totalProposals > 0
+        ? Math.round((acceptedProposals / totalProposals) * 100)
+        : 0;
 
     return {
       users: {
@@ -396,19 +416,23 @@ export class AdminService {
       .find()
       .sort({ createdAt: -1 })
       .limit(limit)
-      .select('name email role avatar createdAt accountType companyName')
+      .select("name email role avatar createdAt accountType companyName")
       .lean();
   }
 
   async getRecentJobs(limit: number = 10) {
-    return this.jobModel
-      .find()
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate('clientId', 'name email avatar')
-      // Explicitly include _id so admin UI can link to /jobs/:id reliably
-      .select('_id title category location status budgetAmount budgetType createdAt proposalCount')
-      .lean();
+    return (
+      this.jobModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate("clientId", "name email avatar")
+        // Explicitly include _id so admin UI can link to /jobs/:id reliably
+        .select(
+          "_id title category location status budgetAmount budgetType createdAt proposalCount",
+        )
+        .lean()
+    );
   }
 
   async getRecentProposals(limit: number = 10) {
@@ -416,45 +440,67 @@ export class AdminService {
       .find()
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('proId', 'name email avatar')
-      .populate('jobId', 'title category')
-      .select('status proposedPrice createdAt')
+      .populate("proId", "name email avatar")
+      .populate("jobId", "title category")
+      .select("status proposedPrice createdAt")
       .lean();
   }
 
   async getActivityTimeline(limit: number = 20) {
-    const [recentUsers, recentJobs, recentProposals, recentTickets] = await Promise.all([
-      this.userModel.find().sort({ createdAt: -1 }).limit(limit).select('_id uid name role createdAt').lean(),
-      this.jobModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate('clientId', 'name')
-        .select('_id title category status createdAt')
-        .lean(),
-      this.proposalModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate('proId', 'name')
-        .populate('jobId', 'title category')
-        .select('_id status createdAt')
-        .lean(),
-      this.ticketModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .populate('userId', 'name')
-        .select('_id subject status createdAt')
-        .lean(),
-    ]);
+    const [recentUsers, recentJobs, recentProposals, recentTickets] =
+      await Promise.all([
+        this.userModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .select("_id uid name role createdAt")
+          .lean(),
+        this.jobModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate("clientId", "name")
+          .select("_id title category status createdAt")
+          .lean(),
+        this.proposalModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate("proId", "name")
+          .populate("jobId", "title category")
+          .select("_id status createdAt")
+          .lean(),
+        this.ticketModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate("userId", "name")
+          .select("_id subject status createdAt")
+          .lean(),
+      ]);
 
     // Combine and sort by date
     const activities = [
-      ...recentUsers.map(u => ({ type: 'user_signup', data: u, date: (u as any).createdAt })),
-      ...recentJobs.map(j => ({ type: 'job_created', data: j, date: (j as any).createdAt })),
-      ...recentProposals.map(p => ({ type: 'proposal_sent', data: p, date: (p as any).createdAt })),
-      ...recentTickets.map(t => ({ type: 'ticket_created', data: t, date: (t as any).createdAt })),
+      ...recentUsers.map((u) => ({
+        type: "user_signup",
+        data: u,
+        date: (u as any).createdAt,
+      })),
+      ...recentJobs.map((j) => ({
+        type: "job_created",
+        data: j,
+        date: (j as any).createdAt,
+      })),
+      ...recentProposals.map((p) => ({
+        type: "proposal_sent",
+        data: p,
+        date: (p as any).createdAt,
+      })),
+      ...recentTickets.map((t) => ({
+        type: "ticket_created",
+        data: t,
+        date: (t as any).createdAt,
+      })),
     ]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, limit);
@@ -464,8 +510,8 @@ export class AdminService {
 
   async getJobsByCategory() {
     return this.jobModel.aggregate([
-      { $match: { category: { $type: 'string', $ne: '' } } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $match: { category: { $type: "string", $ne: "" } } },
+      { $group: { _id: "$category", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
     ]);
@@ -473,8 +519,8 @@ export class AdminService {
 
   async getJobsByLocation() {
     return this.jobModel.aggregate([
-      { $match: { location: { $type: 'string', $ne: '' } } },
-      { $group: { _id: '$location', count: { $sum: 1 } } },
+      { $match: { location: { $type: "string", $ne: "" } } },
+      { $group: { _id: "$location", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
     ]);
@@ -482,7 +528,7 @@ export class AdminService {
 
   async getUsersByRole() {
     return this.userModel.aggregate([
-      { $group: { _id: '$role', count: { $sum: 1 } } },
+      { $group: { _id: "$role", count: { $sum: 1 } } },
     ]);
   }
 
@@ -494,7 +540,7 @@ export class AdminService {
       { $match: { createdAt: { $gte: startDate } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           count: { $sum: 1 },
         },
       },
@@ -510,7 +556,7 @@ export class AdminService {
       { $match: { createdAt: { $gte: startDate } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           count: { $sum: 1 },
         },
       },
@@ -526,7 +572,7 @@ export class AdminService {
       { $match: { createdAt: { $gte: startDate } } },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           count: { $sum: 1 },
         },
       },
@@ -537,34 +583,30 @@ export class AdminService {
   // ============== PENDING PROFESSIONALS MANAGEMENT ==============
 
   async getPendingPros(options: PendingProsOptions) {
-    const { page, limit, search, status = 'pending' } = options;
+    const { page, limit, search, status = "pending" } = options;
     const skip = (page - 1) * limit;
 
     const query: FilterQuery<User> = {
-      role: 'pro',
+      role: "pro",
     };
 
-    // Filter by approval status
-    if (status === 'pending') {
-      query.$or = [
-        { isAdminApproved: false },
-        { isAdminApproved: { $exists: false } },
-      ];
-    } else if (status === 'approved') {
-      query.isAdminApproved = true;
-    } else if (status === 'rejected') {
-      query.isAdminApproved = false;
-      query.adminRejectionReason = { $exists: true, $ne: '' };
+    // Filter by verification status
+    if (status === "pending") {
+      query.verificationStatus = { $nin: ["verified", "rejected"] };
+    } else if (status === "approved") {
+      query.verificationStatus = "verified";
+    } else if (status === "rejected") {
+      query.verificationStatus = "rejected";
     }
 
     if (search) {
       query.$and = query.$and || [];
       query.$and.push({
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } },
-          { city: { $regex: search, $options: 'i' } },
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { phone: { $regex: search, $options: "i" } },
+          { city: { $regex: search, $options: "i" } },
         ],
       });
     }
@@ -575,7 +617,9 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted isAdminApproved adminRejectionReason createdAt portfolioProjects')
+        .select(
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus adminRejectionReason createdAt portfolioProjects",
+        )
         .lean(),
       this.userModel.countDocuments(query),
     ]);
@@ -591,20 +635,22 @@ export class AdminService {
 
   async getPendingProsStats() {
     const [pending, approved, rejected, total] = await Promise.all([
+      // Pending: not verified and not rejected
       this.userModel.countDocuments({
-        role: 'pro',
-        $or: [
-          { isAdminApproved: false, adminRejectionReason: { $exists: false } },
-          { isAdminApproved: { $exists: false } },
-        ],
+        role: "pro",
+        verificationStatus: { $nin: ["verified", "rejected"] },
       }),
-      this.userModel.countDocuments({ role: 'pro', isAdminApproved: true }),
+      // Approved: verificationStatus is verified
       this.userModel.countDocuments({
-        role: 'pro',
-        isAdminApproved: false,
-        adminRejectionReason: { $exists: true, $ne: '' },
+        role: "pro",
+        verificationStatus: "verified",
       }),
-      this.userModel.countDocuments({ role: 'pro' }),
+      // Rejected: verificationStatus is rejected
+      this.userModel.countDocuments({
+        role: "pro",
+        verificationStatus: "rejected",
+      }),
+      this.userModel.countDocuments({ role: "pro" }),
     ]);
 
     return { pending, approved, rejected, total };
@@ -613,15 +659,14 @@ export class AdminService {
   async approvePro(proId: string, adminId: string): Promise<User> {
     const user = await this.userModel.findById(proId);
     if (!user) {
-      throw new Error('Professional not found');
+      throw new Error("Professional not found");
     }
-    if (user.role !== 'pro') {
-      throw new Error('User is not a professional');
+    if (user.role !== "pro") {
+      throw new Error("User is not a professional");
     }
 
-    user.isAdminApproved = true;
+    user.verificationStatus = "verified";
     user.isProfileCompleted = true; // Admin approval means profile is complete
-    user.verificationStatus = 'verified'; // Admin approval = verified status
     user.adminApprovedAt = new Date();
     user.adminApprovedBy = adminId;
     user.adminRejectionReason = undefined;
@@ -631,9 +676,10 @@ export class AdminService {
     // Create notification for the pro
     await this.notificationModel.create({
       userId: proId,
-      type: 'profile_approved',
-      title: 'Profile Approved',
-      message: 'Your professional profile has been approved! You are now visible to clients.',
+      type: "profile_approved",
+      title: "Profile Approved",
+      message:
+        "Your professional profile has been approved! You are now visible to clients.",
       isRead: false,
       createdAt: new Date(),
     });
@@ -647,16 +693,20 @@ export class AdminService {
     return user;
   }
 
-  async rejectPro(proId: string, adminId: string, reason: string): Promise<User> {
+  async rejectPro(
+    proId: string,
+    adminId: string,
+    reason: string,
+  ): Promise<User> {
     const user = await this.userModel.findById(proId);
     if (!user) {
-      throw new Error('Professional not found');
+      throw new Error("Professional not found");
     }
-    if (user.role !== 'pro') {
-      throw new Error('User is not a professional');
+    if (user.role !== "pro") {
+      throw new Error("User is not a professional");
     }
 
-    user.isAdminApproved = false;
+    user.verificationStatus = "rejected";
     user.adminRejectionReason = reason;
 
     await user.save();
@@ -664,8 +714,8 @@ export class AdminService {
     // Create notification for the pro
     await this.notificationModel.create({
       userId: proId,
-      type: 'profile_rejected',
-      title: 'Profile Needs Updates',
+      type: "profile_rejected",
+      title: "Profile Needs Updates",
       message: `Your profile was not approved. Reason: ${reason}`,
       isRead: false,
       createdAt: new Date(),
@@ -680,26 +730,103 @@ export class AdminService {
     return user;
   }
 
+  async updateVerificationStatus(
+    proId: string,
+    adminId: string,
+    status: string,
+    notes?: string,
+    notifyUser: boolean = true,
+  ): Promise<User> {
+    const validStatuses = ['pending', 'submitted', 'verified', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Invalid verification status. Must be one of: ${validStatuses.join(', ')}`);
+    }
+
+    const user = await this.userModel.findById(proId);
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    if (user.role !== "pro") {
+      throw new Error("User is not a professional");
+    }
+
+    const previousStatus = user.verificationStatus;
+    user.verificationStatus = status;
+    user.verificationNotes = notes || undefined;
+
+    // Update related fields based on status
+    if (status === 'verified') {
+      user.isProfileCompleted = true;
+      user.adminApprovedAt = new Date();
+      user.adminApprovedBy = adminId;
+      user.adminRejectionReason = undefined;
+    } else if (status === 'rejected') {
+      user.adminRejectionReason = notes;
+    }
+
+    await user.save();
+
+    // Create notification if status changed and notifyUser is true
+    if (notifyUser && previousStatus !== status) {
+      let notificationType = 'verification_update';
+      let title = 'Verification Status Updated';
+      let message = notes || `Your verification status has been updated to: ${status}`;
+
+      if (status === 'verified') {
+        notificationType = 'profile_approved';
+        title = 'Profile Approved';
+        message = notes || 'Your professional profile has been approved! You are now visible to clients.';
+      } else if (status === 'rejected') {
+        notificationType = 'profile_rejected';
+        title = 'Profile Needs Updates';
+        message = notes || 'Your profile was not approved. Please check the admin notes.';
+      }
+
+      await this.notificationModel.create({
+        userId: proId,
+        type: notificationType,
+        title,
+        message,
+        isRead: false,
+        createdAt: new Date(),
+      });
+
+      // Send SMS notification for significant status changes
+      if (user.phone && (status === 'verified' || status === 'rejected')) {
+        const smsMessage = status === 'verified'
+          ? `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. homico.ge`
+          : `თქვენი Homico პროფილი საჭიროებს განახლებას. შეამოწმეთ შეტყობინებები. homico.ge`;
+        await this.smsService.sendNotificationSms(user.phone, smsMessage);
+      }
+    }
+
+    return user;
+  }
+
   // ============== MIGRATIONS ==============
 
-  async syncVerificationStatus(): Promise<{ updated: number; users: string[] }> {
+  async syncVerificationStatus(): Promise<{
+    updated: number;
+    users: string[];
+  }> {
     // Find all users who have isAdminApproved=true but verificationStatus is not 'verified'
-    const usersToUpdate = await this.userModel.find({
-      isAdminApproved: true,
-      verificationStatus: { $ne: 'verified' },
-    }).select('_id name email');
+    const usersToUpdate = await this.userModel
+      .find({
+        isAdminApproved: true,
+        verificationStatus: { $ne: "verified" },
+      })
+      .select("_id name email");
 
-    const userIds = usersToUpdate.map(u => u._id.toString());
-    const userNames = usersToUpdate.map(u => `${u.name} (${u.email})`);
+    const userNames = usersToUpdate.map((u) => `${u.name} (${u.email})`);
 
     // Update all matching users
     const result = await this.userModel.updateMany(
       {
         isAdminApproved: true,
-        verificationStatus: { $ne: 'verified' },
+        verificationStatus: { $ne: "verified" },
       },
       {
-        $set: { verificationStatus: 'verified' },
+        $set: { verificationStatus: "verified" },
       },
     );
 

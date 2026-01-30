@@ -111,6 +111,19 @@ export class JobsService {
     }
     const andConditions: any[] = [];
 
+    // Exclude jobs with expired deadlines (only for open jobs browse)
+    // Jobs with no deadline or deadline in the future should be shown
+    if (query.status === JobStatus.OPEN) {
+      const now = new Date();
+      andConditions.push({
+        $or: [
+          { deadline: { $exists: false } },
+          { deadline: null },
+          { deadline: { $gte: now } },
+        ],
+      });
+    }
+
     // Support filtering by multiple categories (for pro users with selected categories)
     if (filters?.categories && filters.categories.length > 0) {
       query.category = { $in: filters.categories };
@@ -699,7 +712,7 @@ export class JobsService {
     createProposalDto: CreateProposalDto,
   ): Promise<Proposal> {
     // Check if pro is verified
-    const proUser = await this.userModel.findById(proId).select('verificationStatus isAdminApproved').exec();
+    const proUser = await this.userModel.findById(proId).select('verificationStatus').exec();
     if (!proUser) {
       throw new NotFoundException('მომხმარებელი ვერ მოიძებნა');
     }
