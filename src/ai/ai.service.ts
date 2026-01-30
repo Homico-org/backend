@@ -501,10 +501,10 @@ Respond with JSON:
     }
 
     const langInstruction = locale === 'ka'
-      ? 'პასუხი გამოიტანე ქართულად (notes ველში).'
+      ? 'CRITICAL: The "notes" array MUST be written in Georgian language (ქართულად). Example: ["გაითვალისწინეთ ტენიანობისგან დამცავი მასალები სააბაზანოში", "უზრუნველყავით სათანადო ვენტილაცია"]'
       : locale === 'ru'
-      ? 'Отвечай на русском языке (в поле notes).'
-      : 'Respond in English (in notes field).';
+      ? 'CRITICAL: The "notes" array MUST be written in Russian language. Example: ["Используйте влагостойкие материалы в ванной", "Обеспечьте хорошую вентиляцию"]'
+      : 'Write notes in English.';
 
     const systemPrompt = `You are an expert at analyzing apartment/house project documents and floor plans.
 Extract room information and suggest renovation work configurations.
