@@ -839,25 +839,26 @@ export class UsersService {
     const skip = (page - 1) * limit;
 
     // Build sort object - always sort premium first
+    // Include _id as final sort key to ensure consistent pagination (prevents duplicates)
     let sortObj: any = {};
     switch (filters?.sort) {
       case "rating":
-        sortObj = { isPremium: -1, avgRating: -1 };
+        sortObj = { isPremium: -1, avgRating: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isPremium: -1, totalReviews: -1 };
+        sortObj = { isPremium: -1, totalReviews: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isPremium: -1, basePrice: 1 };
+        sortObj = { isPremium: -1, basePrice: 1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isPremium: -1, basePrice: -1 };
+        sortObj = { isPremium: -1, basePrice: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isPremium: -1, createdAt: -1 };
+        sortObj = { isPremium: -1, createdAt: -1, _id: -1 };
         break;
       default: // 'recommended'
-        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1 };
+        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1, _id: -1 };
     }
 
     // Build query - only role=pro
