@@ -492,3 +492,4 @@ UserSchema.index({ companyName: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });
+UserSchema.index({ verificationStatus: 1, role: 1 });
