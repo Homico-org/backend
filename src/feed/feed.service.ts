@@ -256,8 +256,21 @@ export class FeedService {
       }
     }
 
+    // Deduplicate: If a project exists in both PortfolioItem collection AND embedded,
+    // prefer the PortfolioItem version (has its own ObjectId for likes)
+    // Create a set of (proId + title) combinations from portfolioFeedItems
+    const portfolioItemKeys = new Set(
+      portfolioFeedItems.map(item => `${item.pro.id}:${item.title.toLowerCase().trim()}`)
+    );
+
+    // Filter out embedded items that already exist in PortfolioItem collection
+    const uniqueEmbeddedItems = embeddedFeedItems.filter(item => {
+      const key = `${item.pro.id}:${item.title.toLowerCase().trim()}`;
+      return !portfolioItemKeys.has(key);
+    });
+
     // Merge and sort all feed items
-    let allFeedItems = [...portfolioFeedItems, ...embeddedFeedItems];
+    let allFeedItems = [...portfolioFeedItems, ...uniqueEmbeddedItems];
 
     // Apply sorting based on sort parameter
     if (sort === 'rating') {
