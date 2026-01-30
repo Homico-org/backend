@@ -119,3 +119,25 @@ export class ChatDto {
   @IsString()
   locale?: string;
 }
+
+export class AnalyzeProjectDto {
+  @ApiPropertyOptional({ description: 'Project document text (extracted from file)' })
+  @IsOptional()
+  @IsString()
+  projectText?: string;
+
+  @ApiPropertyOptional({ description: 'Base64 encoded image data (for floor plans, blueprints)' })
+  @IsOptional()
+  @IsString()
+  imageBase64?: string;
+
+  @ApiPropertyOptional({ description: 'Image MIME type (e.g., image/png, image/jpeg)' })
+  @IsOptional()
+  @IsString()
+  imageMimeType?: string;
+
+  @ApiPropertyOptional({ description: 'Language for response', enum: ['en', 'ka', 'ru'], default: 'en' })
+  @IsOptional()
+  @IsString()
+  locale?: string;
+}

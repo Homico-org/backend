@@ -15,6 +15,7 @@ import {
   CompareEstimatesDto,
   GetPriceInfoDto,
   ChatDto,
+  AnalyzeProjectDto,
 } from './dto/ai.dto';
 import { Public } from '../common/decorators/public.decorator';
 
@@ -98,5 +99,23 @@ export class AiController {
     }
     const response = await this.aiService.chat(dto.messages, dto.locale || 'en');
     return { response };
+  }
+
+  @Post('analyze-project')
+  @Public() // Allow public access for the tool
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Analyze project file or image and extract room/work configurations' })
+  @ApiResponse({ status: 200, description: 'Project analysis result with room configurations' })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  async analyzeProject(@Body() dto: AnalyzeProjectDto) {
+    if (!dto.projectText?.trim() && !dto.imageBase64) {
+      throw new BadRequestException('Either project text or image is required');
+    }
+    return this.aiService.analyzeProject(
+      dto.projectText || '',
+      dto.locale || 'en',
+      dto.imageBase64,
+      dto.imageMimeType,
+    );
   }
 }
