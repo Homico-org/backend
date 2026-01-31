@@ -1,27 +1,35 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { ChatGateway } from '../chat/chat.gateway';
-import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType } from '../notifications/schemas/notification.schema';
-import { PortfolioService } from '../portfolio/portfolio.service';
-import { User } from '../users/schemas/user.schema';
-import { Job } from './schemas/job.schema';
 import {
-    ProjectAttachment,
-    ProjectComment,
-    ProjectHistoryEvent,
-    ProjectHistoryEventType,
-    ProjectStage,
-    ProjectTracking,
-    StageHistory,
-} from './schemas/project-tracking.schema';
-import { Proposal } from './schemas/proposal.schema';
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model, Types } from "mongoose";
+import { ChatGateway } from "../chat/chat.gateway";
+import { NotificationsService } from "../notifications/notifications.service";
+import { NotificationType } from "../notifications/schemas/notification.schema";
+import { PortfolioService } from "../portfolio/portfolio.service";
+import { User } from "../users/schemas/user.schema";
+import { Job } from "./schemas/job.schema";
+import {
+  ProjectAttachment,
+  ProjectComment,
+  ProjectHistoryEvent,
+  ProjectHistoryEventType,
+  ProjectStage,
+  ProjectTracking,
+  StageHistory,
+} from "./schemas/project-tracking.schema";
+import { Proposal } from "./schemas/proposal.schema";
 
 @Injectable()
 export class ProjectTrackingService {
   constructor(
-    @InjectModel(ProjectTracking.name) private projectTrackingModel: Model<ProjectTracking>,
+    @InjectModel(ProjectTracking.name)
+    private projectTrackingModel: Model<ProjectTracking>,
     @InjectModel(Proposal.name) private proposalModel: Model<Proposal>,
     @InjectModel(Job.name) private jobModel: Model<Job>,
     @InjectModel(User.name) private userModel: Model<User>,
@@ -71,8 +79,8 @@ export class ProjectTrackingService {
   async getProjectByJobId(jobId: string): Promise<ProjectTracking | null> {
     return this.projectTrackingModel
       .findOne({ jobId: new Types.ObjectId(jobId) })
-      .populate('clientId', 'name email avatar')
-      .populate('proId', 'name email avatar phone')
+      .populate("clientId", "name email avatar")
+      .populate("proId", "name email avatar phone")
       .exec();
   }
 
@@ -80,12 +88,12 @@ export class ProjectTrackingService {
   async getProjectDetails(jobId: string, userId: string): Promise<any> {
     const project = await this.projectTrackingModel
       .findOne({ jobId: new Types.ObjectId(jobId) })
-      .populate('clientId', 'name email avatar phone')
-      .populate('proId', 'name email avatar phone title')
+      .populate("clientId", "name email avatar phone")
+      .populate("proId", "name email avatar phone title")
       .exec();
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     // Verify user is part of this project
@@ -93,13 +101,15 @@ export class ProjectTrackingService {
     const isPro = project.proId._id.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get job details
     const job = await this.jobModel
       .findById(jobId)
-      .select('title description category location images media budgetType budgetAmount budgetMin budgetMax deadline')
+      .select(
+        "title description category location images media budgetType budgetAmount budgetMin budgetMax deadline",
+      )
       .exec();
 
     return {
@@ -123,7 +133,7 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     // Both client and pro can update stage
@@ -131,7 +141,7 @@ export class ProjectTrackingService {
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     const now = new Date();
@@ -189,10 +199,10 @@ export class ProjectTrackingService {
           stage: newStage,
           progress: savedProject.progress,
           project: savedProject,
-        }
+        },
       );
     } catch (error) {
-      console.error('[ProjectTracking] Failed to emit stage update:', error);
+      console.error("[ProjectTracking] Failed to emit stage update:", error);
     }
 
     // Log to history
@@ -200,23 +210,59 @@ export class ProjectTrackingService {
       jobId,
       ProjectHistoryEventType.STAGE_CHANGED,
       userId,
-      { fromStage: project.stageHistory.length > 1 ? project.stageHistory[project.stageHistory.length - 2]?.stage : undefined, toStage: newStage },
+      {
+        fromStage:
+          project.stageHistory.length > 1
+            ? project.stageHistory[project.stageHistory.length - 2]?.stage
+            : undefined,
+        toStage: newStage,
+      },
     );
 
     // Send notification when stage changes
     try {
-      const job = await this.jobModel.findById(jobId).select('title').exec();
-      const user = await this.userModel.findById(userId).select('name').exec();
+      const job = await this.jobModel.findById(jobId).select("title").exec();
+      const user = await this.userModel.findById(userId).select("name").exec();
 
       // Notify the other party about stage change
-      const recipientId = isPro ? project.clientId.toString() : project.proId.toString();
+      const recipientId = isPro
+        ? project.clientId.toString()
+        : project.proId.toString();
 
-      const stageMessages: Record<ProjectStage, { title: string; titleKa: string; message: string; messageKa: string }> = {
-        [ProjectStage.HIRED]: { title: 'Project Created', titleKa: 'პროექტი შეიქმნა', message: 'You have been hired', messageKa: 'თქვენ დაგიქირავეს' },
-        [ProjectStage.STARTED]: { title: 'Project Started', titleKa: 'პროექტი დაიწყო', message: `${user?.name || 'Pro'} has started working on "${job?.title}"`, messageKa: `${user?.name || 'სპეციალისტმა'} დაიწყო მუშაობა: "${job?.title}"` },
-        [ProjectStage.IN_PROGRESS]: { title: 'Work in Progress', titleKa: 'მიმდინარეობს', message: `Work is in progress on "${job?.title}"`, messageKa: `მიმდინარეობს მუშაობა: "${job?.title}"` },
-        [ProjectStage.REVIEW]: { title: 'Ready for Review', titleKa: 'მზადაა შესამოწმებლად', message: `"${job?.title}" is ready for your review`, messageKa: `"${job?.title}" მზადაა შესამოწმებლად` },
-        [ProjectStage.COMPLETED]: { title: 'Project Completed', titleKa: 'პროექტი დასრულდა', message: `"${job?.title}" has been completed`, messageKa: `"${job?.title}" დასრულდა` },
+      const stageMessages: Record<
+        ProjectStage,
+        { title: string; titleKa: string; message: string; messageKa: string }
+      > = {
+        [ProjectStage.HIRED]: {
+          title: "Project Created",
+          titleKa: "პროექტი შეიქმნა",
+          message: "You have been hired",
+          messageKa: "თქვენ დაგიქირავეს",
+        },
+        [ProjectStage.STARTED]: {
+          title: "Project Started",
+          titleKa: "პროექტი დაიწყო",
+          message: `${user?.name || "Pro"} has started working on "${job?.title}"`,
+          messageKa: `${user?.name || "სპეციალისტმა"} დაიწყო მუშაობა: "${job?.title}"`,
+        },
+        [ProjectStage.IN_PROGRESS]: {
+          title: "Work in Progress",
+          titleKa: "მიმდინარეობს",
+          message: `Work is in progress on "${job?.title}"`,
+          messageKa: `მიმდინარეობს მუშაობა: "${job?.title}"`,
+        },
+        [ProjectStage.REVIEW]: {
+          title: "Ready for Review",
+          titleKa: "მზადაა შესამოწმებლად",
+          message: `"${job?.title}" is ready for your review`,
+          messageKa: `"${job?.title}" მზადაა შესამოწმებლად`,
+        },
+        [ProjectStage.COMPLETED]: {
+          title: "Project Completed",
+          titleKa: "პროექტი დასრულდა",
+          message: `"${job?.title}" has been completed`,
+          messageKa: `"${job?.title}" დასრულდა`,
+        },
       };
 
       const msg = stageMessages[newStage];
@@ -227,10 +273,13 @@ export class ProjectTrackingService {
         NotificationType.PROFILE_UPDATE, // Using profile_update as a generic notification type
         msg.titleKa,
         msg.messageKa,
-        { link: notificationLink, referenceId: jobId, referenceModel: 'Job' }
+        { link: notificationLink, referenceId: jobId, referenceModel: "Job" },
       );
     } catch (error) {
-      console.error('[ProjectTracking] Failed to send stage notification:', error);
+      console.error(
+        "[ProjectTracking] Failed to send stage notification:",
+        error,
+      );
     }
 
     return savedProject;
@@ -246,22 +295,26 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     // Only the client can confirm completion
     if (project.clientId.toString() !== userId) {
-      throw new ForbiddenException('Only the client can confirm project completion');
+      throw new ForbiddenException(
+        "Only the client can confirm project completion",
+      );
     }
 
     // Project must be in completed stage
     if (project.currentStage !== ProjectStage.COMPLETED) {
-      throw new BadRequestException('Project must be marked as completed by the professional first');
+      throw new BadRequestException(
+        "Project must be marked as completed by the professional first",
+      );
     }
 
     // Check if already confirmed
     if (project.clientConfirmedAt) {
-      throw new BadRequestException('Project has already been confirmed');
+      throw new BadRequestException("Project has already been confirmed");
     }
 
     const now = new Date();
@@ -270,13 +323,12 @@ export class ProjectTrackingService {
     project.clientConfirmedAt = now;
 
     // Update the job status to completed
-    await this.jobModel.findByIdAndUpdate(jobId, { status: 'completed' });
+    await this.jobModel.findByIdAndUpdate(jobId, { status: "completed" });
 
     // Increment the pro's completedJobs counter
-    await this.userModel.findByIdAndUpdate(
-      project.proId,
-      { $inc: { completedJobs: 1 } }
-    );
+    await this.userModel.findByIdAndUpdate(project.proId, {
+      $inc: { completedJobs: 1 },
+    });
 
     await project.save();
 
@@ -285,21 +337,28 @@ export class ProjectTrackingService {
       jobId,
       ProjectHistoryEventType.PROJECT_COMPLETED,
       userId,
-      { description: 'Client confirmed completion' },
+      { description: "Client confirmed completion" },
     );
 
     // Notify the pro that client confirmed and payment will be processed
     try {
-      const job = await this.jobModel.findById(jobId).select('title').exec();
+      const job = await this.jobModel.findById(jobId).select("title").exec();
       await this.notificationsService.notify(
         project.proId.toString(),
         NotificationType.JOB_COMPLETED,
-        'გადახდა მოხდება მალე',
+        "გადახდა მოხდება მალე",
         `კლიენტმა დაადასტურა "${job?.title}" პროექტის დასრულება. გადახდა მოხდება მალე.`,
-        { link: `/my-jobs/${jobId}`, referenceId: jobId, referenceModel: 'Job' }
+        {
+          link: `/my-jobs/${jobId}`,
+          referenceId: jobId,
+          referenceModel: "Job",
+        },
       );
     } catch (error) {
-      console.error('[ProjectTracking] Failed to send confirmation notification:', error);
+      console.error(
+        "[ProjectTracking] Failed to send confirmation notification:",
+        error,
+      );
     }
 
     // TODO: Trigger actual payment process here
@@ -308,18 +367,20 @@ export class ProjectTrackingService {
     // Create portfolio item from completed job if there are portfolio images
     if (project.portfolioImages && project.portfolioImages.length > 0) {
       try {
-        const job = await this.jobModel.findById(jobId)
-          .select('title description category location')
+        const job = await this.jobModel
+          .findById(jobId)
+          .select("title description category location")
           .exec();
-        const client = await this.userModel.findById(project.clientId)
-          .select('name avatar city')
+        const client = await this.userModel
+          .findById(project.clientId)
+          .select("name avatar city")
           .exec();
 
         // Create in PortfolioItem collection (for feed/browse)
         const portfolioItem = await this.portfolioService.createFromJob({
           proId: project.proId.toString(),
           jobId: jobId,
-          title: job?.title || 'Completed Project',
+          title: job?.title || "Completed Project",
           description: job?.description,
           images: project.portfolioImages,
           category: job?.category,
@@ -335,33 +396,27 @@ export class ProjectTrackingService {
         await project.save();
 
         // Also add to pro's embedded portfolioProjects array (for pro profile page)
-        await this.userModel.findByIdAndUpdate(
-          project.proId,
-          {
-            $push: {
-              portfolioProjects: {
-                id: portfolioItem._id.toString(),
-                title: job?.title || 'Completed Project',
-                description: job?.description || '',
-                images: project.portfolioImages,
-                location: job?.location,
-                jobId: jobId,
-                source: 'homico',
-              }
-            }
-          }
-        );
-
-        console.log('[ProjectTracking] Portfolio item created and added to pro profile:', portfolioItem._id);
+        await this.userModel.findByIdAndUpdate(project.proId, {
+          $push: {
+            portfolioProjects: {
+              id: portfolioItem._id.toString(),
+              title: job?.title || "Completed Project",
+              description: job?.description || "",
+              images: project.portfolioImages,
+              location: job?.location,
+              jobId: jobId,
+              source: "homico",
+            },
+          },
+        });
       } catch (error) {
-        console.error('[ProjectTracking] Failed to create portfolio item:', error);
         // Don't fail the completion if portfolio creation fails
       }
     }
 
     return {
       success: true,
-      message: 'Project confirmed. Payment will be processed shortly.',
+      message: "Project confirmed. Payment will be processed shortly.",
     };
   }
 
@@ -376,12 +431,12 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     // Only pro can update progress
     if (project.proId.toString() !== userId) {
-      throw new ForbiddenException('Only the professional can update progress');
+      throw new ForbiddenException("Only the professional can update progress");
     }
 
     project.progress = Math.min(100, Math.max(0, progress));
@@ -399,12 +454,14 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     // Only pro can set expected end date
     if (project.proId.toString() !== userId) {
-      throw new ForbiddenException('Only the professional can set expected end date');
+      throw new ForbiddenException(
+        "Only the professional can set expected end date",
+      );
     }
 
     project.expectedEndDate = expectedEndDate;
@@ -422,24 +479,27 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get user info
-    const user = await this.userModel.findById(userId).select('name avatar').exec();
+    const user = await this.userModel
+      .findById(userId)
+      .select("name avatar")
+      .exec();
 
     const comment: ProjectComment = {
       userId: new Types.ObjectId(userId),
-      userName: user?.name || 'Unknown',
+      userName: user?.name || "Unknown",
       userAvatar: user?.avatar,
-      userRole: isClient ? 'client' : 'pro',
+      userRole: isClient ? "client" : "pro",
       content,
       createdAt: new Date(),
     } as ProjectComment;
@@ -458,23 +518,27 @@ export class ProjectTrackingService {
       .exec();
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get last read timestamp for current user
-    const lastReadAt = isClient ? project.clientLastReadAt : project.proLastReadAt;
+    const lastReadAt = isClient
+      ? project.clientLastReadAt
+      : project.proLastReadAt;
 
     // Transform comments to messages format
     const messages = project.comments.map((comment: any, idx: number) => {
-      const isFromOther = comment.userRole !== (isClient ? 'client' : 'pro');
-      const isUnread = isFromOther && (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
+      const isFromOther = comment.userRole !== (isClient ? "client" : "pro");
+      const isUnread =
+        isFromOther &&
+        (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
 
       return {
         _id: comment._id?.toString() || `msg-${idx}`,
@@ -505,14 +569,14 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Update the last read timestamp for the current user
@@ -538,14 +602,14 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     const now = new Date();
@@ -570,14 +634,14 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     const now = new Date();
@@ -602,32 +666,40 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get last viewed timestamps for current user
-    const lastReadAt = isClient ? project.clientLastReadAt : project.proLastReadAt;
-    const lastViewedPollsAt = isClient ? project.clientLastViewedPollsAt : project.proLastViewedPollsAt;
-    const lastViewedMaterialsAt = isClient ? project.clientLastViewedMaterialsAt : project.proLastViewedMaterialsAt;
+    const lastReadAt = isClient
+      ? project.clientLastReadAt
+      : project.proLastReadAt;
+    const lastViewedPollsAt = isClient
+      ? project.clientLastViewedPollsAt
+      : project.proLastViewedPollsAt;
+    const lastViewedMaterialsAt = isClient
+      ? project.clientLastViewedMaterialsAt
+      : project.proLastViewedMaterialsAt;
 
     // Count unread messages (from the other party)
-    const userRole = isClient ? 'client' : 'pro';
+    const userRole = isClient ? "client" : "pro";
     const unreadMessages = project.comments.filter((comment: any) => {
       const isFromOther = comment.userRole !== userRole;
-      const isUnread = isFromOther && (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
+      const isUnread =
+        isFromOther &&
+        (!lastReadAt || new Date(comment.createdAt) > lastReadAt);
       return isUnread;
     }).length;
 
     // For polls, we need to query the Poll collection
     // Count polls created after lastViewedPollsAt by the other party
-    const Poll = this.projectTrackingModel.db.model('Poll');
+    const Poll = this.projectTrackingModel.db.model("Poll");
     let unreadPolls = 0;
     try {
       const pollQuery: any = { jobId: new Types.ObjectId(jobId) };
@@ -650,9 +722,14 @@ export class ProjectTrackingService {
     let unreadMaterials = 0;
     if (project.history) {
       unreadMaterials = project.history.filter((event: any) => {
-        const isResourceEvent = ['resource_added', 'resource_item_added'].includes(event.eventType);
+        const isResourceEvent = [
+          "resource_added",
+          "resource_item_added",
+        ].includes(event.eventType);
         const isFromOther = event.userRole !== userRole;
-        const isAfterLastViewed = !lastViewedMaterialsAt || new Date(event.createdAt) > lastViewedMaterialsAt;
+        const isAfterLastViewed =
+          !lastViewedMaterialsAt ||
+          new Date(event.createdAt) > lastViewedMaterialsAt;
         return isResourceEvent && isFromOther && isAfterLastViewed;
       }).length;
     }
@@ -675,7 +752,7 @@ export class ProjectTrackingService {
     const hasAttachments = attachments && attachments.length > 0;
 
     if (!hasContent && !hasAttachments) {
-      throw new BadRequestException('Message must have content or attachments');
+      throw new BadRequestException("Message must have content or attachments");
     }
 
     const project = await this.projectTrackingModel.findOne({
@@ -683,25 +760,28 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get user info
-    const user = await this.userModel.findById(userId).select('name avatar').exec();
+    const user = await this.userModel
+      .findById(userId)
+      .select("name avatar")
+      .exec();
 
     const comment: any = {
       _id: new Types.ObjectId(),
       userId: new Types.ObjectId(userId),
-      userName: user?.name || 'Unknown',
+      userName: user?.name || "Unknown",
       userAvatar: user?.avatar,
-      userRole: isClient ? 'client' : 'pro',
+      userRole: isClient ? "client" : "pro",
       content,
       attachments: attachments || [],
       createdAt: new Date(),
@@ -725,32 +805,40 @@ export class ProjectTrackingService {
     try {
       this.chatGateway.emitProjectMessage(jobId, formattedMessage);
     } catch (error) {
-      console.error('[ProjectTracking] Failed to emit project message:', error);
+      console.error("[ProjectTracking] Failed to emit project message:", error);
     }
 
     // Send notification to the other party
     try {
-      const recipientId = isClient ? project.proId.toString() : project.clientId.toString();
-      const job = await this.jobModel.findById(jobId).select('title').exec();
-      const senderName = user?.name || (isClient ? 'კლიენტი' : 'სპეციალისტი');
-      const messagePreview = content && content.length > 50 ? content.substring(0, 50) + '...' : content || 'ფაილი გაიგზავნა';
+      const recipientId = isClient
+        ? project.proId.toString()
+        : project.clientId.toString();
+      const job = await this.jobModel.findById(jobId).select("title").exec();
+      const senderName = user?.name || (isClient ? "კლიენტი" : "სპეციალისტი");
+      const messagePreview =
+        content && content.length > 50
+          ? content.substring(0, 50) + "..."
+          : content || "ფაილი გაიგზავნა";
       // Both clients and pros use /jobs/{id} route - add #chat to scroll to chat section
       const link = `/jobs/${jobId}#chat`;
 
       await this.notificationsService.notify(
         recipientId,
         NotificationType.PROJECT_MESSAGE,
-        'ახალი შეტყობინება',
+        "ახალი შეტყობინება",
         `${senderName}: ${messagePreview}`,
         {
           link,
           referenceId: jobId,
-          referenceModel: 'Job',
+          referenceModel: "Job",
           metadata: { jobTitle: job?.title },
         },
       );
     } catch (error) {
-      console.error('[ProjectTracking] Failed to send message notification:', error);
+      console.error(
+        "[ProjectTracking] Failed to send message notification:",
+        error,
+      );
     }
 
     return { message: formattedMessage };
@@ -773,22 +861,22 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     // Get user info
-    const user = await this.userModel.findById(userId).select('name').exec();
+    const user = await this.userModel.findById(userId).select("name").exec();
 
     const attachment: ProjectAttachment = {
       uploadedBy: new Types.ObjectId(userId),
-      uploaderName: user?.name || 'Unknown',
+      uploaderName: user?.name || "Unknown",
       fileName: attachmentData.fileName,
       fileUrl: attachmentData.fileUrl,
       fileType: attachmentData.fileType,
@@ -812,18 +900,18 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     if (attachmentIndex < 0 || attachmentIndex >= project.attachments.length) {
-      throw new NotFoundException('Attachment not found');
+      throw new NotFoundException("Attachment not found");
     }
 
     const attachment = project.attachments[attachmentIndex];
 
     // Only uploader can delete
     if (attachment.uploadedBy.toString() !== userId) {
-      throw new ForbiddenException('You can only delete your own attachments');
+      throw new ForbiddenException("You can only delete your own attachments");
     }
 
     project.attachments.splice(attachmentIndex, 1);
@@ -831,16 +919,20 @@ export class ProjectTrackingService {
   }
 
   // Get all projects for a user (client or pro)
-  async getUserProjects(userId: string, role: 'client' | 'pro'): Promise<any[]> {
-    const query = role === 'client'
-      ? { clientId: new Types.ObjectId(userId) }
-      : { proId: new Types.ObjectId(userId) };
+  async getUserProjects(
+    userId: string,
+    role: "client" | "pro",
+  ): Promise<any[]> {
+    const query =
+      role === "client"
+        ? { clientId: new Types.ObjectId(userId) }
+        : { proId: new Types.ObjectId(userId) };
 
     const projects = await this.projectTrackingModel
       .find(query)
-      .populate('jobId', 'title category images media status')
-      .populate('clientId', 'name avatar')
-      .populate('proId', 'name avatar title')
+      .populate("jobId", "title category images media status")
+      .populate("clientId", "name avatar")
+      .populate("proId", "name avatar title")
       .sort({ updatedAt: -1 })
       .exec();
 
@@ -854,7 +946,7 @@ export class ProjectTrackingService {
     jobId: string,
     eventType: ProjectHistoryEventType,
     userId: string,
-    metadata?: ProjectHistoryEvent['metadata'],
+    metadata?: ProjectHistoryEvent["metadata"],
   ): Promise<void> {
     try {
       const project = await this.projectTrackingModel.findOne({
@@ -863,16 +955,19 @@ export class ProjectTrackingService {
 
       if (!project) return;
 
-      const user = await this.userModel.findById(userId).select('name avatar').exec();
+      const user = await this.userModel
+        .findById(userId)
+        .select("name avatar")
+        .exec();
       const isClient = project.clientId.toString() === userId;
       const isPro = project.proId.toString() === userId;
 
       const historyEvent: any = {
         eventType,
         userId: new Types.ObjectId(userId),
-        userName: user?.name || 'Unknown',
+        userName: user?.name || "Unknown",
         userAvatar: user?.avatar,
-        userRole: isClient ? 'client' : isPro ? 'pro' : 'system',
+        userRole: isClient ? "client" : isPro ? "pro" : "system",
         metadata,
         createdAt: new Date(),
       };
@@ -881,7 +976,7 @@ export class ProjectTrackingService {
       project.history.push(historyEvent);
       await project.save();
     } catch (error) {
-      console.error('[ProjectTracking] Failed to add history event:', error);
+      console.error("[ProjectTracking] Failed to add history event:", error);
     }
   }
 
@@ -901,30 +996,35 @@ export class ProjectTrackingService {
     });
 
     if (!project) {
-      throw new NotFoundException('Project tracking not found');
+      throw new NotFoundException("Project tracking not found");
     }
 
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
-      throw new ForbiddenException('You are not part of this project');
+      throw new ForbiddenException("You are not part of this project");
     }
 
     let history = project.history || [];
 
     // Filter by event types if specified
     if (options?.eventTypes && options.eventTypes.length > 0) {
-      history = history.filter(h => options.eventTypes.includes(h.eventType));
+      history = history.filter((h) => options.eventTypes.includes(h.eventType));
     }
 
     // Filter by user if specified
     if (options?.userFilter) {
-      history = history.filter(h => h.userId.toString() === options.userFilter);
+      history = history.filter(
+        (h) => h.userId.toString() === options.userFilter,
+      );
     }
 
     // Sort by date descending (newest first)
-    history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    history.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
 
     const total = history.length;
 
@@ -958,17 +1058,20 @@ export class ProjectTrackingService {
   async logPollEvent(
     jobId: string,
     userId: string,
-    eventType: ProjectHistoryEventType.POLL_CREATED | ProjectHistoryEventType.POLL_VOTED | ProjectHistoryEventType.POLL_CLOSED | ProjectHistoryEventType.POLL_OPTION_SELECTED,
+    eventType:
+      | ProjectHistoryEventType.POLL_CREATED
+      | ProjectHistoryEventType.POLL_VOTED
+      | ProjectHistoryEventType.POLL_CLOSED
+      | ProjectHistoryEventType.POLL_OPTION_SELECTED,
     pollId: string,
     pollTitle: string,
     optionText?: string,
   ): Promise<void> {
-    await this.addHistoryEvent(
-      jobId,
-      eventType,
-      userId,
-      { pollId, pollTitle, optionText },
-    );
+    await this.addHistoryEvent(jobId, eventType, userId, {
+      pollId,
+      pollTitle,
+      optionText,
+    });
   }
 
   // Helper method to log resource events
@@ -982,11 +1085,12 @@ export class ProjectTrackingService {
     itemName?: string,
     reactionType?: string,
   ): Promise<void> {
-    await this.addHistoryEvent(
-      jobId,
-      eventType,
-      userId,
-      { resourceId, resourceName, itemId, itemName, reactionType },
-    );
+    await this.addHistoryEvent(jobId, eventType, userId, {
+      resourceId,
+      resourceName,
+      itemId,
+      itemName,
+      reactionType,
+    });
   }
 }
