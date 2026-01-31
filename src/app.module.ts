@@ -27,6 +27,7 @@ import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
 import { LoggerModule } from './common/logger';
 import { AiModule } from './ai/ai.module';
+import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { AiModule } from './ai/ai.module';
     ChatModule,
     LoggerModule,
     AiModule,
+    PublicModule,
   ],
 })
 export class AppModule {}
