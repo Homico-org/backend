@@ -157,9 +157,11 @@ export class SupportService {
     return savedTicket;
   }
 
-  async markAsRead(ticketId: string, userId: string, isAdmin = false): Promise<void> {
+  async markAsRead(ticketId: string, userId: string, isAdmin = false): Promise<{ success: boolean; hasUnreadUserMessages: boolean }> {
     const ticket = await this.ticketModel.findById(ticketId);
-    if (!ticket) return;
+    if (!ticket) {
+      return { success: false, hasUnreadUserMessages: false };
+    }
 
     const now = new Date();
     const messageIdsToUpdate: string[] = [];
@@ -194,6 +196,8 @@ export class SupportService {
     await ticket.populate('userId', 'name email avatar role');
     await ticket.populate('assignedTo', 'name email avatar');
     this.chatGateway.emitSupportTicketUpdate(ticketId, ticket);
+
+    return { success: true, hasUnreadUserMessages: ticket.hasUnreadUserMessages };
   }
 
   async markAsDelivered(ticketId: string, userId: string, isAdmin = false): Promise<void> {
