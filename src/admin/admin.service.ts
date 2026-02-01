@@ -737,6 +737,8 @@ export class AdminService {
     notes?: string,
     notifyUser: boolean = true,
   ): Promise<User> {
+    console.log(`[Admin] updateVerificationStatus called: proId=${proId}, status=${status}`);
+
     const validStatuses = ['pending', 'submitted', 'verified', 'rejected'];
     if (!validStatuses.includes(status)) {
       throw new Error(`Invalid verification status. Must be one of: ${validStatuses.join(', ')}`);
@@ -744,13 +746,16 @@ export class AdminService {
 
     const user = await this.userModel.findById(proId);
     if (!user) {
+      console.log(`[Admin] User not found: ${proId}`);
       throw new Error("Professional not found");
     }
     if (user.role !== "pro") {
+      console.log(`[Admin] User is not a pro: ${user.role}`);
       throw new Error("User is not a professional");
     }
 
     const previousStatus = user.verificationStatus;
+    console.log(`[Admin] Changing status from ${previousStatus} to ${status}`);
     user.verificationStatus = status;
     user.verificationNotes = notes || undefined;
 
@@ -765,6 +770,7 @@ export class AdminService {
     }
 
     await user.save();
+    console.log(`[Admin] User saved. New verificationStatus: ${user.verificationStatus}`);
 
     // Create notification if status changed and notifyUser is true
     if (notifyUser && previousStatus !== status) {

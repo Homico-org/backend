@@ -440,7 +440,17 @@ function normalizePricingModel(
     return (hasBase || hasMax) ? 'per_sqm' : 'byAgreement';
   }
 
-  // If we have both and they differ, it's a range
+  // Explicit 'range' with valid prices - preserve the user's choice
+  if (pricingModel === 'range' && hasBase && hasMax) {
+    return 'range';
+  }
+
+  // Explicit 'fixed' with a valid price - preserve the user's choice
+  if (pricingModel === 'fixed' && (hasBase || hasMax)) {
+    return 'fixed';
+  }
+
+  // Legacy inference: if we have both and they differ, it's a range
   if (hasBase && hasMax && max !== base) return 'range';
 
   // If we have any numeric price at all, treat as fixed
