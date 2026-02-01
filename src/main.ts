@@ -34,31 +34,35 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger Configuration
-  const config = new DocumentBuilder()
-    .setTitle('Homico API')
-    .setDescription('Marketplace API for renovation professionals')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT token',
-        in: 'header',
-      },
-      'JWT-auth',
-    )
-    .build();
+  // Swagger Configuration - Only enable in development
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  if (!isProduction) {
+    const config = new DocumentBuilder()
+      .setTitle('Homico API')
+      .setDescription('Marketplace API for renovation professionals')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'JWT',
+          description: 'Enter JWT token',
+          in: 'header',
+        },
+        'JWT-auth',
+      )
+      .build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+    console.log(`Swagger documentation available at: http://localhost:${process.env.PORT || 3001}/api`);
+  }
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`Homico backend is running on: http://localhost:${port}`);
-  console.log(`Swagger documentation available at: http://localhost:${port}/api`);
 }
 
 bootstrap();
