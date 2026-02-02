@@ -28,6 +28,8 @@ import { ChatModule } from './chat/chat.module';
 import { LoggerModule } from './common/logger';
 import { AiModule } from './ai/ai.module';
 import { PublicModule } from './public/public.module';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -55,7 +57,7 @@ import { PublicModule } from './public/public.module';
         maxAge: 31536000000, // 1 year in milliseconds
         immutable: true,
         // Set proper headers for caching
-        setHeaders: (res, path) => {
+        setHeaders: (res, _path) => {
           // Add cache headers for all static files
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
           // Add Vary header for proper CDN caching
@@ -78,6 +80,14 @@ import { PublicModule } from './public/public.module';
       },
       inject: [ConfigService],
     }),
+    // Global rate limiting (abuse protection)
+    // Note: ttl is in milliseconds in current Nest throttler docs.
+    ThrottlerModule.forRoot([
+      // General API traffic
+      { name: 'default', ttl: 60_000, limit: 120 },
+      // Extra protection against burst traffic
+      { name: 'burst', ttl: 10_000, limit: 40 },
+    ]),
     AuthModule,
     UsersModule,
     PortfolioModule,
@@ -101,6 +111,13 @@ import { PublicModule } from './public/public.module';
     LoggerModule,
     AiModule,
     PublicModule,
+  ],
+  providers: [
+    // Apply rate limiting across the whole API by default
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

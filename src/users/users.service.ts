@@ -80,8 +80,6 @@ export class UsersService {
       ...createUserDto,
       uid,
       password: hashedPassword,
-      // Set phoneVerifiedAt if phone was verified during registration
-      ...(createUserDto.isPhoneVerified && { phoneVerifiedAt: new Date() }),
     });
 
     const savedUser = await user.save();

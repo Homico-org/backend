@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Patch } from '@nestjs/common';
+import { BadRequestException, Controller, NotFoundException, Post, Body, UseGuards, Request, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { VerificationService } from './verification.service';
 import { SendOtpDto, VerifyOtpDto, OtpType, ForgotPasswordDto, ResetPasswordDto, VerifyResetCodeDto } from './dto/send-otp.dto';
@@ -38,19 +38,22 @@ export class VerificationController {
     @Request() req,
     @Body() body: { type: OtpType; identifier: string },
   ) {
-    const userId = req.user.sub;
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('Invalid authentication context');
+    }
     const user = await this.usersService.findById(userId);
 
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundException('User not found');
     }
 
     // Verify the identifier matches the user's email/phone
     if (body.type === OtpType.EMAIL && user.email !== body.identifier) {
-      throw new Error('Email does not match');
+      throw new BadRequestException('Email does not match');
     }
     if (body.type === OtpType.PHONE && user.phone !== body.identifier) {
-      throw new Error('Phone does not match');
+      throw new BadRequestException('Phone does not match');
     }
 
     // Update user verification status

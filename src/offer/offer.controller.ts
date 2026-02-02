@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   UseGuards,
-  Query,
 } from '@nestjs/common';
 import { OfferService } from './offer.service';
 import { CreateOfferDto } from './dto/create-offer.dto';
@@ -33,8 +32,11 @@ export class OfferController {
   }
 
   @Get('project/:projectRequestId')
-  findByProjectRequest(@Param('projectRequestId') projectRequestId: string) {
-    return this.offerService.findByProjectRequest(projectRequestId);
+  findByProjectRequest(
+    @CurrentUser() user: any,
+    @Param('projectRequestId') projectRequestId: string,
+  ) {
+    return this.offerService.findByProjectRequest(projectRequestId, user);
   }
 
   @Get('my-offers')
@@ -45,15 +47,16 @@ export class OfferController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.offerService.findOne(id);
+  findOne(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.offerService.findOne(id, user);
   }
 
   @Patch(':id/status')
   updateStatus(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body('status') status: OfferStatus,
   ) {
-    return this.offerService.updateStatus(id, status);
+    return this.offerService.updateStatus(id, status, user);
   }
 }

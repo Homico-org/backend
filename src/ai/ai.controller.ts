@@ -4,11 +4,11 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AiService } from './ai.service';
+import { Throttle } from '@nestjs/throttler';
 import {
   AnalyzeEstimateDto,
   CalculateRenovationDto,
@@ -21,6 +21,8 @@ import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('AI Tools')
 @Controller('ai')
+// AI endpoints can be expensive; keep a stricter limit than global default.
+@Throttle({ default: { ttl: 60_000, limit: 30 } })
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
