@@ -11,7 +11,6 @@ import { OtpChannelType, SmsService } from './services/sms.service';
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
-  private readonly TEST_OTP_CODE = '1234';
 
   constructor(
     @InjectModel(Otp.name) private otpModel: Model<Otp>,
@@ -41,9 +40,9 @@ export class VerificationService {
       createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) },
     });
 
-    // if (recentOtps >= 3) {
-    //   throw new BadRequestException('Too many OTP requests. Please try again later.');
-    // }
+    if (recentOtps >= 3) {
+      throw new BadRequestException('Too many OTP requests. Please try again later.');
+    }
 
     // For phone verification
     if (type === OtpType.PHONE) {
@@ -119,17 +118,6 @@ export class VerificationService {
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto): Promise<{ verified: boolean }> {
     const { identifier, code, type } = verifyOtpDto;
-
-    // Test OTP code for development/testing - always works
-    if (code === this.TEST_OTP_CODE) {
-      this.logger.log(`Test OTP code '${this.TEST_OTP_CODE}' used for ${identifier}`);
-      // Mark our tracking record as used
-      await this.otpModel.updateMany(
-        { identifier, type, isUsed: false },
-        { isUsed: true },
-      );
-      return { verified: true };
-    }
 
     // For phone verification
     if (type === OtpType.PHONE) {
@@ -258,26 +246,6 @@ export class VerificationService {
     const user = await this.userModel.findOne({ phone });
     if (!user) {
       throw new NotFoundException('No account found with this phone number');
-    }
-
-    // Test OTP code for development/testing
-    if (code === this.TEST_OTP_CODE) {
-      this.logger.log(`Test OTP code '${this.TEST_OTP_CODE}' used for password reset: ${phone}`);
-      await this.otpModel.updateMany(
-        { identifier: phone, purpose: OtpPurpose.PASSWORD_RESET, isUsed: false },
-        { isUsed: true },
-      );
-      // Create verified record
-      const verifiedOtp = new this.otpModel({
-        identifier: phone,
-        code: 'VERIFIED',
-        type: OtpType.PHONE,
-        purpose: OtpPurpose.PASSWORD_RESET,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-        isUsed: false,
-      });
-      await verifiedOtp.save();
-      return { verified: true };
     }
 
     // Try Prelude verification first for international numbers

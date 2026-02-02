@@ -13,6 +13,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -60,7 +61,19 @@ export class UploadController {
   }
 
   @Post('public')
-  @UseInterceptors(FileInterceptor('file'))
+  // Public uploads are a frequent abuse target: keep limits tight.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          return callback(new Error('Only image uploads are allowed'), false);
+        }
+        return callback(null, true);
+      },
+    }),
+  )
   @ApiOperation({ summary: 'Upload a single file (public - for registration)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -82,7 +95,18 @@ export class UploadController {
   }
 
   @Post('avatar')
-  @UseInterceptors(FileInterceptor('file'))
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 3 * 1024 * 1024 }, // 3MB
+      fileFilter: (req, file, callback) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          return callback(new Error('Only image uploads are allowed'), false);
+        }
+        return callback(null, true);
+      },
+    }),
+  )
   @ApiOperation({ summary: 'Upload avatar image (public - for registration)' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -99,10 +123,6 @@ export class UploadController {
   async uploadAvatar(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
-    }
-    // Validate it's an image
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('File must be an image');
     }
     return await this.uploadService.getFileInfo(file);
   }
