@@ -2,11 +2,11 @@
  * Seed categories into MongoDB
  *
  * Usage:
- *   npx ts-node scripts/seed-categories.ts [prod|dev]
+ *   npx ts-node scripts/seed-categories.ts [prod|dev] [--reset]
  *
  * This script will:
- *   - Delete all existing categories
- *   - Insert the predefined categories
+ *   - Upsert (update/insert) the predefined categories by `key`
+ *   - Optionally reset the collection if `--reset` is provided
  */
 
 import * as dotenv from "dotenv";
@@ -18,7 +18,10 @@ dotenv.config({ path: resolve(__dirname, "../.env") });
 
 // Check for command line argument for database
 const args = process.argv.slice(2);
-const targetEnv = args[0] || "prod";
+const targetEnv = (args.find((a) => a === "prod" || a === "dev") || "prod") as
+  | "prod"
+  | "dev";
+const shouldReset = args.includes("--reset") || args.includes("--drop");
 
 // Database URIs
 const DB_URIS: Record<string, string> = {
@@ -29,6 +32,8 @@ const DB_URIS: Record<string, string> = {
 const MONGODB_URI = DB_URIS[targetEnv] || DB_URIS.prod;
 
 if (!MONGODB_URI) {
+  // eslint-disable-next-line no-console
+  console.error("Missing MONGODB_URI (check backend/.env).");
   process.exit(1);
 }
 
@@ -215,6 +220,100 @@ const CATEGORIES = [
         isActive: true,
         sortOrder: 8,
         children: [],
+      },
+      {
+        // NOTE: Use a unique key to avoid clashing with existing flooring child `wood`
+        key: "woodwork",
+        name: "Woodwork",
+        nameKa: "ხის სამუშაოები",
+        icon: "carpentry",
+        keywords: [
+          "wood",
+          "carpentry",
+          "joinery",
+          "wardrobe",
+          "kitchen cabinet",
+          "furniture",
+          "ხე",
+          "ხის სამუშაოები",
+          "დურგალი",
+          "ავეჯი",
+        ],
+        isActive: true,
+        sortOrder: 9,
+        children: [],
+      },
+      {
+        key: "glasswork",
+        name: "Glasswork",
+        nameKa: "მინის სამუშაოები",
+        icon: "glasswork",
+        keywords: [
+          "glass",
+          "glazing",
+          "mirror",
+          "mirrors",
+          "shower glass",
+          "partition",
+          "facade",
+          "window",
+          "მინა",
+          "სარკე",
+          "სარკეები",
+          "შხაპკაბინა",
+          "ტიხარი",
+          "ფასადი",
+        ],
+        isActive: true,
+        sortOrder: 10,
+        children: [
+          {
+            key: "mirrors",
+            name: "Mirrors",
+            nameKa: "სარკეები",
+            icon: "mirrors",
+            keywords: [
+              "mirror",
+              "mirrors",
+              "bathroom mirror",
+              "სარკე",
+              "სარკეები",
+            ],
+            isActive: true,
+            sortOrder: 0,
+          },
+          {
+            key: "shower-glass",
+            name: "Shower Glass / Partitions",
+            nameKa: "შხაპკაბინა / შუშის ტიხრები",
+            icon: "shower-glass",
+            keywords: [
+              "shower",
+              "shower glass",
+              "partition",
+              "bathroom",
+              "შხაპკაბინა",
+              "ტიხარი",
+            ],
+            isActive: true,
+            sortOrder: 1,
+          },
+          {
+            key: "facade-glazing",
+            name: "Facade Glazing",
+            nameKa: "ფასადის მოჭიქვა",
+            icon: "facade-glazing",
+            keywords: [
+              "facade",
+              "glazing",
+              "glass facade",
+              "ფასადი",
+              "მოჭიქვა",
+            ],
+            isActive: true,
+            sortOrder: 2,
+          },
+        ],
       },
     ],
   },
@@ -476,10 +575,25 @@ const CATEGORIES = [
 async function seedCategories() {
   await mongoose.connect(MONGODB_URI);
 
-  // Insert new categories
+  // Ensure indexes exist (especially the unique `key` index)
+  await Category.syncIndexes();
+
+  // Optionally reset collection (explicit opt-in)
+  if (shouldReset) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[seed-categories] Resetting categories collection (${targetEnv})...`,
+    );
+    await Category.deleteMany({});
+  }
+
+  // Upsert categories by key so nested changes (like new children) apply
   for (const categoryData of CATEGORIES) {
-    const category = new Category(categoryData);
-    await category.save();
+    await Category.updateOne(
+      { key: categoryData.key },
+      { $set: categoryData },
+      { upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    );
   }
 
   await mongoose.disconnect();
