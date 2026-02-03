@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { CloudinaryStorage } from '@fluidjs/multer-cloudinary';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
