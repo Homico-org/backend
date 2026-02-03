@@ -27,6 +27,7 @@ import { FeedModule } from './feed/feed.module';
 import { ChatModule } from './chat/chat.module';
 import { LoggerModule } from './common/logger';
 import { AiModule } from './ai/ai.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { PublicModule } from './public/public.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -110,6 +111,7 @@ import { APP_GUARD } from '@nestjs/core';
     ChatModule,
     LoggerModule,
     AiModule,
+    AiAssistantModule,
     PublicModule,
   ],
   providers: [
