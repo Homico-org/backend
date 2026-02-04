@@ -7,7 +7,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "postinstall": "npm rebuild sharp || true",
+    "prebuild": "rm -rf node_modules/sharp && npm install sharp@0.34.5 || true",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
