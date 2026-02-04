@@ -658,7 +658,7 @@ ${toolInstructions}
         label: 'Post a Job',
         labelKa: 'განცხადების დამატება',
         labelRu: 'Разместить заказ',
-        url: '/jobs/create',
+        url: '/post-job',
       });
     }
 
@@ -669,7 +669,7 @@ ${toolInstructions}
         label: 'Get Quotes',
         labelKa: 'შეთავაზებების მიღება',
         labelRu: 'Получить предложения',
-        url: '/jobs/create',
+        url: '/post-job',
       });
     }
 
@@ -729,7 +729,7 @@ ${toolInstructions}
           label: 'Post a Job',
           labelKa: 'განცხადების დამატება',
           labelRu: 'Разместить заказ',
-          url: '/jobs/create',
+          url: '/post-job',
         });
       }
 
@@ -743,7 +743,7 @@ ${toolInstructions}
           label: 'Register Now',
           labelKa: 'რეგისტრაცია',
           labelRu: 'Регистрация',
-          url: '/auth/signup',
+          url: '/register',
         });
       }
     }

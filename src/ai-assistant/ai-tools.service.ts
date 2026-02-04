@@ -106,7 +106,7 @@ export class AiToolsService {
           : undefined,
         portfolioCount: (pro as any).portfolioItemCount || pro.portfolioProjects?.length || 0,
         completedJobs: (pro.completedJobs || 0) + (pro.externalCompletedJobs || 0),
-        profileUrl: `/pro/${pro.uid}`,
+        profileUrl: `/professionals/${pro.uid}`,
       };
     });
 
@@ -171,7 +171,7 @@ export class AiToolsService {
           : undefined,
         portfolioCount: (pro as any).portfolioItemCount || (pro.portfolioProjects?.length || 0),
         completedJobs: (pro.completedJobs || 0) + (pro.externalCompletedJobs || 0),
-        profileUrl: `/pro/${pro.uid}`,
+        profileUrl: `/professionals/${pro.uid}`,
       };
 
       return {
