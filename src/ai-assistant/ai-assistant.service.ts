@@ -161,7 +161,7 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
 
 @Injectable()
 export class AiAssistantService {
-  private openai: OpenAI;
+  private openai: OpenAI | null = null;
 
   constructor(
     @InjectModel(ChatSession.name) private sessionModel: Model<ChatSession>,
@@ -169,9 +169,12 @@ export class AiAssistantService {
     private configService: ConfigService,
     private aiToolsService: AiToolsService,
   ) {
-    this.openai = new OpenAI({
-      apiKey: this.configService.get<string>('OPENAI_API_KEY'),
-    });
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    if (apiKey) {
+      this.openai = new OpenAI({ apiKey });
+    } else {
+      console.warn('[AiAssistantService] OPENAI_API_KEY not configured. AI chat will be disabled.');
+    }
   }
 
   private getSystemPrompt(locale: string = 'en', userRole?: string): string {
@@ -323,6 +326,18 @@ ${toolInstructions}
     dto: SendMessageDto,
     userId?: string,
   ): Promise<AiAssistantResponse> {
+    // Check if OpenAI is configured
+    if (!this.openai) {
+      const locale = dto.locale || 'en';
+      const errorMessage =
+        locale === 'ka'
+          ? 'AI ასისტენტი დროებით მიუწვდომელია. გთხოვთ სცადოთ მოგვიანებით.'
+          : locale === 'ru'
+            ? 'AI ассистент временно недоступен. Попробуйте позже.'
+            : 'AI assistant is temporarily unavailable. Please try again later.';
+      return { response: errorMessage };
+    }
+
     const session = await this.sessionModel.findById(sessionId).exec();
 
     if (!session) {
