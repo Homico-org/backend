@@ -17,10 +17,12 @@ export class ChatMessage extends Document {
     tokensUsed?: number;
     model?: string;
     processingTimeMs?: number;
+    richContent?: any[];
     suggestedActions?: Array<{
       type: 'link' | 'action';
       label: string;
       labelKa?: string;
+      labelRu?: string;
       url?: string;
       action?: string;
     }>;
