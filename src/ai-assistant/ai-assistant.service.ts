@@ -36,7 +36,7 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           minRating: {
             type: 'number',
             description:
-              'Minimum rating (0-5). Use 4 or 4.5 for "best" or "top rated" requests.',
+              'Minimum rating filter (0-5). Only use when user explicitly asks for a specific minimum rating like "at least 4 stars". Do NOT use for "best" or "top" requests - use sort: "rating" instead.',
           },
           minPrice: {
             type: 'number',
@@ -50,7 +50,7 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
             type: 'string',
             enum: ['rating', 'reviews', 'price-low', 'price-high', 'newest'],
             description:
-              'How to sort results. Use "rating" for best/top requests, "reviews" for most reviewed, "price-low" for budget options.',
+              'How to sort results. ALWAYS use "rating" for "best", "top", or "საუკეთესო" requests. Use "reviews" for most popular/reviewed. Use "price-low" for budget/cheap options.',
           },
           limit: {
             type: 'number',
