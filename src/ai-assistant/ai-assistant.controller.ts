@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UseGuards,
   Delete,
 } from '@nestjs/common';
@@ -48,11 +49,11 @@ export class AiAssistantController {
   @ApiResponse({ status: 200, description: 'Active session or null' })
   async findActiveSession(
     @CurrentUser() user: any,
-    @Body() body: { anonymousId?: string },
+    @Query('anonymousId') anonymousId?: string,
   ) {
     const session = await this.aiAssistantService.findActiveSession(
       user?.userId,
-      body?.anonymousId,
+      anonymousId,
     );
 
     if (!session) {
@@ -70,10 +71,11 @@ export class AiAssistantController {
         sessionId: (fullSession as any)._id,
         status: fullSession.status,
         messageCount: fullSession.messageCount,
-        messages: fullSession.messages.map(msg => ({
+        messages: fullSession.messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
           createdAt: (msg as any).createdAt,
+          richContent: msg.metadata?.richContent,
           suggestedActions: msg.metadata?.suggestedActions,
         })),
       },
@@ -99,10 +101,11 @@ export class AiAssistantController {
       sessionId: (session as any)._id,
       status: session.status,
       messageCount: session.messageCount,
-      messages: session.messages.map(msg => ({
+      messages: session.messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
         createdAt: (msg as any).createdAt,
+        richContent: msg.metadata?.richContent,
         suggestedActions: msg.metadata?.suggestedActions,
       })),
       createdAt: (session as any).createdAt,
@@ -130,6 +133,7 @@ export class AiAssistantController {
     return {
       response: result.response,
       suggestedActions: result.suggestedActions,
+      richContent: result.richContent,
     };
   }
 
