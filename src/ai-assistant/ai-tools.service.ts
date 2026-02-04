@@ -53,7 +53,20 @@ export class AiToolsService {
       page: 1,
     };
 
-    if (category) filters.category = category;
+    // Intelligently determine if 'category' is a top-level category or a subcategory
+    if (category) {
+      const categoryInfo = await this.resolveCategory(category);
+      if (categoryInfo.isTopLevel) {
+        filters.category = categoryInfo.categoryKey;
+      } else if (categoryInfo.subcategoryKey) {
+        // It's a subcategory - search by subcategory instead
+        filters.subcategory = categoryInfo.subcategoryKey;
+      } else {
+        // Try as subcategory directly (fallback)
+        filters.subcategory = category;
+      }
+    }
+
     if (subcategory) filters.subcategory = subcategory;
     if (minRating) filters.minRating = minRating;
     if (maxPrice) filters.maxPrice = maxPrice;
@@ -247,17 +260,45 @@ export class AiToolsService {
    * Get price ranges for a category based on real data
    */
   async getPriceRanges(category: string): Promise<RichContent> {
-    // Get professionals in this category to compute real price ranges
-    const result = await this.usersService.findAllPros({
-      category,
+    // Resolve if it's a category or subcategory
+    const categoryInfo = await this.resolveCategory(category);
+
+    const filters: any = {
       limit: 100,
       page: 1,
-    });
+    };
+
+    if (categoryInfo.isTopLevel) {
+      filters.category = categoryInfo.categoryKey;
+    } else if (categoryInfo.subcategoryKey) {
+      filters.subcategory = categoryInfo.subcategoryKey;
+    }
+
+    // Get professionals in this category to compute real price ranges
+    const result = await this.usersService.findAllPros(filters);
 
     const professionals = result.data;
 
-    // Get category details
-    const categoryDetails = await this.categoriesService.findByKey(category);
+    // Get category details - try both as category and subcategory
+    let categoryDetails = await this.categoriesService.findByKey(category);
+    let categoryName = category;
+    let categoryNameKa = category;
+
+    if (categoryDetails) {
+      categoryName = categoryDetails.name;
+      categoryNameKa = categoryDetails.nameKa;
+    } else {
+      // Try to find subcategory details
+      const allCategories = await this.categoriesService.findAll();
+      for (const cat of allCategories) {
+        const sub = cat.subcategories?.find((s: any) => s.key === category);
+        if (sub) {
+          categoryName = sub.name;
+          categoryNameKa = sub.nameKa;
+          break;
+        }
+      }
+    }
 
     // Compute price statistics
     const prices = professionals
@@ -271,8 +312,8 @@ export class AiToolsService {
 
     if (prices.length === 0) {
       priceInfo = {
-        category: categoryDetails?.name || category,
-        categoryKa: categoryDetails?.nameKa,
+        category: categoryName,
+        categoryKa: categoryNameKa,
         professionalCount: professionals.length,
         priceRanges: [],
         note: 'Contact professionals directly for pricing information.',
@@ -292,8 +333,8 @@ export class AiToolsService {
       const premiumMin = allMinPrices[Math.floor(allMinPrices.length * 0.66)] || avgMin;
 
       priceInfo = {
-        category: categoryDetails?.name || category,
-        categoryKa: categoryDetails?.nameKa,
+        category: categoryName,
+        categoryKa: categoryNameKa,
         averagePrice: {
           min: avgMin,
           max: avgMax,
@@ -474,5 +515,44 @@ export class AiToolsService {
     if (normalized === 'per_sqm' || normalized === 'sqm') return 'per_sqm';
 
     return 'fixed';
+  }
+
+  /**
+   * Resolve a category key - determine if it's a top-level category or subcategory
+   */
+  private async resolveCategory(
+    key: string,
+  ): Promise<{ isTopLevel: boolean; categoryKey?: string; subcategoryKey?: string }> {
+    const keyLower = key.toLowerCase();
+
+    // First, check if it's a top-level category
+    const allCategories = await this.categoriesService.findAll();
+
+    for (const cat of allCategories) {
+      if (cat.key.toLowerCase() === keyLower) {
+        return { isTopLevel: true, categoryKey: cat.key };
+      }
+
+      // Check subcategories
+      if (cat.subcategories) {
+        for (const sub of cat.subcategories) {
+          if (sub.key.toLowerCase() === keyLower) {
+            return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: sub.key };
+          }
+
+          // Check sub-subcategories (children)
+          if (sub.children) {
+            for (const child of sub.children) {
+              if (child.key.toLowerCase() === keyLower) {
+                return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: child.key };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Not found - return as-is and let it be used as subcategory
+    return { isTopLevel: false, subcategoryKey: key };
   }
 }
