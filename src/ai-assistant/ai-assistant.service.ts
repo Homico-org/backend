@@ -9,9 +9,18 @@ import { CreateSessionDto, SendMessageDto } from './dto/ai-assistant.dto';
 import { AiToolsService } from './ai-tools.service';
 import {
   RichContent,
+  RichContentType,
   AiAssistantResponse,
   SuggestedAction,
 } from './dto/rich-content.dto';
+
+type ToolContext = {
+  categoryQuery?: string;
+  proIds?: string[];
+  proUids?: number[];
+  featureQuery?: string;
+  helpQuery?: string;
+};
 
 // OpenAI function definitions for the AI to call
 const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
@@ -157,6 +166,28 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'search_help',
+      description:
+        "Search Homico's help/FAQ and feature guides. Use this when the user asks about platform rules, how something works, troubleshooting, or general questions that may be answered from Homico knowledge base.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'What to search for (user question or keywords).',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max items per list (default 4, max 6).',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
 ];
 
 @Injectable()
@@ -193,14 +224,16 @@ You have access to tools that let you query real data from Homico's database:
 - get_categories: List available service categories
 - get_price_ranges: Get real pricing data for a category
 - explain_feature: Explain how Homico features work
+- search_help: Search Homico help/FAQ and feature guides
 
 IMPORTANT GUIDELINES:
 1. When users ask about professionals, ALWAYS use search_professionals to show real data
 2. When users ask about prices/costs, use get_price_ranges for real pricing data
 3. When users ask "how do I" questions, use explain_feature to provide step-by-step guidance
 4. When users ask about services/categories, use get_categories to show available options
-5. After calling a tool, provide a helpful summary of the results
-6. If a tool returns no results, suggest alternative approaches`;
+5. When users ask how the platform works / rules / troubleshooting, use search_help
+6. After calling a tool, provide a helpful summary of results and what to do next
+7. If a tool returns no results, suggest alternative approaches and ask 1 clarifying question`;
 
     const prompts = {
       en: `You are Homi, the intelligent AI assistant for Homico - Georgia's leading platform connecting homeowners with renovation professionals.
@@ -211,8 +244,7 @@ ${toolInstructions}
 
 Your personality:
 - Warm, helpful, and knowledgeable about home renovation
-- You speak concisely but informatively
-- You use occasional friendly emojis sparingly (1-2 per message max)
+- You are direct and practical
 - You're an expert on Georgian renovation market, pricing, and best practices
 
 You can help with:
@@ -221,8 +253,10 @@ You can help with:
 3. **Platform Help**: Explain how to register, post jobs, contact pros, etc.
 4. **Renovation Advice**: Planning projects, choosing materials, understanding timelines
 
-Keep responses concise (2-4 sentences typically, unless showing detailed information).
-When showing professionals or prices, let the rich content speak for itself - don't repeat all the details in text.`,
+Response style:
+- Give a 1–2 sentence summary, then structured bullets (steps/options/checklist) when helpful
+- Be more detailed when the user asks for details, comparisons, or guidance
+- When showing professionals/prices in rich content, do NOT repeat every number; highlight 2–3 useful insights and next steps`,
 
       ka: `შენ ხარ ჰომი - Homico-ს ინტელექტუალური AI ასისტენტი. Homico არის საქართველოს წამყვანი პლატფორმა, რომელიც აკავშირებს სახლის მფლობელებს რემონტის პროფესიონალებთან.
 
@@ -360,11 +394,11 @@ ${toolInstructions}
     });
     await userMessage.save();
 
-    // Get conversation history (last 10 messages for context)
+    // Get conversation history (last 15 messages for context)
     const history = await this.messageModel
       .find({ sessionId: new Types.ObjectId(sessionId) })
       .sort({ createdAt: -1 })
-      .limit(10)
+      .limit(15)
       .lean()
       .exec();
 
@@ -395,12 +429,13 @@ ${toolInstructions}
         messages,
         tools: AI_TOOLS,
         tool_choice: 'auto',
-        max_tokens: 1000,
-        temperature: 0.7,
+        max_tokens: 1200,
+        temperature: 0.6,
       });
 
       let assistantMessage = completion.choices[0]?.message;
       const richContent: RichContent[] = [];
+      const toolContext: ToolContext = {};
 
       // Process tool calls if any
       if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
@@ -419,8 +454,16 @@ ${toolInstructions}
           );
 
           // Add tool result to rich content if it has data
-          if (toolResult.richContent) {
-            richContent.push(toolResult.richContent);
+          if (toolResult.richContent && toolResult.richContent.length > 0) {
+            richContent.push(...toolResult.richContent);
+          }
+
+          if (toolResult.context) {
+            if (toolResult.context.categoryQuery) toolContext.categoryQuery = toolResult.context.categoryQuery;
+            if (toolResult.context.proIds) toolContext.proIds = toolResult.context.proIds;
+            if (toolResult.context.proUids) toolContext.proUids = toolResult.context.proUids;
+            if (toolResult.context.featureQuery) toolContext.featureQuery = toolResult.context.featureQuery;
+            if (toolResult.context.helpQuery) toolContext.helpQuery = toolResult.context.helpQuery;
           }
 
           // Add tool response to messages
@@ -435,8 +478,8 @@ ${toolInstructions}
         completion = await this.openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages,
-          max_tokens: 500,
-          temperature: 0.7,
+          max_tokens: 900,
+          temperature: 0.6,
         });
 
         assistantMessage = completion.choices[0]?.message;
@@ -457,6 +500,8 @@ ${toolInstructions}
         assistantContent,
         richContent,
         locale,
+        toolContext,
+        dto.currentPage,
       );
 
       // Save assistant message
@@ -503,7 +548,7 @@ ${toolInstructions}
     toolName: string,
     args: any,
     locale: 'en' | 'ka' | 'ru',
-  ): Promise<{ summary: any; richContent?: RichContent }> {
+  ): Promise<{ summary: any; richContent?: RichContent[]; context?: ToolContext }> {
     try {
       switch (toolName) {
         case 'search_professionals': {
@@ -529,7 +574,12 @@ ${toolInstructions}
                 price: p.priceRange,
               })),
             },
-            richContent: professionals.length > 0 ? result : undefined,
+            richContent: professionals.length > 0 ? [result] : undefined,
+            context: {
+              categoryQuery: args.category,
+              proIds: professionals.map((p) => p.id).filter(Boolean),
+              proUids: professionals.map((p) => p.uid).filter(Boolean),
+            },
           };
         }
 
@@ -543,7 +593,8 @@ ${toolInstructions}
               found: true,
               professional: result.data,
             },
-            richContent: result,
+            richContent: [result],
+            context: { proIds: [(result.data as any)?.id].filter(Boolean) },
           };
         }
 
@@ -563,7 +614,8 @@ ${toolInstructions}
                 client: r.clientName,
               })),
             },
-            richContent: reviews.length > 0 ? result : undefined,
+            richContent: reviews.length > 0 ? [result] : undefined,
+            context: { proIds: [args.proId].filter(Boolean) },
           };
         }
 
@@ -579,7 +631,7 @@ ${toolInstructions}
                 subcategories: c.subcategoryCount,
               })),
             },
-            richContent: categories.length > 0 ? result : undefined,
+            richContent: categories.length > 0 ? [result] : undefined,
           };
         }
 
@@ -593,7 +645,8 @@ ${toolInstructions}
               priceRanges: priceInfo.priceRanges,
               professionalCount: priceInfo.professionalCount,
             },
-            richContent: result,
+            richContent: [result],
+            context: { categoryQuery: args.category },
           };
         }
 
@@ -615,7 +668,52 @@ ${toolInstructions}
               steps: feature.steps?.length || 0,
               actionUrl: feature.actionUrl,
             },
-            richContent: result,
+            richContent: [result],
+            context: { featureQuery: args.feature },
+          };
+        }
+
+        case 'search_help': {
+          const query = String(args.query || '').trim();
+          const limit = Math.min(Math.max(Number(args.limit || 4), 1), 6);
+          if (!query) {
+            return { summary: { error: 'Query is required' } };
+          }
+
+          const kb = this.aiToolsService.searchKnowledge(query, locale);
+          const blocks: RichContent[] = [];
+
+          if (kb.features?.length) {
+            blocks.push({
+              type: RichContentType.FEATURE_LIST,
+              data: kb.features.slice(0, 5),
+            });
+          }
+
+          if (kb.faqs?.length) {
+            const faqItems = kb.faqs.slice(0, limit).map((f: any) => ({
+              question: f.question?.en || '',
+              questionKa: f.question?.ka,
+              questionRu: f.question?.ru,
+              answer: f.answer?.en || '',
+              answerKa: f.answer?.ka,
+              answerRu: f.answer?.ru,
+              relatedFeature: f.relatedFeature,
+            }));
+            blocks.push({
+              type: RichContentType.FAQ_LIST,
+              data: faqItems,
+            });
+          }
+
+          return {
+            summary: {
+              query,
+              matchedFeatures: kb.features?.length || 0,
+              matchedFaqs: kb.faqs?.length || 0,
+            },
+            richContent: blocks.length ? blocks : undefined,
+            context: { helpQuery: query },
           };
         }
 
@@ -632,6 +730,8 @@ ${toolInstructions}
     content: string,
     richContent: RichContent[],
     locale: string,
+    toolContext?: ToolContext,
+    currentPage?: string,
   ): SuggestedAction[] {
     const actions: SuggestedAction[] = [];
     const contentLower = content.toLowerCase();
@@ -643,9 +743,20 @@ ${toolInstructions}
     const hasPriceInfo = richContent.some((rc) => rc.type === 'PRICE_INFO');
     const hasFeature = richContent.some((rc) => rc.type === 'FEATURE_EXPLANATION');
     const hasCategories = richContent.some((rc) => rc.type === 'CATEGORY_LIST');
+    const hasFaqs = richContent.some((rc) => rc.type === RichContentType.FAQ_LIST);
+    const hasFeatureList = richContent.some((rc) => rc.type === RichContentType.FEATURE_LIST);
 
     // If showing professionals, suggest browsing more or posting a job
     if (hasProList) {
+      if (toolContext?.categoryQuery) {
+        actions.push({
+          type: 'action',
+          label: 'Show typical prices',
+          labelKa: 'აჩვენე ტიპური ფასები',
+          labelRu: 'Показать типичные цены',
+          action: `What are typical prices for ${toolContext.categoryQuery}?`,
+        });
+      }
       actions.push({
         type: 'link',
         label: 'View All Professionals',
@@ -653,6 +764,16 @@ ${toolInstructions}
         labelRu: 'Все специалисты',
         url: '/browse/professionals',
       });
+      if (toolContext?.proUids?.length) {
+        const uid = toolContext.proUids[0];
+        actions.unshift({
+          type: 'action',
+          label: 'Show reviews for top result',
+          labelKa: 'იხილე საუკეთესო შედეგის შეფასებები',
+          labelRu: 'Отзывы по лучшему результату',
+          action: `Show me reviews for professional ${uid}`,
+        });
+      }
       actions.push({
         type: 'link',
         label: 'Post a Job',
@@ -664,6 +785,15 @@ ${toolInstructions}
 
     // If showing price info, suggest getting quotes
     if (hasPriceInfo) {
+      if (toolContext?.categoryQuery) {
+        actions.unshift({
+          type: 'action',
+          label: 'Show top professionals for this',
+          labelKa: 'აჩვენე საუკეთესო პროფესიონალები',
+          labelRu: 'Показать лучших специалистов',
+          action: `Show top ${toolContext.categoryQuery} professionals`,
+        });
+      }
       actions.push({
         type: 'link',
         label: 'Get Quotes',
@@ -689,6 +819,13 @@ ${toolInstructions}
             url: feature.actionUrl,
           });
         }
+        actions.push({
+          type: 'action',
+          label: 'Show related FAQs',
+          labelKa: 'იხილე დაკავშირებული კითხვები',
+          labelRu: 'Показать связанные вопросы',
+          action: `Search help about ${toolContext?.featureQuery || feature.feature || 'this feature'}`,
+        });
       }
     }
 
@@ -699,6 +836,27 @@ ${toolInstructions}
         label: 'Browse Categories',
         labelKa: 'კატეგორიების ნახვა',
         labelRu: 'Просмотр категорий',
+        url: '/browse/professionals',
+      });
+    }
+
+    if ((hasFaqs || hasFeatureList) && !hasProList && !hasPriceInfo) {
+      actions.push({
+        type: 'action',
+        label: 'Ask a follow-up',
+        labelKa: 'დასვი დამატებითი კითხვა',
+        labelRu: 'Задать уточняющий вопрос',
+        action: 'Can you tailor this to my case?',
+      });
+    }
+
+    // Light page-aware navigation helpers
+    if (currentPage?.startsWith('/professionals/')) {
+      actions.push({
+        type: 'link',
+        label: 'Browse Similar Pros',
+        labelKa: 'მსგავსი პროფესიონალები',
+        labelRu: 'Похожие специалисты',
         url: '/browse/professionals',
       });
     }
