@@ -25,6 +25,8 @@ export class ChatMessage extends Document {
       labelRu?: string;
       url?: string;
       action?: string;
+      actionKa?: string;
+      actionRu?: string;
     }>;
   };
 }

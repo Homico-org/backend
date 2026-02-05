@@ -755,6 +755,8 @@ ${toolInstructions}
           labelKa: 'აჩვენე ტიპური ფასები',
           labelRu: 'Показать типичные цены',
           action: `What are typical prices for ${toolContext.categoryQuery}?`,
+          actionKa: `${toolContext.categoryQuery} — რა არის ტიპური ფასები?`,
+          actionRu: `Какие типичные цены для ${toolContext.categoryQuery}?`,
         });
       }
       actions.push({
@@ -772,6 +774,8 @@ ${toolInstructions}
           labelKa: 'იხილე საუკეთესო შედეგის შეფასებები',
           labelRu: 'Отзывы по лучшему результату',
           action: `Show me reviews for professional ${uid}`,
+          actionKa: `მაჩვენე პროფესიონალ ${uid}-ის შეფასებები`,
+          actionRu: `Покажи отзывы специалиста ${uid}`,
         });
       }
       actions.push({
@@ -792,6 +796,8 @@ ${toolInstructions}
           labelKa: 'აჩვენე საუკეთესო პროფესიონალები',
           labelRu: 'Показать лучших специалистов',
           action: `Show top ${toolContext.categoryQuery} professionals`,
+          actionKa: `მაჩვენე საუკეთესო პროფესიონალები: ${toolContext.categoryQuery}`,
+          actionRu: `Покажи лучших специалистов: ${toolContext.categoryQuery}`,
         });
       }
       actions.push({
@@ -825,6 +831,8 @@ ${toolInstructions}
           labelKa: 'იხილე დაკავშირებული კითხვები',
           labelRu: 'Показать связанные вопросы',
           action: `Search help about ${toolContext?.featureQuery || feature.feature || 'this feature'}`,
+          actionKa: `მოძებნე დახმარება: ${toolContext?.featureQuery || feature.feature || 'ფუნქცია'}`,
+          actionRu: `Найди помощь: ${toolContext?.featureQuery || feature.feature || 'функция'}`,
         });
       }
     }
@@ -847,6 +855,8 @@ ${toolInstructions}
         labelKa: 'დასვი დამატებითი კითხვა',
         labelRu: 'Задать уточняющий вопрос',
         action: 'Can you tailor this to my case?',
+        actionKa: 'შეგიძლია ეს ჩემს შემთხვევას მოარგო?',
+        actionRu: 'Можешь адаптировать это под мой случай?',
       });
     }
 
