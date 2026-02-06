@@ -874,13 +874,28 @@ export class AdminService {
       throw new Error("Job not found");
     }
 
+    // Get proposals - jobId is stored as string in proposals collection
     const proposals = await this.proposalModel
-      .find({ jobId })
-      .populate("proId", "name email avatar phone avgRating totalReviews verificationStatus city")
+      .find({ jobId: jobId })
       .sort({ createdAt: -1 })
       .lean();
 
-    return proposals;
+    // Manually populate proId since it's stored as string, not ObjectId
+    const proIds = proposals.map((p: any) => p.proId).filter(Boolean);
+    const pros = await this.userModel
+      .find({ _id: { $in: proIds } })
+      .select("name email avatar phone avgRating totalReviews verificationStatus city")
+      .lean();
+
+    const proMap = new Map(pros.map((p: any) => [p._id.toString(), p]));
+
+    // Attach pro data to proposals
+    const populatedProposals = proposals.map((p: any) => ({
+      ...p,
+      proId: proMap.get(p.proId) || { name: "Unknown", _id: p.proId },
+    }));
+
+    return populatedProposals;
   }
 
   // ============== MIGRATIONS ==============
