@@ -809,6 +809,80 @@ export class AdminService {
     return user;
   }
 
+  // ============== JOB MANAGEMENT ==============
+
+  async getJobById(jobId: string) {
+    const job = await this.jobModel
+      .findById(jobId)
+      .populate("clientId", "name email avatar phone")
+      .lean();
+
+    if (!job) {
+      throw new Error("Job not found");
+    }
+
+    return job;
+  }
+
+  async updateJob(jobId: string, updateData: any) {
+    const job = await this.jobModel.findById(jobId);
+    if (!job) {
+      throw new Error("Job not found");
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+      "title",
+      "description",
+      "category",
+      "subcategory",
+      "status",
+      "budgetAmount",
+      "budgetType",
+      "location",
+      "urgency",
+    ];
+
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        (job as any)[field] = updateData[field];
+      }
+    }
+
+    await job.save();
+    return job;
+  }
+
+  async deleteJob(jobId: string) {
+    const job = await this.jobModel.findById(jobId);
+    if (!job) {
+      throw new Error("Job not found");
+    }
+
+    // Delete related proposals
+    await this.proposalModel.deleteMany({ jobId });
+
+    // Delete the job
+    await this.jobModel.findByIdAndDelete(jobId);
+
+    return { message: "Job deleted successfully" };
+  }
+
+  async getJobProposals(jobId: string) {
+    const job = await this.jobModel.findById(jobId);
+    if (!job) {
+      throw new Error("Job not found");
+    }
+
+    const proposals = await this.proposalModel
+      .find({ jobId })
+      .populate("proId", "name email avatar phone avgRating totalReviews verificationStatus city")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return proposals;
+  }
+
   // ============== MIGRATIONS ==============
 
   async syncVerificationStatus(): Promise<{

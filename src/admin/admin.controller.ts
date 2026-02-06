@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -301,6 +301,43 @@ export class AdminController {
   ) {
     const adminId = req.user?.id || req.user?._id;
     return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
+  }
+
+  // ============== JOB MANAGEMENT ==============
+
+  @Get('jobs/:id')
+  @ApiOperation({ summary: 'Get job details by ID' })
+  @ApiResponse({ status: 200, description: 'Job details' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  getJobById(@Param('id') jobId: string) {
+    return this.adminService.getJobById(jobId);
+  }
+
+  @Patch('jobs/:id')
+  @ApiOperation({ summary: 'Update a job' })
+  @ApiResponse({ status: 200, description: 'Job updated successfully' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  updateJob(
+    @Param('id') jobId: string,
+    @Body() updateData: any,
+  ) {
+    return this.adminService.updateJob(jobId, updateData);
+  }
+
+  @Delete('jobs/:id')
+  @ApiOperation({ summary: 'Delete a job' })
+  @ApiResponse({ status: 200, description: 'Job deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  deleteJob(@Param('id') jobId: string) {
+    return this.adminService.deleteJob(jobId);
+  }
+
+  @Get('jobs/:id/proposals')
+  @ApiOperation({ summary: 'Get proposals for a job' })
+  @ApiResponse({ status: 200, description: 'List of proposals' })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  getJobProposals(@Param('id') jobId: string) {
+    return this.adminService.getJobProposals(jobId);
   }
 
   // ============== MIGRATIONS ==============
