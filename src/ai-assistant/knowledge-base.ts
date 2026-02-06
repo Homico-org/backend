@@ -11,7 +11,12 @@ export type FeatureKey =
   | 'proposals'
   | 'reviews'
   | 'portfolio'
-  | 'how_it_works';
+  | 'how_it_works'
+  | 'tools'
+  | 'tool_analyzer'
+  | 'tool_prices'
+  | 'tool_calculator'
+  | 'tool_compare';
 
 interface KnowledgeBase {
   features: Record<FeatureKey, FeatureExplanation>;
@@ -778,6 +783,335 @@ export const KNOWLEDGE_BASE: KnowledgeBase = {
       actionLabel: 'Get Started',
       actionLabelKa: 'დაიწყეთ',
       actionLabelRu: 'Начать',
+    },
+
+    tools: {
+      feature: 'tools',
+      title: 'Renovation Tools',
+      titleKa: 'რემონტის ხელსაწყოები',
+      titleRu: 'Инструменты для ремонта',
+      description:
+        'Free tools to help you plan, estimate, and compare renovation costs.',
+      descriptionKa:
+        'უფასო ხელსაწყოები რემონტის დაგეგმვის, ხარჯების შეფასებისა და შედარებისთვის.',
+      descriptionRu:
+        'Бесплатные инструменты для планирования, оценки и сравнения затрат на ремонт.',
+      steps: [
+        {
+          step: 1,
+          title: 'Estimate Analyzer',
+          titleKa: 'შეფასების ანალიზატორი',
+          titleRu: 'Анализатор сметы',
+          description:
+            'Upload contractor estimates to analyze prices against market averages.',
+          descriptionKa:
+            'ატვირთეთ კონტრაქტორის შეფასებები ფასების გასაანალიზებლად საბაზრო საშუალოსთან მიმართებაში.',
+          descriptionRu:
+            'Загрузите сметы подрядчиков для анализа цен относительно рыночных средних.',
+          icon: 'file-search',
+        },
+        {
+          step: 2,
+          title: 'Price Database',
+          titleKa: 'ფასების მონაცემთა ბაზა',
+          titleRu: 'База данных цен',
+          description:
+            'Browse renovation service prices by category to know market rates.',
+          descriptionKa:
+            'დაათვალიერეთ რემონტის სერვისების ფასები კატეგორიების მიხედვით საბაზრო ფასების გასაგებად.',
+          descriptionRu:
+            'Просматривайте цены на ремонтные услуги по категориям для понимания рыночных ставок.',
+          icon: 'database',
+        },
+        {
+          step: 3,
+          title: 'Cost Calculator',
+          titleKa: 'ხარჯების კალკულატორი',
+          titleRu: 'Калькулятор стоимости',
+          description:
+            'Calculate estimated renovation costs based on your project details.',
+          descriptionKa:
+            'გამოთვალეთ სავარაუდო რემონტის ღირებულება თქვენი პროექტის დეტალების მიხედვით.',
+          descriptionRu:
+            'Рассчитайте примерную стоимость ремонта на основе деталей вашего проекта.',
+          icon: 'calculator',
+        },
+        {
+          step: 4,
+          title: 'Estimate Comparison',
+          titleKa: 'შეფასებების შედარება',
+          titleRu: 'Сравнение смет',
+          description:
+            'Compare estimates from multiple contractors side by side.',
+          descriptionKa:
+            'შეადარეთ სხვადასხვა კონტრაქტორის შეფასებები ერთმანეთს.',
+          descriptionRu:
+            'Сравните сметы от разных подрядчиков рядом друг с другом.',
+          icon: 'scale',
+        },
+      ],
+      actionUrl: '/tools',
+      actionLabel: 'Open Tools',
+      actionLabelKa: 'ხელსაწყოების გახსნა',
+      actionLabelRu: 'Открыть инструменты',
+    },
+
+    tool_analyzer: {
+      feature: 'tool_analyzer',
+      title: 'Estimate Analyzer',
+      titleKa: 'შეფასების ანალიზატორი',
+      titleRu: 'Анализатор сметы',
+      description:
+        'Upload your renovation estimate to check if prices are fair compared to market averages.',
+      descriptionKa:
+        'ატვირთეთ თქვენი რემონტის შეფასება და შეამოწმეთ ფასები საბაზრო საშუალოსთან მიმართებაში.',
+      descriptionRu:
+        'Загрузите вашу смету на ремонт, чтобы проверить справедливость цен по сравнению с рыночными средними.',
+      steps: [
+        {
+          step: 1,
+          title: 'Upload estimate',
+          titleKa: 'ატვირთეთ შეფასება',
+          titleRu: 'Загрузите смету',
+          description:
+            'Upload Excel, PDF, or image of your contractor estimate.',
+          descriptionKa:
+            'ატვირთეთ Excel, PDF ან ფოტო თქვენი კონტრაქტორის შეფასებიდან.',
+          descriptionRu:
+            'Загрузите Excel, PDF или фото сметы от подрядчика.',
+          icon: 'upload',
+        },
+        {
+          step: 2,
+          title: 'AI analyzes prices',
+          titleKa: 'AI აანალიზებს ფასებს',
+          titleRu: 'ИИ анализирует цены',
+          description:
+            'Our AI compares each line item against market average prices.',
+          descriptionKa:
+            'ჩვენი AI ადარებს თითოეულ პოზიციას საბაზრო საშუალო ფასებთან.',
+          descriptionRu:
+            'Наш ИИ сравнивает каждую позицию со средними рыночными ценами.',
+          icon: 'sparkles',
+        },
+        {
+          step: 3,
+          title: 'See alerts',
+          titleKa: 'ნახეთ გაფრთხილებები',
+          titleRu: 'Смотрите предупреждения',
+          description:
+            'Get alerts for overpriced items, missing prices, and potential savings.',
+          descriptionKa:
+            'მიიღეთ გაფრთხილებები გადაჭარბებულ ფასებზე, გამოტოვებულ ფასებზე და პოტენციურ დაზოგვაზე.',
+          descriptionRu:
+            'Получите предупреждения о завышенных ценах, отсутствующих ценах и потенциальной экономии.',
+          icon: 'alert-triangle',
+        },
+        {
+          step: 4,
+          title: 'Negotiate better',
+          titleKa: 'მოაწყვეთ უკეთესი მოლაპარაკება',
+          titleRu: 'Договоритесь лучше',
+          description:
+            'Use insights to negotiate fair prices with your contractor.',
+          descriptionKa:
+            'გამოიყენეთ შედეგები სამართლიანი ფასების მოსალაპარაკებლად კონტრაქტორთან.',
+          descriptionRu:
+            'Используйте результаты для переговоров о справедливых ценах с подрядчиком.',
+          icon: 'handshake',
+        },
+      ],
+      actionUrl: '/tools/analyzer',
+      actionLabel: 'Analyze Estimate',
+      actionLabelKa: 'შეფასების ანალიზი',
+      actionLabelRu: 'Анализировать смету',
+    },
+
+    tool_prices: {
+      feature: 'tool_prices',
+      title: 'Price Database',
+      titleKa: 'ფასების მონაცემთა ბაზა',
+      titleRu: 'База данных цен',
+      description:
+        'Browse current market prices for renovation services in Georgia.',
+      descriptionKa:
+        'დაათვალიერეთ მიმდინარე საბაზრო ფასები რემონტის სერვისებზე საქართველოში.',
+      descriptionRu:
+        'Просматривайте текущие рыночные цены на ремонтные услуги в Грузии.',
+      steps: [
+        {
+          step: 1,
+          title: 'Browse categories',
+          titleKa: 'დაათვალიერეთ კატეგორიები',
+          titleRu: 'Просмотрите категории',
+          description:
+            'Filter by category: electrical, plumbing, walls, flooring, painting, etc.',
+          descriptionKa:
+            'გაფილტრეთ კატეგორიით: ელექტრიკა, სანტექნიკა, კედლები, იატაკი, შეღებვა და ა.შ.',
+          descriptionRu:
+            'Фильтруйте по категории: электрика, сантехника, стены, полы, покраска и т.д.',
+          icon: 'grid',
+        },
+        {
+          step: 2,
+          title: 'Search services',
+          titleKa: 'მოძებნეთ სერვისები',
+          titleRu: 'Ищите услуги',
+          description:
+            'Search for specific services by name.',
+          descriptionKa:
+            'მოძებნეთ კონკრეტული სერვისები სახელით.',
+          descriptionRu:
+            'Ищите конкретные услуги по названию.',
+          icon: 'search',
+        },
+        {
+          step: 3,
+          title: 'View price ranges',
+          titleKa: 'ნახეთ ფასების დიაპაზონი',
+          titleRu: 'Смотрите диапазоны цен',
+          description:
+            'See min/max prices, units (per sqm, per piece, etc.).',
+          descriptionKa:
+            'ნახეთ მინ/მაქს ფასები, ერთეულები (კვმ-ზე, ცალზე და ა.შ.).',
+          descriptionRu:
+            'Смотрите мин/макс цены, единицы измерения (за кв.м, за штуку и т.д.).',
+          icon: 'tag',
+        },
+      ],
+      actionUrl: '/tools/prices',
+      actionLabel: 'View Prices',
+      actionLabelKa: 'ფასების ნახვა',
+      actionLabelRu: 'Посмотреть цены',
+    },
+
+    tool_calculator: {
+      feature: 'tool_calculator',
+      title: 'Renovation Calculator',
+      titleKa: 'რემონტის კალკულატორი',
+      titleRu: 'Калькулятор ремонта',
+      description:
+        'Estimate your renovation costs by entering project details.',
+      descriptionKa:
+        'შეაფასეთ რემონტის ღირებულება თქვენი პროექტის დეტალების შეყვანით.',
+      descriptionRu:
+        'Оцените стоимость ремонта, введя детали вашего проекта.',
+      steps: [
+        {
+          step: 1,
+          title: 'Enter room details',
+          titleKa: 'შეიყვანეთ ოთახის დეტალები',
+          titleRu: 'Введите данные помещения',
+          description:
+            'Specify room dimensions, type (bathroom, kitchen, bedroom).',
+          descriptionKa:
+            'მიუთითეთ ოთახის ზომები, ტიპი (აბაზანა, სამზარეულო, საძინებელი).',
+          descriptionRu:
+            'Укажите размеры помещения, тип (ванная, кухня, спальня).',
+          icon: 'ruler',
+        },
+        {
+          step: 2,
+          title: 'Select work types',
+          titleKa: 'აირჩიეთ სამუშაოს ტიპები',
+          titleRu: 'Выберите виды работ',
+          description:
+            'Choose what work you need: electrical, plumbing, walls, flooring, etc.',
+          descriptionKa:
+            'აირჩიეთ რა სამუშაო გჭირდებათ: ელექტრიკა, სანტექნიკა, კედლები, იატაკი და ა.შ.',
+          descriptionRu:
+            'Выберите нужные работы: электрика, сантехника, стены, полы и т.д.',
+          icon: 'check-square',
+        },
+        {
+          step: 3,
+          title: 'Get estimate',
+          titleKa: 'მიიღეთ შეფასება',
+          titleRu: 'Получите оценку',
+          description:
+            'See estimated cost range based on current market prices.',
+          descriptionKa:
+            'ნახეთ სავარაუდო ღირებულების დიაპაზონი მიმდინარე საბაზრო ფასების მიხედვით.',
+          descriptionRu:
+            'Смотрите примерный диапазон стоимости на основе текущих рыночных цен.',
+          icon: 'calculator',
+        },
+      ],
+      actionUrl: '/tools/calculator',
+      actionLabel: 'Calculate Cost',
+      actionLabelKa: 'ღირებულების გამოთვლა',
+      actionLabelRu: 'Рассчитать стоимость',
+    },
+
+    tool_compare: {
+      feature: 'tool_compare',
+      title: 'Estimate Comparison',
+      titleKa: 'შეფასებების შედარება',
+      titleRu: 'Сравнение смет',
+      description:
+        'Compare renovation estimates from multiple contractors side by side.',
+      descriptionKa:
+        'შეადარეთ რემონტის შეფასებები სხვადასხვა კონტრაქტორისგან ერთმანეთს.',
+      descriptionRu:
+        'Сравните сметы на ремонт от разных подрядчиков рядом друг с другом.',
+      steps: [
+        {
+          step: 1,
+          title: 'Upload estimates',
+          titleKa: 'ატვირთეთ შეფასებები',
+          titleRu: 'Загрузите сметы',
+          description:
+            'Upload 2-4 contractor estimates for comparison.',
+          descriptionKa:
+            'ატვირთეთ 2-4 კონტრაქტორის შეფასება შესადარებლად.',
+          descriptionRu:
+            'Загрузите 2-4 сметы от подрядчиков для сравнения.',
+          icon: 'upload',
+        },
+        {
+          step: 2,
+          title: 'View comparison',
+          titleKa: 'ნახეთ შედარება',
+          titleRu: 'Смотрите сравнение',
+          description:
+            'See prices side by side, category by category.',
+          descriptionKa:
+            'ნახეთ ფასები გვერდიგვერდ, კატეგორიების მიხედვით.',
+          descriptionRu:
+            'Смотрите цены рядом друг с другом по категориям.',
+          icon: 'columns',
+        },
+        {
+          step: 3,
+          title: 'Find best value',
+          titleKa: 'იპოვეთ საუკეთესო ღირებულება',
+          titleRu: 'Найдите лучшую цену',
+          description:
+            'Identify which contractor offers the best value for each category.',
+          descriptionKa:
+            'დაადგინეთ რომელი კონტრაქტორი სთავაზობს საუკეთესო ფასს თითოეული კატეგორიისთვის.',
+          descriptionRu:
+            'Определите, какой подрядчик предлагает лучшую цену для каждой категории.',
+          icon: 'trophy',
+        },
+        {
+          step: 4,
+          title: 'Make decision',
+          titleKa: 'მიიღეთ გადაწყვეტილება',
+          titleRu: 'Примите решение',
+          description:
+            'Choose the contractor with the best balance of price and quality.',
+          descriptionKa:
+            'აირჩიეთ კონტრაქტორი ფასისა და ხარისხის საუკეთესო ბალანსით.',
+          descriptionRu:
+            'Выберите подрядчика с лучшим балансом цены и качества.',
+          icon: 'check-circle',
+        },
+      ],
+      actionUrl: '/tools/compare',
+      actionLabel: 'Compare Estimates',
+      actionLabelKa: 'შეფასებების შედარება',
+      actionLabelRu: 'Сравнить сметы',
     },
   },
 

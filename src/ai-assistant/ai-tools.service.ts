@@ -382,40 +382,147 @@ export class AiToolsService {
     feature: string,
     locale: 'en' | 'ka' | 'ru' = 'en',
   ): Promise<RichContent | null> {
-    // Map common phrases to feature keys
+    // Map common phrases to feature keys (English, Georgian, Russian)
     const featureMapping: Record<string, FeatureKey> = {
+      // Registration - Client
       register: 'registration_client',
       'register client': 'registration_client',
       'sign up': 'registration_client',
+      'რეგისტრაცია': 'registration_client',
+      'დარეგისტრირება': 'registration_client',
+
+      // Registration - Professional
       'register professional': 'registration_pro',
       'register pro': 'registration_pro',
       'become professional': 'registration_pro',
+      'become a pro': 'registration_pro',
+      'პროფესიონალად': 'registration_pro',
+      'პროფესიონალის რეგისტრაცია': 'registration_pro',
+      'როგორ გავხდე პროფესიონალი': 'registration_pro',
+      'როგორ დავრეგისტრირდე პროფესიონალად': 'registration_pro',
+      'სპეციალისტად რეგისტრაცია': 'registration_pro',
+      'как стать специалистом': 'registration_pro',
+      'регистрация специалиста': 'registration_pro',
+
+      // Post Job
       'post job': 'post_job',
       'create job': 'post_job',
+      'განცხადება': 'post_job',
+      'სამუშაოს განთავსება': 'post_job',
+      'разместить заказ': 'post_job',
+
+      // Find Professionals
       'find professional': 'find_professionals',
       'find pros': 'find_professionals',
       'browse professional': 'find_professionals',
       search: 'find_professionals',
+      'პროფესიონალების პოვნა': 'find_professionals',
+      'მოძებნა': 'find_professionals',
+      'найти специалиста': 'find_professionals',
+
+      // Pricing
       pricing: 'pricing',
       price: 'pricing',
       cost: 'pricing',
       free: 'pricing',
+      'ფასი': 'pricing',
+      'ღირებულება': 'pricing',
+      'უფასო': 'pricing',
+      'цена': 'pricing',
+      'стоимость': 'pricing',
+
+      // Verification
       verification: 'verification',
       verify: 'verification',
       verified: 'verification',
+      'ვერიფიკაცია': 'verification',
+      'დადასტურება': 'verification',
+      'верификация': 'verification',
+
+      // Messaging
       message: 'messaging',
       messaging: 'messaging',
       chat: 'messaging',
+      'შეტყობინება': 'messaging',
+      'ჩათი': 'messaging',
+      'сообщение': 'messaging',
+
+      // Proposals
       proposal: 'proposals',
       proposals: 'proposals',
       quote: 'proposals',
+      'შეთავაზება': 'proposals',
+      'წინადადება': 'proposals',
+      'предложение': 'proposals',
+
+      // Reviews
       review: 'reviews',
       reviews: 'reviews',
       rating: 'reviews',
+      'შეფასება': 'reviews',
+      'რეიტინგი': 'reviews',
+      'отзыв': 'reviews',
+
+      // Portfolio
       portfolio: 'portfolio',
+      'პორტფოლიო': 'portfolio',
+      'портфолио': 'portfolio',
+
+      // How it works
       'how it works': 'how_it_works',
       'how does it work': 'how_it_works',
       homico: 'how_it_works',
+      'როგორ მუშაობს': 'how_it_works',
+      'как работает': 'how_it_works',
+
+      // Tools - General
+      tools: 'tools',
+      'ხელსაწყოები': 'tools',
+      'კალკულატორები': 'tools',
+      'инструменты': 'tools',
+
+      // Tool - Analyzer
+      analyzer: 'tool_analyzer',
+      'estimate analyzer': 'tool_analyzer',
+      'analyze estimate': 'tool_analyzer',
+      'check estimate': 'tool_analyzer',
+      'ანალიზატორი': 'tool_analyzer',
+      'შეფასების ანალიზი': 'tool_analyzer',
+      'შეფასების შემოწმება': 'tool_analyzer',
+      'анализатор сметы': 'tool_analyzer',
+      'проверить смету': 'tool_analyzer',
+
+      // Tool - Prices
+      'price database': 'tool_prices',
+      'prices database': 'tool_prices',
+      'market prices': 'tool_prices',
+      'renovation prices': 'tool_prices',
+      'ფასების ბაზა': 'tool_prices',
+      'რემონტის ფასები': 'tool_prices',
+      'საბაზრო ფასები': 'tool_prices',
+      'რა ღირს': 'tool_prices',
+      'база цен': 'tool_prices',
+      'цены на ремонт': 'tool_prices',
+
+      // Tool - Calculator
+      calculator: 'tool_calculator',
+      'cost calculator': 'tool_calculator',
+      'renovation calculator': 'tool_calculator',
+      'calculate cost': 'tool_calculator',
+      'კალკულატორი': 'tool_calculator',
+      'ღირებულების კალკულატორი': 'tool_calculator',
+      'რემონტის კალკულატორი': 'tool_calculator',
+      'калькулятор': 'tool_calculator',
+      'калькулятор ремонта': 'tool_calculator',
+
+      // Tool - Compare
+      compare: 'tool_compare',
+      'compare estimates': 'tool_compare',
+      'estimate comparison': 'tool_compare',
+      'შედარება': 'tool_compare',
+      'შეფასებების შედარება': 'tool_compare',
+      'сравнение смет': 'tool_compare',
+      'сравнить сметы': 'tool_compare',
     };
 
     // Find matching feature key

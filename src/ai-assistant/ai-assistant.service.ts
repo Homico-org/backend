@@ -152,14 +152,14 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: 'explain_feature',
       description:
-        'Explain a Homico platform feature. Use this when users ask how to do something on Homico, like registering, posting jobs, or finding professionals.',
+        'Explain a Homico platform feature with rich step-by-step guidance. ALWAYS use this when users ask "how do I", "how to", "როგორ" questions about platform features. Returns detailed steps with icons.',
       parameters: {
         type: 'object',
         properties: {
           feature: {
             type: 'string',
             description:
-              'The feature to explain. Examples: "registration", "register professional", "post job", "find professionals", "verification", "messaging", "proposals", "reviews", "portfolio", "how it works".',
+              'The feature to explain. Use these exact values: "registration_pro" for professional registration, "registration_client" for client registration, "post_job" for posting jobs, "find_professionals" for finding pros, "verification" for verification process, "messaging" for chat/messages, "proposals" for job proposals, "reviews" for reviews, "portfolio" for portfolio, "how_it_works" for general platform explanation, "tools" for all renovation tools overview, "tool_analyzer" for estimate analyzer (check contractor prices), "tool_prices" for price database, "tool_calculator" for renovation calculator, "tool_compare" for comparing estimates.',
           },
         },
         required: ['feature'],
@@ -252,6 +252,7 @@ You can help with:
 2. **Cost Estimation**: Show real price ranges from professionals on the platform
 3. **Platform Help**: Explain how to register, post jobs, contact pros, etc.
 4. **Renovation Advice**: Planning projects, choosing materials, understanding timelines
+5. **Free Tools**: Explain our tools at /tools - Estimate Analyzer (check if contractor prices are fair), Price Database (browse market prices), Calculator (estimate costs), Compare (compare multiple estimates)
 
 Response style:
 - Give a 1–2 sentence summary, then structured bullets (steps/options/checklist) when helpful
@@ -275,6 +276,7 @@ ${toolInstructions}
 2. **ღირებულების შეფასება**: აჩვენე რეალური ფასები პლატფორმის პროფესიონალებისგან
 3. **პლატფორმის დახმარება**: ახსენი როგორ დარეგისტრირდნენ, განათავსონ განცხადება და ა.შ.
 4. **რემონტის რჩევები**: პროექტების დაგეგმვა, მასალების შერჩევა
+5. **უფასო ხელსაწყოები**: აგიხსნი ჩვენს ხელსაწყოებს /tools გვერდზე - შეფასების ანალიზატორი (კონტრაქტორის ფასების შემოწმება), ფასების ბაზა (საბაზრო ფასების ნახვა), კალკულატორი (ღირებულების შეფასება), შედარება (რამდენიმე შეფასების შედარება)
 
 პასუხები იყოს მოკლე (ჩვეულებრივ 2-4 წინადადება).`,
 
@@ -295,6 +297,7 @@ ${toolInstructions}
 2. **Оценка стоимости**: Показать реальные цены от специалистов на платформе
 3. **Помощь с платформой**: Объяснить как регистрироваться, размещать заказы и т.д.
 4. **Советы по ремонту**: Планирование проектов, выбор материалов
+5. **Бесплатные инструменты**: Объясню наши инструменты на /tools - Анализатор смет (проверить цены подрядчика), База цен (рыночные цены), Калькулятор (оценка стоимости), Сравнение (сравнить несколько смет)
 
 Ответы должны быть краткими (обычно 2-4 предложения).`,
     };

@@ -728,6 +728,12 @@ export class JobsService {
       throw new NotFoundException('სამუშაო ვერ მოიძებნა');
     }
 
+    // Only allow proposals for high-level categories (design, architecture)
+    const HIGH_LEVEL_CATEGORIES = ['design', 'architecture'];
+    if (!job.category || !HIGH_LEVEL_CATEGORIES.includes(job.category.toLowerCase())) {
+      throw new ForbiddenException('წინადადებების გაგზავნა შესაძლებელია მხოლოდ დიზაინისა და არქიტექტურის კატეგორიის სამუშაოებზე. სხვა კატეგორიებისთვის გამოიყენეთ კომენტარები.');
+    }
+
     // Prevent submitting proposal to own job
     if (job.clientId.toString() === proId) {
       throw new ForbiddenException('საკუთარ თავს ვერ გაუგზავნით წინადადებას');
