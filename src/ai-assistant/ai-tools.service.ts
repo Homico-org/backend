@@ -25,6 +25,7 @@ export interface SearchProfessionalsParams {
   minPrice?: number;
   sort?: 'rating' | 'reviews' | 'price-low' | 'price-high' | 'newest';
   limit?: number;
+  locale?: 'en' | 'ka' | 'ru';
 }
 
 export interface GetProfessionalReviewsParams {
@@ -46,7 +47,16 @@ export class AiToolsService {
   async searchProfessionals(
     params: SearchProfessionalsParams,
   ): Promise<RichContent> {
-    const { category, subcategory, minRating, maxPrice, minPrice, sort, limit = 5 } = params;
+    const {
+      category,
+      subcategory,
+      minRating,
+      maxPrice,
+      minPrice,
+      sort,
+      limit = 5,
+      locale = 'en',
+    } = params;
 
     const filters: any = {
       limit,
@@ -55,7 +65,7 @@ export class AiToolsService {
 
     // Intelligently determine if 'category' is a top-level category or a subcategory
     if (category) {
-      const categoryInfo = await this.resolveCategory(category);
+      const categoryInfo = await this.resolveCategory(category, locale);
       if (categoryInfo.isTopLevel) {
         filters.category = categoryInfo.categoryKey;
       } else if (categoryInfo.subcategoryKey) {
@@ -67,7 +77,14 @@ export class AiToolsService {
       }
     }
 
-    if (subcategory) filters.subcategory = subcategory;
+    if (subcategory) {
+      // Allow localized / free-text subcategory (e.g. "არქიტექტორი") and resolve it to a key when possible
+      const subInfo = await this.resolveCategory(subcategory, locale);
+      filters.subcategory = subInfo.subcategoryKey || subcategory;
+      if (!filters.category && subInfo.categoryKey) {
+        filters.category = subInfo.categoryKey;
+      }
+    }
     if (minRating) filters.minRating = minRating;
     if (maxPrice) filters.maxPrice = maxPrice;
     if (minPrice) filters.minPrice = minPrice;
@@ -254,6 +271,70 @@ export class AiToolsService {
       type: RichContentType.CATEGORY_LIST,
       data: categoryItems,
     };
+  }
+
+  /**
+   * Suggest closest matching categories for a free-text query.
+   * Useful when users type role words like "არქიტექტორი" instead of a category key.
+   */
+  async suggestCategories(
+    query: string,
+    locale: 'en' | 'ka' | 'ru' = 'en',
+    limit: number = 8,
+  ): Promise<RichContent> {
+    const q = String(query || '').trim();
+    if (!q) {
+      return { type: RichContentType.CATEGORY_LIST, data: [] };
+    }
+
+    const result = await this.categoriesService.search(q);
+    const items: CategoryItem[] = [];
+    const seen = new Set<string>();
+
+    const pushCategory = (cat: any) => {
+      if (!cat?.key || seen.has(cat.key)) return;
+      seen.add(cat.key);
+      items.push({
+        key: cat.key,
+        name: cat.name,
+        nameKa: cat.nameKa,
+        icon: cat.icon,
+        subcategoryCount: (cat.subcategories || []).length,
+      });
+    };
+
+    // Prioritize top-level categories first
+    for (const cat of result.categories || []) {
+      pushCategory(cat);
+      if (items.length >= limit) break;
+    }
+
+    // Then categories of matching subcategories/sub-subcategories
+    if (items.length < limit) {
+      const categoriesByKey = new Map<string, any>(
+        (await this.categoriesService.findAll()).map((c: any) => [c.key, c]),
+      );
+
+      for (const sub of result.subcategories || []) {
+        const cat = categoriesByKey.get(sub.category);
+        if (cat) pushCategory(cat);
+        if (items.length >= limit) break;
+      }
+
+      for (const child of result.subSubcategories || []) {
+        const cat = categoriesByKey.get(child.category);
+        if (cat) pushCategory(cat);
+        if (items.length >= limit) break;
+      }
+    }
+
+    // Localize the primary `name` for RU as well (front-end uses `nameKa` only for ka)
+    if (locale === 'ru') {
+      // If the DB doesn't store `nameRu`, we keep `name` as default.
+      // (We still provide `nameKa` for Georgian UI.)
+    }
+
+    return { type: RichContentType.CATEGORY_LIST, data: items.slice(0, limit) };
   }
 
   /**
@@ -629,14 +710,33 @@ export class AiToolsService {
    */
   private async resolveCategory(
     key: string,
+    locale: 'en' | 'ka' | 'ru' = 'en',
   ): Promise<{ isTopLevel: boolean; categoryKey?: string; subcategoryKey?: string }> {
-    const keyLower = key.toLowerCase();
+    const query = String(key || '').trim();
+    const keyLower = query.toLowerCase();
+
+    // Lightweight alias mapping for common "role words" users type (esp. in Georgian/Russian)
+    const alias = this.resolveCategoryAlias(keyLower);
+    if (alias) {
+      return { isTopLevel: true, categoryKey: alias };
+    }
 
     // First, check if it's a top-level category
     const allCategories = await this.categoriesService.findAll();
 
+    const norm = this.normalizeCategoryQuery(query);
+
     for (const cat of allCategories) {
       if (cat.key.toLowerCase() === keyLower) {
+        return { isTopLevel: true, categoryKey: cat.key };
+      }
+
+      // Also match by localized name / keywords (important for KA/RU queries)
+      if (
+        this.normalizeCategoryQuery(cat.name) === norm ||
+        this.normalizeCategoryQuery(cat.nameKa) === norm ||
+        (cat.keywords || []).some((k) => this.normalizeCategoryQuery(k) === norm)
+      ) {
         return { isTopLevel: true, categoryKey: cat.key };
       }
 
@@ -647,10 +747,26 @@ export class AiToolsService {
             return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: sub.key };
           }
 
+          if (
+            this.normalizeCategoryQuery(sub.name) === norm ||
+            this.normalizeCategoryQuery(sub.nameKa) === norm ||
+            (sub.keywords || []).some((k) => this.normalizeCategoryQuery(k) === norm)
+          ) {
+            return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: sub.key };
+          }
+
           // Check sub-subcategories (children)
           if (sub.children) {
             for (const child of sub.children) {
               if (child.key.toLowerCase() === keyLower) {
+                return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: child.key };
+              }
+
+              if (
+                this.normalizeCategoryQuery(child.name) === norm ||
+                this.normalizeCategoryQuery(child.nameKa) === norm ||
+                (child.keywords || []).some((k) => this.normalizeCategoryQuery(k) === norm)
+              ) {
                 return { isTopLevel: false, categoryKey: cat.key, subcategoryKey: child.key };
               }
             }
@@ -659,7 +775,84 @@ export class AiToolsService {
       }
     }
 
+    // Fallback: use the categories search (supports partial matches and keywords)
+    // This is crucial for queries like "არქიტექტორი" where users type a role word, not a category key.
+    if (query) {
+      const search = await this.categoriesService.search(query);
+
+      if (search.categories?.length) {
+        // Best effort: pick first (CategoriesService already filters inactive)
+        return { isTopLevel: true, categoryKey: search.categories[0].key };
+      }
+
+      if (search.subSubcategories?.length) {
+        const best = search.subSubcategories[0];
+        return {
+          isTopLevel: false,
+          categoryKey: best.category,
+          subcategoryKey: best.subSubcategory.key,
+        };
+      }
+
+      if (search.subcategories?.length) {
+        const best = search.subcategories[0];
+        return {
+          isTopLevel: false,
+          categoryKey: best.category,
+          subcategoryKey: best.subcategory.key,
+        };
+      }
+    }
+
     // Not found - return as-is and let it be used as subcategory
     return { isTopLevel: false, subcategoryKey: key };
+  }
+
+  private normalizeCategoryQuery(value: string | undefined | null): string {
+    return String(value || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[_/]+/g, ' ')
+      .replace(/[-]+/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]+/gu, '')
+      .replace(/\s+/g, ' ');
+  }
+
+  private resolveCategoryAlias(queryLower: string): string | null {
+    const q = this.normalizeCategoryQuery(queryLower);
+    const aliases: Record<string, string> = {
+      // EN
+      architect: 'architecture',
+      architects: 'architecture',
+      architecture: 'architecture',
+      'interior designer': 'interior-design',
+      designer: 'design',
+      electricians: 'electrical',
+      electrician: 'electrical',
+      plumber: 'plumbing',
+      plumbers: 'plumbing',
+      painter: 'painting',
+      painters: 'painting',
+      // KA
+      არქიტექტორი: 'architecture',
+      არქიტექტორები: 'architecture',
+      არქიტექტურა: 'architecture',
+      დიზაინერი: 'design',
+      ინტერიერი: 'interior-design',
+      'ინტერიერის დიზაინი': 'interior-design',
+      ელექტრიკოსი: 'electrical',
+      სანტექნიკოსი: 'plumbing',
+      სანტექნიკა: 'plumbing',
+      მხატვარი: 'painting',
+      // RU
+      архитектор: 'architecture',
+      архитектура: 'architecture',
+      дизайнер: 'design',
+      электрик: 'electrical',
+      сантехник: 'plumbing',
+      маляр: 'painting',
+    };
+
+    return aliases[q] || null;
   }
 }

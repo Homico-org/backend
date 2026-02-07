@@ -36,11 +36,12 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           category: {
             type: 'string',
             description:
-              'The category key to search in (e.g., "plumbing", "electrical", "interior-design", "construction", "painting", "flooring"). Use lowercase with hyphens.',
+              'Category to search in. Prefer the category key (e.g., "plumbing", "electrical", "interior-design", "architecture"). If the user provides a localized name (e.g., "არქიტექტურა") or a role word (e.g., "არქიტექტორი"), pass it as-is — the backend will resolve it.',
           },
           subcategory: {
             type: 'string',
-            description: 'Optional subcategory to narrow the search.',
+            description:
+              'Optional subcategory to narrow the search. Can be a key or a localized/free-text term; it will be resolved when possible.',
           },
           minRating: {
             type: 'number',
@@ -233,7 +234,8 @@ IMPORTANT GUIDELINES:
 4. When users ask about services/categories, use get_categories to show available options
 5. When users ask how the platform works / rules / troubleshooting, use search_help
 6. After calling a tool, provide a helpful summary of results and what to do next
-7. If a tool returns no results, suggest alternative approaches and ask 1 clarifying question`;
+7. If a tool returns no results, suggest alternative approaches and ask 1 clarifying question.
+   - If search_professionals returns 0, suggest 2–5 closest categories and offer to browse all professionals or post a job.`;
 
     const prompts = {
       en: `You are Homi, the intelligent AI assistant for Homico - Georgia's leading platform connecting homeowners with renovation professionals.
@@ -563,9 +565,18 @@ ${toolInstructions}
             maxPrice: args.maxPrice,
             sort: args.sort || 'rating',
             limit: Math.min(args.limit || 5, 10),
+            locale,
           });
 
           const professionals = result.data as any[];
+          const originalQuery = String(args.subcategory || args.category || '').trim();
+
+          // If we found no professionals, suggest closest matching categories (helps with locale/category mismatches)
+          const categorySuggestions =
+            professionals.length === 0 && originalQuery
+              ? await this.aiToolsService.suggestCategories(originalQuery, locale, 8)
+              : null;
+
           return {
             summary: {
               found: professionals.length,
@@ -577,7 +588,12 @@ ${toolInstructions}
                 price: p.priceRange,
               })),
             },
-            richContent: professionals.length > 0 ? [result] : undefined,
+            richContent:
+              professionals.length > 0
+                ? [result]
+                : categorySuggestions && (categorySuggestions.data as any[])?.length
+                  ? [categorySuggestions]
+                  : undefined,
             context: {
               categoryQuery: args.category,
               proIds: professionals.map((p) => p.id).filter(Boolean),
@@ -767,7 +783,7 @@ ${toolInstructions}
         label: 'View All Professionals',
         labelKa: 'ყველა პროფესიონალის ნახვა',
         labelRu: 'Все специалисты',
-        url: '/browse/professionals',
+        url: '/professionals',
       });
       if (toolContext?.proUids?.length) {
         const uid = toolContext.proUids[0];
@@ -847,7 +863,7 @@ ${toolInstructions}
         label: 'Browse Categories',
         labelKa: 'კატეგორიების ნახვა',
         labelRu: 'Просмотр категорий',
-        url: '/browse/professionals',
+        url: '/professionals',
       });
     }
 
@@ -870,7 +886,7 @@ ${toolInstructions}
         label: 'Browse Similar Pros',
         labelKa: 'მსგავსი პროფესიონალები',
         labelRu: 'Похожие специалисты',
-        url: '/browse/professionals',
+        url: '/professionals',
       });
     }
 
@@ -886,7 +902,7 @@ ${toolInstructions}
           label: 'Browse Professionals',
           labelKa: 'პროფესიონალების ნახვა',
           labelRu: 'Найти специалистов',
-          url: '/browse/professionals',
+          url: '/professionals',
         });
       }
 
