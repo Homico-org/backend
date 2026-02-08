@@ -278,7 +278,14 @@ export class SmsService {
    * Currently only supports UBill (Georgian numbers)
    */
   async sendNotificationSms(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
-    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    // Normalize Georgian local numbers (5XXXXXXXX or 05XXXXXXXX) to +995 format
+    let normalized = phoneNumber.replace(/\s+/g, '').replace(/^0+/, '');
+    if (/^5\d{8}$/.test(normalized)) {
+      normalized = `+995${normalized}`;
+    } else if (!normalized.startsWith('+')) {
+      normalized = `+${normalized}`;
+    }
+    const formattedNumber = normalized;
     const provider = this.getProviderForNumber(formattedNumber);
 
     if (provider === 'none' || provider === 'prelude') {

@@ -412,7 +412,10 @@ export class ReviewService {
     if (data.phone) {
       const smsMessage = `Homico: ${pro.name} გთხოვთ დატოვოთ შეფასება. ${reviewLink}`;
       try {
-        await this.smsService.sendNotificationSms(data.phone, smsMessage);
+        const result = await this.smsService.sendNotificationSms(data.phone, smsMessage);
+        if (!result.success) {
+          return { success: false, message: result.error || 'Failed to send SMS' };
+        }
         return { success: true, message: 'Invitation sent via SMS' };
       } catch (error) {
         console.error('Failed to send review invitation SMS:', error);

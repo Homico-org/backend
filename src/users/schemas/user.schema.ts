@@ -481,12 +481,9 @@ UserSchema.set('toJSON', {
   },
 });
 
-// Normalize pricing model when writing
-UserSchema.path('pricingModel').set(function (value: any) {
-  // `this` is the mongoose document; basePrice/maxPrice may be set separately
-  const normalized = normalizePricingModel(value, (this as any).basePrice, (this as any).maxPrice);
-  return normalized;
-});
+// Note: Mongoose 8 runs setters on $set by default, but the setter cannot see
+// sibling fields (basePrice/maxPrice) being set in the same update operation.
+// Normalization is handled by the service layer (input) and toJSON (output).
 
 UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });

@@ -50,11 +50,6 @@ export class ReviewController {
     return this.reviewService.findByClient(user.userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.reviewService.findOne(id);
-  }
-
   @Get('check/job/:jobId')
   @UseGuards(JwtAuthGuard)
   async checkReviewExists(
@@ -86,6 +81,11 @@ export class ReviewController {
   ) {
     const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
     return this.reviewService.getReviewRequestByToken(token, ip);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.reviewService.findOne(id);
   }
 
   @Post('external/direct/:proId')
