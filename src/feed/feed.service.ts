@@ -15,6 +15,7 @@ export interface FeedItem {
   afterImage?: string;
   beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
   category: string;
+  subcategories?: string[];
   pro: {
     id: string;
     name: string;
@@ -132,13 +133,13 @@ export class FeedService {
         .sort({ createdAt: -1 })
         .populate({
           path: 'proId',
-          select: 'name title bio avgRating avatar categories verificationStatus',
+          select: 'name title bio avgRating avatar categories selectedServices selectedSubcategories subcategories verificationStatus',
           match: { verificationStatus: 'verified' },
         })
         .lean(),
       this.userModel
         .find(proUserQuery)
-        .select('name title bio avgRating avatar categories portfolioProjects updatedAt')
+        .select('name title bio avgRating avatar categories selectedServices selectedSubcategories subcategories portfolioProjects updatedAt')
         .lean(),
       this.portfolioModel.countDocuments(portfolioItemQuery),
     ]);
@@ -161,6 +162,19 @@ export class FeedService {
       // Check if this is a Homico-verified project
       const isVerified = item.source === 'homico' || !!item.jobId;
 
+      // Derive subcategories from the professional's selectedServices filtered by this item's category
+      const itemCategory = item.category || proUser?.categories?.[0] || '';
+      const proServices = (proUser as any)?.selectedServices as Array<{ key: string; categoryKey: string }> | undefined;
+      let subcategories: string[] = [];
+      if (proServices && proServices.length > 0) {
+        subcategories = proServices
+          .filter(s => s.categoryKey === itemCategory)
+          .map(s => s.key);
+      } else {
+        // Fallback to selectedSubcategories or subcategories
+        subcategories = (proUser as any)?.selectedSubcategories || (proUser as any)?.subcategories || [];
+      }
+
       return {
         id: itemId,
         type,
@@ -171,7 +185,8 @@ export class FeedService {
         beforeImage: item.beforeImage,
         afterImage: item.afterImage,
         beforeAfterPairs: item.beforeAfterPairs || [],
-        category: item.category || proUser?.categories?.[0] || '',
+        category: itemCategory,
+        subcategories,
         pro: {
           id: proUser?._id?.toString() || '',
           name: proUser?.name || 'Professional',
@@ -224,6 +239,18 @@ export class FeedService {
         // Check if this is a Homico-verified project
         const isVerified = project.source === 'homico' || !!project.jobId;
 
+        // Derive subcategories from embedded pro's selectedServices
+        const embeddedCategory = proUser.categories?.[0] || '';
+        const embeddedServices = (proUser as any)?.selectedServices as Array<{ key: string; categoryKey: string }> | undefined;
+        let embeddedSubcategories: string[] = [];
+        if (embeddedServices && embeddedServices.length > 0) {
+          embeddedSubcategories = embeddedServices
+            .filter(s => s.categoryKey === embeddedCategory)
+            .map(s => s.key);
+        } else {
+          embeddedSubcategories = (proUser as any)?.selectedSubcategories || (proUser as any)?.subcategories || [];
+        }
+
         embeddedFeedItems.push({
           id: projectId,
           // For embedded projects, store the actual like target (the pro user)
@@ -237,7 +264,8 @@ export class FeedService {
           beforeImage: firstPair?.beforeImage,
           afterImage: firstPair?.afterImage,
           beforeAfterPairs: project.beforeAfterPairs || [],
-          category: proUser.categories?.[0] || '',
+          category: embeddedCategory,
+          subcategories: embeddedSubcategories,
           pro: {
             id: proUser._id?.toString() || '',
             name: proUser.name || 'Professional',
