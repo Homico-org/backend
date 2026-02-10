@@ -83,9 +83,8 @@ export class FeedService {
       // Filter by any of the user's subcategories
       portfolioItemQuery.subcategory = { $in: subcategories };
     }
-    if (location) {
-      portfolioItemQuery.location = new RegExp(location, 'i');
-    }
+    // Location filtering for portfolio items is done post-populate on the pro's city/serviceAreas
+    // since most portfolio items don't have their own location field
     if (search) {
       const searchRegex = new RegExp(search, 'i');
       portfolioItemQuery.$or = [
@@ -133,7 +132,7 @@ export class FeedService {
         .sort({ createdAt: -1 })
         .populate({
           path: 'proId',
-          select: 'name title bio avgRating avatar categories selectedServices selectedSubcategories subcategories verificationStatus',
+          select: 'name title bio avgRating avatar categories selectedServices selectedSubcategories subcategories verificationStatus city serviceAreas',
           match: { verificationStatus: 'verified' },
         })
         .lean(),
@@ -146,8 +145,22 @@ export class FeedService {
 
     // Transform PortfolioItem items to feed items
     // Filter out items where proUser is null or doesn't have a valid _id
+    const locationRegex = location ? new RegExp(location, 'i') : null;
     const portfolioFeedItems: (FeedItem & { sortDate: Date })[] = portfolioItems
-      .filter((item) => item.proId && item.proId._id)
+      .filter((item) => {
+        if (!item.proId || !item.proId._id) return false;
+        // Filter by location: check item.location, or pro's city/serviceAreas
+        if (locationRegex) {
+          const itemLocation = item.location || '';
+          const proCity = (item.proId as any).city || '';
+          const proAreas: string[] = (item.proId as any).serviceAreas || [];
+          const matchesLocation = locationRegex.test(itemLocation)
+            || locationRegex.test(proCity)
+            || proAreas.some((a: string) => locationRegex.test(a));
+          if (!matchesLocation) return false;
+        }
+        return true;
+      })
       .map((item) => {
       const proUser = item.proId;
       const itemId = item._id.toString();
