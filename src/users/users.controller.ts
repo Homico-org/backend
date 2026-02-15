@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
@@ -356,6 +357,23 @@ export class UsersController {
     @Body() body: any,
   ) {
     return this.usersService.updateProProfile(user.userId, body);
+  }
+
+  @Patch('pros/:id/profile')
+  @ApiOperation({ summary: 'Admin: update any pro profile by ID' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Pro profile updated by admin' })
+  @ApiResponse({ status: 403, description: 'Admin access required' })
+  @UseGuards(JwtAuthGuard)
+  async adminUpdateProProfile(
+    @CurrentUser() user: any,
+    @Param('id') proId: string,
+    @Body() body: any,
+  ) {
+    if (user.role !== 'admin') {
+      throw new ForbiddenException('Admin access required');
+    }
+    return this.usersService.updateProProfile(proId, body);
   }
 
   @Get('pros/locations')

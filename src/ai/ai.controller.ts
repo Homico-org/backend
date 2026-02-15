@@ -15,6 +15,7 @@ import {
   CompareEstimatesDto,
   GetPriceInfoDto,
   ChatDto,
+  GenerateBioDto,
   AnalyzeProjectDto,
 } from './dto/ai.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -87,6 +88,20 @@ export class AiController {
       throw new BadRequestException('Item is required');
     }
     return this.aiService.getPriceInfo(dto.item, dto.locale || 'en');
+  }
+
+  @Post('generate-bio')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Generate a professional bio from short user input' })
+  @ApiResponse({ status: 200, description: 'Generated bio text' })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  async generateBio(@Body() dto: GenerateBioDto) {
+    if (!dto.prompt?.trim()) {
+      throw new BadRequestException('Prompt is required');
+    }
+    const bio = await this.aiService.generateBio(dto.prompt, dto.locale || 'en');
+    return { bio };
   }
 
   @Post('chat')

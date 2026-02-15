@@ -653,6 +653,61 @@ Respond ONLY with valid JSON:
   }
 
   /**
+   * Generate a professional bio/description from short user input
+   */
+  async generateBio(
+    prompt: string,
+    locale: string = 'en',
+  ): Promise<string> {
+    if (!this.isConfigured()) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    const isKa = locale === 'ka';
+
+    const systemPrompt = isKa
+      ? `შენ ხარ პროფესიონალი კოპირაიტერი, რომელიც ეხმარება ხელოსნებს და სპეციალისტებს პროფილის აღწერის შექმნაში.
+მომხმარებელი მოგაწვდის რამდენიმე სიტყვას ან მოკლე ფრაზას თავის შესახებ.
+შენი ამოცანაა ეს გადააკეთო პროფესიონალურ, მიმზიდველ აღწერად.
+
+წესები:
+- დაწერე პირველ პირში ("მე ვარ...", "ჩემი გამოცდილება...")
+- 3-5 წინადადება, მაქსიმუმ 400 სიმბოლო
+- იყავი კონკრეტული და პროფესიონალური
+- ხაზი გაუსვი გამოცდილებას და უნარებს
+- ნუ გამოიგონებ ფაქტებს რაც მომხმარებელმა არ ახსენა
+- მხოლოდ აღწერის ტექსტი დააბრუნე, სხვა არაფერი`
+      : `You are a professional copywriter helping tradespeople and service professionals create their profile description.
+The user will give you a few words or a short phrase about themselves.
+Your job is to turn this into a professional, compelling bio.
+
+Rules:
+- Write in first person ("I am...", "My experience...")
+- 3-5 sentences, max 400 characters
+- Be specific and professional
+- Highlight experience and skills
+- Do not invent facts the user didn't mention
+- Return only the bio text, nothing else`;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      return response.choices[0]?.message?.content?.trim() || '';
+    } catch (error) {
+      this.logger.error('Error generating bio:', error);
+      throw error;
+    }
+  }
+
+  /**
    * General AI chat for renovation questions
    */
   async chat(

@@ -120,6 +120,17 @@ export class ChatDto {
   locale?: string;
 }
 
+export class GenerateBioDto {
+  @ApiProperty({ description: 'Short prompt/keywords describing the professional' })
+  @IsString()
+  prompt: string;
+
+  @ApiPropertyOptional({ description: 'Language for response', enum: ['en', 'ka'], default: 'en' })
+  @IsOptional()
+  @IsString()
+  locale?: string;
+}
+
 export class AnalyzeProjectDto {
   @ApiPropertyOptional({ description: 'Project document text (extracted from file)' })
   @IsOptional()
