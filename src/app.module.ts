@@ -14,7 +14,7 @@ import { MessageModule } from './message/message.module';
 import { OfferModule } from './offer/offer.module';
 import { ReviewModule } from './review/review.module';
 import { JobsModule } from './jobs/jobs.module';
-import { CompanyModule } from './company/company.module';
+
 import { VerificationModule } from './verification/verification.module';
 import { CategoriesModule } from './categories/categories.module';
 import { UploadModule } from './upload/upload.module';
@@ -29,6 +29,8 @@ import { LoggerModule } from './common/logger';
 import { AiModule } from './ai/ai.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { PublicModule } from './public/public.module';
+import { BusinessModule } from './business/business.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -98,7 +100,6 @@ import { APP_GUARD } from '@nestjs/core';
     OfferModule,
     ReviewModule,
     JobsModule,
-    CompanyModule,
     VerificationModule,
     CategoriesModule,
     UploadModule,
@@ -113,6 +114,8 @@ import { APP_GUARD } from '@nestjs/core';
     AiModule,
     AiAssistantModule,
     PublicModule,
+    BusinessModule,
+    AnalyticsModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default

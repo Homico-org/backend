@@ -102,14 +102,6 @@ export class CreateUserDto {
   accountType?: AccountType;
 
   @ApiPropertyOptional({
-    example: 'ABC Construction LLC',
-    description: 'Company name (required for organization accounts)'
-  })
-  @IsString()
-  @IsOptional()
-  companyName?: string;
-
-  @ApiPropertyOptional({
     example: true,
     description: 'Whether phone has been verified via OTP during registration'
   })

@@ -195,7 +195,6 @@ export class UsersService {
       city: user.city,
       role: user.role,
       accountType: user.accountType,
-      companyName: user.companyName,
       createdAt: (user as any).createdAt,
     };
   }
@@ -820,7 +819,6 @@ export class UsersService {
     sort?: string;
     page?: number;
     limit?: number;
-    companyIds?: string[];
     excludeUserId?: string;
   }): Promise<{
     data: User[];
@@ -943,13 +941,6 @@ export class UsersService {
       query.$expr = exprAnd.length > 1 ? { $and: exprAnd } : exprAnd[0];
     }
 
-    if (filters?.companyIds && filters.companyIds.length > 0) {
-      const { Types } = require("mongoose");
-      query.companyId = {
-        $in: filters.companyIds.map((id) => new Types.ObjectId(id)),
-      };
-    }
-
     if (filters?.search) {
       const searchTerm = filters.search.trim();
 
@@ -968,7 +959,6 @@ export class UsersService {
           { description: searchRegex },
           { categories: searchRegex },
           { subcategories: searchRegex },
-          { companyName: searchRegex },
         ];
       }
     }

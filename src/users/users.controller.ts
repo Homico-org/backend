@@ -19,7 +19,6 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AddCardPaymentMethodDto, AddBankPaymentMethodDto, SetDefaultPaymentMethodDto } from './dto/payment-method.dto';
-
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
@@ -55,7 +54,6 @@ export class UsersController {
       city: userData.city,
       avatar: userData.avatar,
       accountType: userData.accountType,
-      companyName: userData.companyName,
       isProfileCompleted: userData.isProfileCompleted,
       selectedCategories: userData.selectedCategories || userData.categories,
       // For pro users, derive subcategories from selectedServices if available
@@ -86,7 +84,6 @@ export class UsersController {
       city: updatedUser.city,
       avatar: updatedUser.avatar,
       accountType: updatedUser.accountType,
-      companyName: updatedUser.companyName,
       selectedCategories: updatedUser.selectedCategories || updatedUser.categories,
       selectedSubcategories: updatedUser.selectedSubcategories?.length > 0
         ? updatedUser.selectedSubcategories
@@ -211,7 +208,6 @@ export class UsersController {
         city: updatedUser.city,
         avatar: updatedUser.avatar,
         accountType: updatedUser.accountType,
-        companyName: updatedUser.companyName,
         selectedCategories: updatedUser.selectedCategories,
         selectedSubcategories: updatedUser.selectedSubcategories,
       },
@@ -400,7 +396,6 @@ export class UsersController {
   @ApiQuery({ name: 'sort', required: false })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-indexed)' })
   @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
-  @ApiQuery({ name: 'companyIds', required: false, description: 'Comma-separated company IDs to filter by' })
   @ApiQuery({ name: 'subcategories', required: false, description: 'Comma-separated subcategory keys' })
   @ApiResponse({ status: 200, description: 'Paginated list of pro users' })
   @UseGuards(OptionalJwtAuthGuard)
@@ -417,7 +412,6 @@ export class UsersController {
     @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
-    @Query('companyIds') companyIds?: string,
   ) {
     return this.usersService.findAllPros({
       category,
@@ -431,7 +425,6 @@ export class UsersController {
       sort,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
-      companyIds: companyIds ? companyIds.split(',').filter(id => id.trim()) : undefined,
     });
   }
 

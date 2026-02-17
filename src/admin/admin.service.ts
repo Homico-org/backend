@@ -511,7 +511,23 @@ export class AdminService {
   async getJobsByCategory() {
     return this.jobModel.aggregate([
       { $match: { category: { $type: "string", $ne: "" } } },
-      { $group: { _id: "$category", count: { $sum: 1 } } },
+      {
+        $addFields: {
+          displayCategory: {
+            $cond: {
+              if: {
+                $and: [
+                  { $ne: ["$subcategory", null] },
+                  { $ne: ["$subcategory", ""] },
+                ],
+              },
+              then: { $toLower: "$subcategory" },
+              else: { $toLower: "$category" },
+            },
+          },
+        },
+      },
+      { $group: { _id: "$displayCategory", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
     ]);
@@ -519,8 +535,18 @@ export class AdminService {
 
   async getJobsByLocation() {
     return this.jobModel.aggregate([
-      { $match: { location: { $type: "string", $ne: "" } } },
-      { $group: { _id: "$location", count: { $sum: 1 } } },
+      {
+        $match: {
+          location: { $type: "string", $ne: "" },
+        },
+      },
+      {
+        $addFields: {
+          normalizedLocation: { $trim: { input: "$location" } },
+        },
+      },
+      { $match: { normalizedLocation: { $ne: "" } } },
+      { $group: { _id: "$normalizedLocation", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
     ]);

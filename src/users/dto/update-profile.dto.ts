@@ -101,11 +101,6 @@ export class UpdateProfileDto {
   @IsOptional()
   title?: string;
 
-  @ApiPropertyOptional({ description: 'Company name' })
-  @IsString()
-  @IsOptional()
-  companyName?: string;
-
   @ApiPropertyOptional({ description: 'Professional description/bio' })
   @IsString()
   @IsOptional()

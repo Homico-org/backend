@@ -24,7 +24,7 @@ export class ReviewController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   create(
     @CurrentUser() user: any,
     @Body() createReviewDto: CreateReviewDto,
@@ -44,7 +44,7 @@ export class ReviewController {
 
   @Get('my-reviews')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   findByClient(@CurrentUser() user: any) {
     // Any user who posted jobs can see their reviews
     return this.reviewService.findByClient(user.userId);

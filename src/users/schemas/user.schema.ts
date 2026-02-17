@@ -4,7 +4,6 @@ import { Document, Types } from 'mongoose';
 export enum UserRole {
   CLIENT = 'client',
   PRO = 'pro',
-  COMPANY = 'company',
   ADMIN = 'admin',
 }
 
@@ -49,13 +48,6 @@ export class PaymentMethod {
   // Common
   isDefault: boolean;
   createdAt: Date;
-}
-
-// Company subdocument schema for pro users
-export class Company {
-  name: string;
-  logo?: string;
-  role?: string;
 }
 
 // Portfolio project subdocument
@@ -116,9 +108,6 @@ export class User extends Document {
     default: AccountType.INDIVIDUAL
   })
   accountType: AccountType;
-
-  @Prop()
-  companyName: string;
 
   @Prop({ default: true })
   isActive: boolean;
@@ -197,9 +186,6 @@ export class User extends Document {
 
   // ============== PRO-SPECIFIC FIELDS ==============
   // These fields are populated when a user with role=pro updates their profile
-
-  @Prop({ type: Types.ObjectId, ref: 'Company' })
-  companyId: Types.ObjectId;
 
   @Prop()
   title: string;
@@ -305,9 +291,6 @@ export class User extends Document {
     default: []
   })
   portfolioProjects: PortfolioProject[];
-
-  @Prop({ type: [{ name: String, logo: String, role: String }], default: [] })
-  companies: Company[];
 
   // Interior Designer specific fields
   @Prop({ type: [String], default: [] })
@@ -494,8 +477,6 @@ UserSchema.index({ subcategories: 1 });
 UserSchema.index({ serviceAreas: 1 });
 UserSchema.index({ avgRating: -1 });
 UserSchema.index({ isAvailable: 1 });
-UserSchema.index({ companyId: 1 });
-UserSchema.index({ companyName: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });

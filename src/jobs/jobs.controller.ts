@@ -48,7 +48,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Job created successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   createJob(@CurrentUser() user: any, @Body() createJobDto: CreateJobDto) {
     return this.jobsService.createJob(user.userId, createJobDto);
   }
@@ -221,7 +221,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Contact revealed successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   revealContact(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.revealContact(proposalId, user.userId);
   }
@@ -231,7 +231,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal shortlisted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   shortlistProposal(
     @Param('proposalId') proposalId: string,
     @Body('hiringChoice') hiringChoice: 'homico' | 'direct',
@@ -245,7 +245,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal accepted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   acceptProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
@@ -255,7 +255,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal rejected successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   rejectProposal(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.rejectProposal(proposalId, user.userId);
   }
@@ -265,7 +265,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Proposal reverted to pending successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   revertToPending(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
     return this.jobsService.revertProposalToPending(proposalId, user.userId);
   }
@@ -643,7 +643,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Reaction toggled' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   async toggleReaction(
     @Param('jobId') jobId: string,
     @Param('sectionId') sectionId: string,
@@ -764,7 +764,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job updated successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   updateJob(
     @Param('id') id: string,
     @CurrentUser() user: any,
@@ -778,7 +778,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job deleted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   async deleteJob(@Param('id') id: string, @CurrentUser() user: any) {
     await this.jobsService.deleteJob(id, user.userId);
     return { message: 'Job deleted successfully' };
@@ -789,7 +789,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job completed successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY)
+  @Roles(UserRole.CLIENT)
   async completeJob(
     @Param('id') id: string,
     @CurrentUser() user: any,
@@ -808,7 +808,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job renewed successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   async renewJob(@Param('id') id: string, @CurrentUser() user: any) {
     return this.jobsService.renewJob(id, user.userId);
   }
@@ -837,7 +837,7 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'List of proposals' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.COMPANY, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
   findJobProposals(@Param('jobId') jobId: string, @CurrentUser() user: any) {
     return this.jobsService.findJobProposals(jobId, user.userId);
   }
