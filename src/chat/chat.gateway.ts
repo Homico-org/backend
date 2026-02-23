@@ -21,6 +21,8 @@ interface SupportTypingData {
   isTyping: boolean;
 }
 
+type RoomPayload = string | { conversationId?: string; ticketId?: string; jobId?: string };
+
 @WebSocketGateway({
   cors: {
     origin: [
@@ -81,19 +83,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  private extractRoomId(payload: RoomPayload, key: "conversationId" | "ticketId" | "jobId"): string | null {
+    if (typeof payload === "string") {
+      return payload;
+    }
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+    const value = payload[key];
+    return typeof value === "string" ? value : null;
+  }
+
   @SubscribeMessage("joinConversation")
   handleJoinConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() conversationId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const conversationId = this.extractRoomId(payload, "conversationId");
+    if (!conversationId) return;
     client.join(`conversation:${conversationId}`);
   }
 
   @SubscribeMessage("leaveConversation")
   handleLeaveConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() conversationId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const conversationId = this.extractRoomId(payload, "conversationId");
+    if (!conversationId) return;
     client.leave(`conversation:${conversationId}`);
   }
 
@@ -112,16 +129,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage("joinSupportTicket")
   handleJoinSupportTicket(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() ticketId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const ticketId = this.extractRoomId(payload, "ticketId");
+    if (!ticketId) return;
     client.join(`support:${ticketId}`);
   }
 
   @SubscribeMessage("leaveSupportTicket")
   handleLeaveSupportTicket(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() ticketId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const ticketId = this.extractRoomId(payload, "ticketId");
+    if (!ticketId) return;
     client.leave(`support:${ticketId}`);
   }
 
@@ -154,16 +175,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage("joinProjectChat")
   handleJoinProjectChat(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() jobId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const jobId = this.extractRoomId(payload, "jobId");
+    if (!jobId) return;
     client.join(`project:${jobId}`);
   }
 
   @SubscribeMessage("leaveProjectChat")
   handleLeaveProjectChat(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() jobId: string,
+    @MessageBody() payload: RoomPayload,
   ) {
+    const jobId = this.extractRoomId(payload, "jobId");
+    if (!jobId) return;
     client.leave(`project:${jobId}`);
   }
 
