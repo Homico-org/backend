@@ -340,7 +340,7 @@ const SERVICE_CATALOG = [
     key: 'plumbing', labelKey: 'catalog.plumbing', descriptionKey: 'catalog.plumbingDesc',
     iconName: 'Droplets', color: '#0EA5E9', minPrice: 35,
     subcategories: [
-      { key: 'pipes', labelKey: 'catalog.pipes', iconName: 'Pipette', priceRange: { min: 40 },
+      { key: 'pipes', labelKey: 'catalog.pipes', descriptionKey: 'catalog.pipesDesc', iconName: 'Pipette', priceRange: { min: 40 },
         services: [
           { key: 'pipe_repair', labelKey: 'catalog.pipeRepair', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'pipe_replacement', labelKey: 'catalog.pipeReplacement', basePrice: 25, unit: 'meter', unitLabelKey: 'catalog.unitMeter' },
@@ -349,7 +349,7 @@ const SERVICE_CATALOG = [
           { key: 'valve_install', labelKey: 'catalog.valveInstall', basePrice: 35, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'bathroom_install', labelKey: 'catalog.bathroomInstall', iconName: 'Bath', priceRange: { min: 40 },
+      { key: 'bathroom_install', labelKey: 'catalog.bathroomInstall', descriptionKey: 'catalog.bathroomInstallDesc', iconName: 'Bath', priceRange: { min: 40 },
         services: [
           { key: 'toilet_install', labelKey: 'catalog.toiletInstall', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'sink_install', labelKey: 'catalog.sinkInstall', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -359,7 +359,7 @@ const SERVICE_CATALOG = [
           { key: 'bidet_install', labelKey: 'catalog.bidetInstall', basePrice: 70, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'kitchen_plumbing', labelKey: 'catalog.kitchenPlumbing', iconName: 'CookingPot', priceRange: { min: 40 },
+      { key: 'kitchen_plumbing', labelKey: 'catalog.kitchenPlumbing', descriptionKey: 'catalog.kitchenPlumbingDesc', iconName: 'CookingPot', priceRange: { min: 40 },
         services: [
           { key: 'kitchen_sink_install', labelKey: 'catalog.kitchenSinkInstall', basePrice: 70, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'dishwasher_connect', labelKey: 'catalog.dishwasherConnect', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -367,14 +367,14 @@ const SERVICE_CATALOG = [
           { key: 'water_filter', labelKey: 'catalog.waterFilter', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'water_heater', labelKey: 'catalog.waterHeater', iconName: 'Flame', priceRange: { min: 80 },
+      { key: 'water_heater', labelKey: 'catalog.waterHeater', descriptionKey: 'catalog.waterHeaterDesc', iconName: 'Flame', priceRange: { min: 80 },
         services: [
           { key: 'boiler_install', labelKey: 'catalog.boilerInstall', basePrice: 300, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'boiler_repair', labelKey: 'catalog.boilerRepair', basePrice: 100, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'boiler_maintenance', labelKey: 'catalog.boilerMaintenance', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'sewer', labelKey: 'catalog.sewer', iconName: 'Pipette', priceRange: { min: 60 },
+      { key: 'sewer', labelKey: 'catalog.sewer', descriptionKey: 'catalog.sewerDesc', iconName: 'Pipette', priceRange: { min: 60 },
         services: [
           { key: 'sewer_cleaning', labelKey: 'catalog.sewerCleaning', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'sewer_repair', labelKey: 'catalog.sewerRepair', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -387,7 +387,7 @@ const SERVICE_CATALOG = [
     key: 'heating_cooling', labelKey: 'catalog.heatingCooling', descriptionKey: 'catalog.heatingCoolingDesc',
     iconName: 'Thermometer', color: '#EF4444', minPrice: 50,
     subcategories: [
-      { key: 'ac_services', labelKey: 'catalog.acServices', iconName: 'Wind', priceRange: { min: 50 },
+      { key: 'ac_services', labelKey: 'catalog.acServices', descriptionKey: 'catalog.acServicesDesc', iconName: 'Wind', priceRange: { min: 50 },
         services: [
           { key: 'ac_install', labelKey: 'catalog.acInstall', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'ac_repair', labelKey: 'catalog.acRepair', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -395,7 +395,7 @@ const SERVICE_CATALOG = [
           { key: 'ac_cleaning', labelKey: 'catalog.acCleaning', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'heating', labelKey: 'catalog.heating', iconName: 'Flame', priceRange: { min: 45 },
+      { key: 'heating', labelKey: 'catalog.heating', descriptionKey: 'catalog.heatingDesc', iconName: 'Flame', priceRange: { min: 45 },
         services: [
           { key: 'radiator_install', labelKey: 'catalog.radiatorInstall', basePrice: 120, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'underfloor_heating', labelKey: 'catalog.underfloorHeating', basePrice: 45, unit: 'sqm', unitLabelKey: 'catalog.unitSqm' },
@@ -403,7 +403,7 @@ const SERVICE_CATALOG = [
           { key: 'heating_pipe', labelKey: 'catalog.heatingPipe', basePrice: 20, unit: 'meter', unitLabelKey: 'catalog.unitMeter' },
         ],
       },
-      { key: 'ventilation', labelKey: 'catalog.ventilation', iconName: 'Wind', priceRange: { min: 60 },
+      { key: 'ventilation', labelKey: 'catalog.ventilation', descriptionKey: 'catalog.ventilationDesc', iconName: 'Wind', priceRange: { min: 60 },
         services: [
           { key: 'vent_install', labelKey: 'catalog.ventInstall', basePrice: 100, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'vent_cleaning', labelKey: 'catalog.ventCleaning', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -417,7 +417,7 @@ const SERVICE_CATALOG = [
     key: 'handyman', labelKey: 'catalog.handyman', descriptionKey: 'catalog.handymanDesc',
     iconName: 'Wrench', color: '#C4735B', minPrice: 20,
     subcategories: [
-      { key: 'mounting', labelKey: 'catalog.mounting', iconName: 'Hammer', priceRange: { min: 20 },
+      { key: 'mounting', labelKey: 'catalog.mounting', descriptionKey: 'catalog.mountingDesc', iconName: 'Hammer', priceRange: { min: 20 },
         services: [
           { key: 'tv_mount', labelKey: 'catalog.tvMount', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'shelf_mount', labelKey: 'catalog.shelfMount', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -426,7 +426,7 @@ const SERVICE_CATALOG = [
           { key: 'picture_hanging', labelKey: 'catalog.pictureHanging', basePrice: 20, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'minor_repairs', labelKey: 'catalog.minorRepairs', iconName: 'Wrench', priceRange: { min: 20 },
+      { key: 'minor_repairs', labelKey: 'catalog.minorRepairs', descriptionKey: 'catalog.minorRepairsDesc', iconName: 'Wrench', priceRange: { min: 20 },
         services: [
           { key: 'drywall_patch', labelKey: 'catalog.drywallPatch', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'paint_touch_up', labelKey: 'catalog.paintTouchUp', basePrice: 25, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -435,7 +435,7 @@ const SERVICE_CATALOG = [
           { key: 'tile_repair', labelKey: 'catalog.tileRepair', basePrice: 35, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'handyman_assembly', labelKey: 'catalog.assemblyServices', iconName: 'Package', priceRange: { min: 30 },
+      { key: 'handyman_assembly', labelKey: 'catalog.assemblyServices', descriptionKey: 'catalog.assemblyServicesDesc', iconName: 'Package', priceRange: { min: 30 },
         services: [
           { key: 'furniture_assembly', labelKey: 'catalog.furnitureAssembly', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'gym_equipment', labelKey: 'catalog.gymEquipment', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -443,7 +443,7 @@ const SERVICE_CATALOG = [
           { key: 'shelving_unit', labelKey: 'catalog.shelvingUnit', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'outdoor', labelKey: 'catalog.outdoor', iconName: 'TreePine', priceRange: { min: 30 },
+      { key: 'outdoor', labelKey: 'catalog.outdoor', descriptionKey: 'catalog.outdoorDesc', iconName: 'TreePine', priceRange: { min: 30 },
         services: [
           { key: 'gutter_cleaning', labelKey: 'catalog.gutterCleaning', basePrice: 15, unit: 'meter', unitLabelKey: 'catalog.unitMeter' },
           { key: 'pressure_washing', labelKey: 'catalog.pressureWashing', basePrice: 8, unit: 'sqm', unitLabelKey: 'catalog.unitSqm' },
@@ -457,7 +457,7 @@ const SERVICE_CATALOG = [
     key: 'appliance', labelKey: 'catalog.appliance', descriptionKey: 'catalog.applianceDesc',
     iconName: 'Monitor', color: '#8B5CF6', minPrice: 40,
     subcategories: [
-      { key: 'large_appliances', labelKey: 'catalog.largeAppliances', iconName: 'Monitor', priceRange: { min: 50 },
+      { key: 'large_appliances', labelKey: 'catalog.largeAppliances', descriptionKey: 'catalog.largeAppliancesDesc', iconName: 'Monitor', priceRange: { min: 50 },
         services: [
           { key: 'washing_machine_repair', labelKey: 'catalog.washingMachineRepair', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'dryer_repair', labelKey: 'catalog.dryerRepair', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -466,7 +466,7 @@ const SERVICE_CATALOG = [
           { key: 'oven_range_repair', labelKey: 'catalog.ovenRangeRepair', basePrice: 75, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'small_appliances', labelKey: 'catalog.smallAppliances', iconName: 'Zap', priceRange: { min: 30 },
+      { key: 'small_appliances', labelKey: 'catalog.smallAppliances', descriptionKey: 'catalog.smallAppliancesDesc', iconName: 'Zap', priceRange: { min: 30 },
         services: [
           { key: 'microwave_repair', labelKey: 'catalog.microwaveRepair', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'coffee_machine_repair', labelKey: 'catalog.coffeeMachineRepair', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -474,7 +474,7 @@ const SERVICE_CATALOG = [
           { key: 'iron_repair', labelKey: 'catalog.ironRepair', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'appliance_installation', labelKey: 'catalog.applianceInstallation', iconName: 'Package', priceRange: { min: 40 },
+      { key: 'appliance_installation', labelKey: 'catalog.applianceInstallation', descriptionKey: 'catalog.applianceInstallationDesc', iconName: 'Package', priceRange: { min: 40 },
         services: [
           { key: 'appliance_install', labelKey: 'catalog.applianceInstall', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'appliance_uninstall', labelKey: 'catalog.applianceUninstall', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -487,7 +487,7 @@ const SERVICE_CATALOG = [
     key: 'electrical', labelKey: 'catalog.electrical', descriptionKey: 'catalog.electricalDesc',
     iconName: 'Zap', color: '#F59E0B', minPrice: 25,
     subcategories: [
-      { key: 'wiring', labelKey: 'catalog.wiring', iconName: 'Cable', priceRange: { min: 25 },
+      { key: 'wiring', labelKey: 'catalog.wiring', descriptionKey: 'catalog.wiringDesc', iconName: 'Cable', priceRange: { min: 25 },
         services: [
           { key: 'outlet_install', labelKey: 'catalog.outletInstall', basePrice: 30, unit: 'point', unitLabelKey: 'catalog.unitPoint' },
           { key: 'switch_install', labelKey: 'catalog.switchInstall', basePrice: 25, unit: 'point', unitLabelKey: 'catalog.unitPoint' },
@@ -496,7 +496,7 @@ const SERVICE_CATALOG = [
           { key: 'circuit_breaker', labelKey: 'catalog.circuitBreaker', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'lighting', labelKey: 'catalog.lighting', iconName: 'Lightbulb', priceRange: { min: 20 },
+      { key: 'lighting', labelKey: 'catalog.lighting', descriptionKey: 'catalog.lightingDesc', iconName: 'Lightbulb', priceRange: { min: 20 },
         services: [
           { key: 'chandelier_install', labelKey: 'catalog.chandelierInstall', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'spot_light', labelKey: 'catalog.spotLight', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -504,14 +504,14 @@ const SERVICE_CATALOG = [
           { key: 'outdoor_lighting', labelKey: 'catalog.outdoorLighting', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'panel', labelKey: 'catalog.panel', iconName: 'LayoutGrid', priceRange: { min: 100 },
+      { key: 'panel', labelKey: 'catalog.panel', descriptionKey: 'catalog.panelDesc', iconName: 'LayoutGrid', priceRange: { min: 100 },
         services: [
           { key: 'panel_install', labelKey: 'catalog.panelInstall', basePrice: 200, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'panel_upgrade', labelKey: 'catalog.panelUpgrade', basePrice: 300, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'grounding', labelKey: 'catalog.grounding', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'smart_home', labelKey: 'catalog.smartHome', iconName: 'Wifi', priceRange: { min: 80 },
+      { key: 'smart_home', labelKey: 'catalog.smartHome', descriptionKey: 'catalog.smartHomeDesc', iconName: 'Wifi', priceRange: { min: 80 },
         services: [
           { key: 'smart_switch', labelKey: 'catalog.smartSwitch', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'smart_thermostat', labelKey: 'catalog.smartThermostat', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -525,7 +525,7 @@ const SERVICE_CATALOG = [
     key: 'doors_locks', labelKey: 'catalog.doorsLocks', descriptionKey: 'catalog.doorsLocksDesc',
     iconName: 'DoorOpen', color: '#6366F1', minPrice: 25,
     subcategories: [
-      { key: 'door_install', labelKey: 'catalog.doorInstallation', iconName: 'DoorOpen', priceRange: { min: 60 },
+      { key: 'door_install', labelKey: 'catalog.doorInstallation', descriptionKey: 'catalog.doorInstallationDesc', iconName: 'DoorOpen', priceRange: { min: 60 },
         services: [
           { key: 'interior_door', labelKey: 'catalog.interiorDoor', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'entrance_door', labelKey: 'catalog.entranceDoor', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -533,7 +533,7 @@ const SERVICE_CATALOG = [
           { key: 'door_frame', labelKey: 'catalog.doorFrame', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'door_repair', labelKey: 'catalog.doorRepairSub', iconName: 'Wrench', priceRange: { min: 25 },
+      { key: 'door_repair', labelKey: 'catalog.doorRepairSub', descriptionKey: 'catalog.doorRepairSubDesc', iconName: 'Wrench', priceRange: { min: 25 },
         services: [
           { key: 'hinge_repair', labelKey: 'catalog.hingeRepair', basePrice: 25, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'door_alignment', labelKey: 'catalog.doorAlignment', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -541,7 +541,7 @@ const SERVICE_CATALOG = [
           { key: 'peephole_install', labelKey: 'catalog.peepholeInstall', basePrice: 20, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'locks', labelKey: 'catalog.locks', iconName: 'Lock', priceRange: { min: 30 },
+      { key: 'locks', labelKey: 'catalog.locks', descriptionKey: 'catalog.locksDesc', iconName: 'Lock', priceRange: { min: 30 },
         services: [
           { key: 'lock_install', labelKey: 'catalog.lockInstall', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'lock_change', labelKey: 'catalog.lockChange', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -550,7 +550,7 @@ const SERVICE_CATALOG = [
           { key: 'safe_install', labelKey: 'catalog.safeInstall', basePrice: 100, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'windows', labelKey: 'catalog.windowServices', iconName: 'Square', priceRange: { min: 30 },
+      { key: 'windows', labelKey: 'catalog.windowServices', descriptionKey: 'catalog.windowServicesDesc', iconName: 'Square', priceRange: { min: 30 },
         services: [
           { key: 'window_install', labelKey: 'catalog.windowInstall', basePrice: 150, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'window_repair', labelKey: 'catalog.windowRepair', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -564,7 +564,7 @@ const SERVICE_CATALOG = [
     key: 'furniture', labelKey: 'catalog.furniture', descriptionKey: 'catalog.furnitureDesc',
     iconName: 'Sofa', color: '#10B981', minPrice: 30,
     subcategories: [
-      { key: 'assembly', labelKey: 'catalog.assembly', iconName: 'Package', priceRange: { min: 30 },
+      { key: 'assembly', labelKey: 'catalog.assembly', descriptionKey: 'catalog.assemblyDesc', iconName: 'Package', priceRange: { min: 30 },
         services: [
           { key: 'wardrobe_assembly', labelKey: 'catalog.wardrobeAssembly', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'bed_assembly', labelKey: 'catalog.bedAssembly', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -574,7 +574,7 @@ const SERVICE_CATALOG = [
           { key: 'tv_stand_assembly', labelKey: 'catalog.tvStandAssembly', basePrice: 35, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'custom_furniture', labelKey: 'catalog.customFurniture', iconName: 'Ruler', priceRange: { min: 200 },
+      { key: 'custom_furniture', labelKey: 'catalog.customFurniture', descriptionKey: 'catalog.customFurnitureDesc', iconName: 'Ruler', priceRange: { min: 200 },
         services: [
           { key: 'custom_wardrobe', labelKey: 'catalog.customWardrobe', basePrice: 800, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'custom_kitchen', labelKey: 'catalog.customKitchen', basePrice: 1500, unit: 'set', unitLabelKey: 'catalog.unitSet' },
@@ -582,7 +582,7 @@ const SERVICE_CATALOG = [
           { key: 'custom_closet', labelKey: 'catalog.customCloset', basePrice: 600, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'furniture_repair', labelKey: 'catalog.furnitureRepair', iconName: 'Wrench', priceRange: { min: 30 },
+      { key: 'furniture_repair', labelKey: 'catalog.furnitureRepair', descriptionKey: 'catalog.furnitureRepairDesc', iconName: 'Wrench', priceRange: { min: 30 },
         services: [
           { key: 'door_hinge_repair', labelKey: 'catalog.doorHingeRepair', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'drawer_repair', labelKey: 'catalog.drawerRepair', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -590,7 +590,7 @@ const SERVICE_CATALOG = [
           { key: 'surface_restoration', labelKey: 'catalog.surfaceRestoration', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'disassembly', labelKey: 'catalog.disassembly', iconName: 'Package', priceRange: { min: 30 },
+      { key: 'disassembly', labelKey: 'catalog.disassembly', descriptionKey: 'catalog.disassemblyDesc', iconName: 'Package', priceRange: { min: 30 },
         services: [
           { key: 'furniture_disassembly', labelKey: 'catalog.furnitureDisassembly', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'furniture_packing', labelKey: 'catalog.furniturePacking', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -602,7 +602,7 @@ const SERVICE_CATALOG = [
     key: 'chemical_cleaning', labelKey: 'catalog.chemicalCleaning', descriptionKey: 'catalog.chemicalCleaningDesc',
     iconName: 'SprayCan', color: '#06B6D4', minPrice: 25,
     subcategories: [
-      { key: 'upholstery', labelKey: 'catalog.upholsteryCleaning', iconName: 'Sofa', priceRange: { min: 25 },
+      { key: 'upholstery', labelKey: 'catalog.upholsteryCleaning', descriptionKey: 'catalog.upholsteryCleaningDesc', iconName: 'Sofa', priceRange: { min: 25 },
         services: [
           { key: 'sofa_cleaning', labelKey: 'catalog.sofaCleaning', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'armchair_cleaning', labelKey: 'catalog.armchairCleaning', basePrice: 35, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -612,7 +612,7 @@ const SERVICE_CATALOG = [
         ],
         addons: [stainProtectionAddon],
       },
-      { key: 'carpet', labelKey: 'catalog.carpetCleaningSub', iconName: 'Layers', priceRange: { min: 10 },
+      { key: 'carpet', labelKey: 'catalog.carpetCleaningSub', descriptionKey: 'catalog.carpetCleaningSubDesc', iconName: 'Layers', priceRange: { min: 10 },
         services: [
           { key: 'carpet_cleaning_service', labelKey: 'catalog.carpetCleaning', basePrice: 10, unit: 'sqm', unitLabelKey: 'catalog.unitSqm' },
           { key: 'rug_cleaning', labelKey: 'catalog.rugCleaning', basePrice: 15, unit: 'sqm', unitLabelKey: 'catalog.unitSqm' },
@@ -620,7 +620,7 @@ const SERVICE_CATALOG = [
         ],
         addons: [stainProtectionAddon],
       },
-      { key: 'curtains_cleaning', labelKey: 'catalog.curtainCleaningSub', iconName: 'Wind', priceRange: { min: 20 },
+      { key: 'curtains_cleaning', labelKey: 'catalog.curtainCleaningSub', descriptionKey: 'catalog.curtainCleaningSubDesc', iconName: 'Wind', priceRange: { min: 20 },
         services: [
           { key: 'curtain_cleaning_service', labelKey: 'catalog.curtainCleaning', basePrice: 20, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'blind_cleaning', labelKey: 'catalog.blindCleaning', basePrice: 15, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -633,7 +633,7 @@ const SERVICE_CATALOG = [
     key: 'it_services', labelKey: 'catalog.itServices', descriptionKey: 'catalog.itServicesDesc',
     iconName: 'Laptop', color: '#2563EB', minPrice: 30,
     subcategories: [
-      { key: 'computer', labelKey: 'catalog.computer', iconName: 'Monitor', priceRange: { min: 30 },
+      { key: 'computer', labelKey: 'catalog.computer', descriptionKey: 'catalog.computerDesc', iconName: 'Monitor', priceRange: { min: 30 },
         services: [
           { key: 'pc_setup', labelKey: 'catalog.pcSetup', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'pc_repair', labelKey: 'catalog.pcRepair', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -642,7 +642,7 @@ const SERVICE_CATALOG = [
           { key: 'os_install', labelKey: 'catalog.osInstall', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'network', labelKey: 'catalog.network', iconName: 'Wifi', priceRange: { min: 30 },
+      { key: 'network', labelKey: 'catalog.network', descriptionKey: 'catalog.networkDesc', iconName: 'Wifi', priceRange: { min: 30 },
         services: [
           { key: 'wifi_setup', labelKey: 'catalog.wifiSetup', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'router_install', labelKey: 'catalog.routerInstall', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -650,7 +650,7 @@ const SERVICE_CATALOG = [
           { key: 'network_troubleshoot', labelKey: 'catalog.networkTroubleshoot', basePrice: 60, unit: 'hour', unitLabelKey: 'catalog.unitHour' },
         ],
       },
-      { key: 'smart_home_tech', labelKey: 'catalog.smartHomeTech', iconName: 'Wifi', priceRange: { min: 50 },
+      { key: 'smart_home_tech', labelKey: 'catalog.smartHomeTech', descriptionKey: 'catalog.smartHomeTechDesc', iconName: 'Wifi', priceRange: { min: 50 },
         services: [
           { key: 'smart_device_setup', labelKey: 'catalog.smartDeviceSetup', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'it_home_automation', labelKey: 'catalog.homeAutomation', basePrice: 100, unit: 'hour', unitLabelKey: 'catalog.unitHour' },
@@ -658,7 +658,7 @@ const SERVICE_CATALOG = [
           { key: 'intercom_install', labelKey: 'catalog.intercomInstall', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'peripheral', labelKey: 'catalog.peripheral', iconName: 'Monitor', priceRange: { min: 30 },
+      { key: 'peripheral', labelKey: 'catalog.peripheral', descriptionKey: 'catalog.peripheralDesc', iconName: 'Monitor', priceRange: { min: 30 },
         services: [
           { key: 'printer_setup', labelKey: 'catalog.printerSetup', basePrice: 30, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'monitor_mount', labelKey: 'catalog.monitorMount', basePrice: 40, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -674,7 +674,7 @@ const SERVICE_CATALOG = [
       { key: 'moving', labelKey: 'catalog.moving', descriptionKey: 'catalog.movingDesc', iconName: 'Truck', priceRange: { min: 80 },
         variants: movingVariants,
       },
-      { key: 'delivery', labelKey: 'catalog.delivery', iconName: 'Package', priceRange: { min: 30 },
+      { key: 'delivery', labelKey: 'catalog.delivery', descriptionKey: 'catalog.deliveryDesc', iconName: 'Package', priceRange: { min: 30 },
         services: [
           { key: 'large_item_delivery', labelKey: 'catalog.largeItemDelivery', basePrice: 80, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
           { key: 'appliance_delivery', labelKey: 'catalog.applianceDelivery', basePrice: 60, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
@@ -682,7 +682,7 @@ const SERVICE_CATALOG = [
           { key: 'furniture_delivery', labelKey: 'catalog.furnitureDelivery', basePrice: 70, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
         ],
       },
-      { key: 'disposal', labelKey: 'catalog.disposal', iconName: 'Trash2', priceRange: { min: 40 },
+      { key: 'disposal', labelKey: 'catalog.disposal', descriptionKey: 'catalog.disposalDesc', iconName: 'Trash2', priceRange: { min: 40 },
         services: [
           { key: 'debris_removal_hl', labelKey: 'catalog.debrisRemoval', basePrice: 100, unit: 'room', unitLabelKey: 'catalog.unitRoom' },
           { key: 'furniture_disposal', labelKey: 'catalog.furnitureDisposal', basePrice: 50, unit: 'piece', unitLabelKey: 'catalog.unitPiece' },
