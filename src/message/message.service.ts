@@ -25,6 +25,19 @@ export class MessageService {
     });
 
     await message.save();
+    const createdAt = (message as any).createdAt ?? new Date();
+
+    // Emit immediately to reduce perceived send latency on receiver clients.
+    this.chatGateway.emitNewMessage(createMessageDto.conversationId, {
+      _id: message._id,
+      conversationId: message.conversationId,
+      senderId,
+      content: message.content,
+      attachments: message.attachments ?? [],
+      isRead: message.isRead,
+      status: message.status,
+      createdAt,
+    });
 
     await this.conversationService.updateLastMessage(
       createMessageDto.conversationId,
@@ -44,9 +57,6 @@ export class MessageService {
       .findById(message._id)
       .populate('senderId', 'name avatar')
       .exec();
-
-    // Emit WebSocket event for real-time updates
-    this.chatGateway.emitNewMessage(createMessageDto.conversationId, populatedMessage);
 
     // Get conversation to notify the recipient
     const conversation = await this.conversationService.findById(createMessageDto.conversationId);

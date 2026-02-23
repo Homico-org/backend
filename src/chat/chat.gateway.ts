@@ -301,6 +301,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       message,
     });
 
+    // Emit message event to admin support room so admin list/open chat updates instantly
+    // even when admin hasn't joined this specific ticket room yet.
+    this.server.to("admin:support").emit("supportNewMessage", {
+      ticketId,
+      message,
+    });
+
     // Emit ticket update to admin room for list refresh
     this.server.to("admin:support").emit("supportTicketUpdate", {
       ticketId,

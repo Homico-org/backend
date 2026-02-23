@@ -148,11 +148,11 @@ export class SupportService {
 
     const savedTicket = await ticket.save();
 
+    // Emit message immediately before expensive population work.
+    this.chatGateway.emitSupportMessage(ticketId, message, savedTicket);
+
     // Populate user info for the response
     await savedTicket.populate('userId', 'name email avatar role');
-
-    // Emit WebSocket events for real-time updates
-    this.chatGateway.emitSupportMessage(ticketId, message, savedTicket);
 
     return savedTicket;
   }
