@@ -21,7 +21,7 @@ import { ProjectRequest } from "../project-request/schemas/project-request.schem
 import { Review } from "../review/schemas/review.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { PaymentMethod, User } from "./schemas/user.schema";
+import { PaymentMethod, ServiceAddress, User } from "./schemas/user.schema";
 import { LoggerService, ActivityType } from "../common/logger";
 
 @Injectable()
@@ -488,6 +488,174 @@ export class UsersService {
     }
 
     return { updated };
+  }
+
+  // ============== SERVICE ADDRESSES ==============
+
+  async getServiceAddresses(userId: string): Promise<ServiceAddress[]> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    return user.serviceAddresses || [];
+  }
+
+  async addServiceAddress(
+    userId: string,
+    dto: {
+      label: 'home' | 'work' | 'custom';
+      customLabel?: string;
+      formattedAddress: string;
+      lat: number;
+      lng: number;
+      apartment?: string;
+      floor?: string;
+      entrance?: string;
+      notes?: string;
+      setAsDefault?: boolean;
+    }
+  ): Promise<ServiceAddress> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const newAddress: ServiceAddress = {
+      id: uuidv4(),
+      label: dto.label,
+      customLabel: dto.customLabel,
+      formattedAddress: dto.formattedAddress,
+      lat: dto.lat,
+      lng: dto.lng,
+      apartment: dto.apartment,
+      floor: dto.floor,
+      entrance: dto.entrance,
+      notes: dto.notes,
+      isDefault: dto.setAsDefault || user.serviceAddresses?.length === 0,
+      createdAt: new Date(),
+    };
+
+    // If setting as default, unset other defaults
+    if (newAddress.isDefault && user.serviceAddresses?.length > 0) {
+      user.serviceAddresses = user.serviceAddresses.map((addr) => ({
+        ...addr,
+        isDefault: false,
+      }));
+    }
+
+    user.serviceAddresses = [...(user.serviceAddresses || []), newAddress];
+    await user.save();
+
+    return newAddress;
+  }
+
+  async updateServiceAddress(
+    userId: string,
+    addressId: string,
+    dto: Partial<{
+      label: 'home' | 'work' | 'custom';
+      customLabel: string;
+      formattedAddress: string;
+      lat: number;
+      lng: number;
+      apartment: string;
+      floor: string;
+      entrance: string;
+      notes: string;
+      setAsDefault: boolean;
+    }>
+  ): Promise<ServiceAddress> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const addressIndex = user.serviceAddresses?.findIndex(
+      (addr) => addr.id === addressId
+    );
+    if (addressIndex === undefined || addressIndex === -1) {
+      throw new NotFoundException("Address not found");
+    }
+
+    const existing = user.serviceAddresses[addressIndex];
+    const updated: ServiceAddress = {
+      ...existing,
+      ...(dto.label !== undefined && { label: dto.label }),
+      ...(dto.customLabel !== undefined && { customLabel: dto.customLabel }),
+      ...(dto.formattedAddress !== undefined && { formattedAddress: dto.formattedAddress }),
+      ...(dto.lat !== undefined && { lat: dto.lat }),
+      ...(dto.lng !== undefined && { lng: dto.lng }),
+      ...(dto.apartment !== undefined && { apartment: dto.apartment }),
+      ...(dto.floor !== undefined && { floor: dto.floor }),
+      ...(dto.entrance !== undefined && { entrance: dto.entrance }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+    };
+
+    if (dto.setAsDefault) {
+      user.serviceAddresses = user.serviceAddresses.map((addr) => ({
+        ...addr,
+        isDefault: false,
+      }));
+      updated.isDefault = true;
+    }
+
+    user.serviceAddresses[addressIndex] = updated;
+    await user.save();
+
+    return updated;
+  }
+
+  async deleteServiceAddress(
+    userId: string,
+    addressId: string
+  ): Promise<void> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const addressIndex = user.serviceAddresses?.findIndex(
+      (addr) => addr.id === addressId
+    );
+    if (addressIndex === undefined || addressIndex === -1) {
+      throw new NotFoundException("Address not found");
+    }
+
+    const wasDefault = user.serviceAddresses[addressIndex].isDefault;
+    user.serviceAddresses.splice(addressIndex, 1);
+
+    // If deleted address was default and there are other addresses, set first one as default
+    if (wasDefault && user.serviceAddresses.length > 0) {
+      user.serviceAddresses[0].isDefault = true;
+    }
+
+    await user.save();
+  }
+
+  async setDefaultServiceAddress(
+    userId: string,
+    addressId: string
+  ): Promise<ServiceAddress> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const addressIndex = user.serviceAddresses?.findIndex(
+      (addr) => addr.id === addressId
+    );
+    if (addressIndex === undefined || addressIndex === -1) {
+      throw new NotFoundException("Address not found");
+    }
+
+    // Unset all defaults and set the new one
+    user.serviceAddresses = user.serviceAddresses.map((addr) => ({
+      ...addr,
+      isDefault: addr.id === addressId,
+    }));
+
+    await user.save();
+    return user.serviceAddresses[addressIndex];
   }
 
   // Payment Methods

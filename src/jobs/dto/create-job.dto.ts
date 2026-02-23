@@ -3,6 +3,41 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { JobBudgetType, JobSizeUnit, JobPropertyType } from '../schemas/job.schema';
 
+export class JobAddressDto {
+  @ApiProperty({ example: '12 Rustaveli Ave, Tbilisi, Georgia' })
+  @IsString()
+  @IsNotEmpty()
+  formattedAddress: string;
+
+  @ApiProperty({ example: 41.7151 })
+  @IsNumber()
+  lat: number;
+
+  @ApiProperty({ example: 44.8271 })
+  @IsNumber()
+  lng: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  apartment?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  floor?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  entrance?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+
 class ReferenceDto {
   @ApiProperty({ enum: ['link', 'image', 'pinterest', 'instagram'] })
   @IsString()
@@ -54,6 +89,12 @@ export class CreateJobDto {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @ApiPropertyOptional({ description: 'Structured address with coordinates' })
+  @ValidateNested()
+  @Type(() => JobAddressDto)
+  @IsOptional()
+  address?: JobAddressDto;
 
   @ApiProperty({ enum: JobPropertyType })
   @IsEnum(JobPropertyType)

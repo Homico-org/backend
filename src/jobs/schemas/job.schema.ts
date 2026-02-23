@@ -59,6 +59,28 @@ export class Job extends Document {
   location: string;
 
   @Prop({
+    type: {
+      formattedAddress: String,
+      lat: Number,
+      lng: Number,
+      apartment: String,
+      floor: String,
+      entrance: String,
+      notes: String,
+    },
+    default: null,
+  })
+  address: {
+    formattedAddress: string;
+    lat: number;
+    lng: number;
+    apartment?: string;
+    floor?: string;
+    entrance?: string;
+    notes?: string;
+  };
+
+  @Prop({
     type: String,
     enum: Object.values(JobPropertyType),
     required: true

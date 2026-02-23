@@ -33,6 +33,22 @@ export enum ProStatus {
   AWAY = 'away',
 }
 
+// Service address embedded schema
+export class ServiceAddress {
+  id: string;
+  label: 'home' | 'work' | 'custom';
+  customLabel?: string;
+  formattedAddress: string;
+  lat: number;
+  lng: number;
+  apartment?: string;
+  floor?: string;
+  entrance?: string;
+  notes?: string;
+  isDefault: boolean;
+  createdAt: Date;
+}
+
 // Payment method embedded schema
 export class PaymentMethod {
   id: string;
@@ -179,6 +195,10 @@ export class User extends Document {
       messages: boolean;
     };
   };
+
+  // Service addresses
+  @Prop({ type: [Object], default: [] })
+  serviceAddresses: ServiceAddress[];
 
   // Payment methods
   @Prop({ type: [Object], default: [] })

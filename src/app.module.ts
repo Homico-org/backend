@@ -31,6 +31,7 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { PublicModule } from './public/public.module';
 import { BusinessModule } from './business/business.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -116,6 +117,7 @@ import { APP_GUARD } from '@nestjs/core';
     PublicModule,
     BusinessModule,
     AnalyticsModule,
+    ServiceCatalogModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default

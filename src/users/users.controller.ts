@@ -19,6 +19,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AddCardPaymentMethodDto, AddBankPaymentMethodDto, SetDefaultPaymentMethodDto } from './dto/payment-method.dto';
+import { AddServiceAddressDto, UpdateServiceAddressDto, SetDefaultAddressDto } from './dto/service-address.dto';
 @ApiTags('Users')
 @Controller('users')
 export class UsersController {
@@ -59,6 +60,7 @@ export class UsersController {
       // For pro users, derive subcategories from selectedServices if available
       selectedSubcategories: derivedSubcategories,
       selectedServices: userData.selectedServices,
+      serviceAddresses: userData.serviceAddresses || [],
       // Include verification status for pro users
       ...(userData.role === 'pro' ? { verificationStatus: userData.verificationStatus || 'pending' } : {}),
     };
@@ -294,6 +296,67 @@ export class UsersController {
     @Body() dto: SetDefaultPaymentMethodDto,
   ) {
     return this.usersService.setDefaultPaymentMethod(user.userId, dto.paymentMethodId);
+  }
+
+  // ============== SERVICE ADDRESSES ==============
+
+  @Get('addresses')
+  @ApiOperation({ summary: 'Get user service addresses' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'List of service addresses' })
+  @UseGuards(JwtAuthGuard)
+  async getServiceAddresses(@CurrentUser() user: any) {
+    return this.usersService.getServiceAddresses(user.userId);
+  }
+
+  @Post('addresses')
+  @ApiOperation({ summary: 'Add a service address' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Address added successfully' })
+  @UseGuards(JwtAuthGuard)
+  async addServiceAddress(
+    @CurrentUser() user: any,
+    @Body() dto: AddServiceAddressDto,
+  ) {
+    return this.usersService.addServiceAddress(user.userId, dto);
+  }
+
+  @Patch('addresses/:id')
+  @ApiOperation({ summary: 'Update a service address' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Address updated successfully' })
+  @UseGuards(JwtAuthGuard)
+  async updateServiceAddress(
+    @CurrentUser() user: any,
+    @Param('id') addressId: string,
+    @Body() dto: UpdateServiceAddressDto,
+  ) {
+    return this.usersService.updateServiceAddress(user.userId, addressId, dto);
+  }
+
+  @Delete('addresses/:id')
+  @ApiOperation({ summary: 'Delete a service address' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Address deleted' })
+  @UseGuards(JwtAuthGuard)
+  async deleteServiceAddress(
+    @CurrentUser() user: any,
+    @Param('id') addressId: string,
+  ) {
+    await this.usersService.deleteServiceAddress(user.userId, addressId);
+    return { message: 'Address deleted successfully' };
+  }
+
+  @Patch('addresses/default')
+  @ApiOperation({ summary: 'Set default service address' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Default address updated' })
+  @UseGuards(JwtAuthGuard)
+  async setDefaultServiceAddress(
+    @CurrentUser() user: any,
+    @Body() dto: SetDefaultAddressDto,
+  ) {
+    return this.usersService.setDefaultServiceAddress(user.userId, dto.addressId);
   }
 
   // ============== NOTIFICATION PREFERENCES ==============
