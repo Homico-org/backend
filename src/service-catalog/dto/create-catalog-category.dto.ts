@@ -8,9 +8,21 @@ import {
   IsArray,
   ValidateNested,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ServiceUnit } from '../schemas/service-catalog.schema';
+
+export class DiscountTierDto {
+  @IsNumber()
+  @Min(1)
+  minQuantity: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percent: number;
+}
 
 export class LocalizedTextDto {
   @IsString()
@@ -68,6 +80,12 @@ export class CatalogServiceDto {
   @IsNumber()
   @IsOptional()
   step?: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DiscountTierDto)
+  @IsOptional()
+  discountTiers?: DiscountTierDto[];
 }
 
 export class CatalogAddonDto {
@@ -183,6 +201,12 @@ export class CatalogSubcategoryDto {
   @Type(() => CatalogServiceDto)
   @IsOptional()
   additionalServices?: CatalogServiceDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DiscountTierDto)
+  @IsOptional()
+  orderDiscountTiers?: DiscountTierDto[];
 }
 
 export class CreateCatalogCategoryDto {

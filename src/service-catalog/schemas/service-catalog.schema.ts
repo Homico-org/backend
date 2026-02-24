@@ -20,6 +20,15 @@ export enum ServiceUnit {
 // === Sub-schemas (embedded documents) ===
 
 @Schema({ _id: false })
+export class DiscountTier {
+  @Prop({ required: true })
+  minQuantity: number;
+
+  @Prop({ required: true })
+  percent: number;
+}
+
+@Schema({ _id: false })
 export class LocalizedText {
   @Prop({ required: true })
   en: string;
@@ -65,6 +74,9 @@ export class CatalogService {
 
   @Prop()
   step?: number;
+
+  @Prop({ type: [Object], default: [] })
+  discountTiers?: DiscountTier[];
 }
 
 @Schema({ _id: false })
@@ -146,6 +158,9 @@ export class CatalogSubcategory {
 
   @Prop({ type: [Object], default: [] })
   additionalServices: CatalogService[];
+
+  @Prop({ type: [Object], default: [] })
+  orderDiscountTiers?: DiscountTier[];
 }
 
 // === Top-level document ===

@@ -53,7 +53,7 @@ function lt(
 // ─── Inline SERVICE_CATALOG data (mirrored from mobile) ────────────────
 
 function buildServiceItem(
-  s: { key: string; labelKey: string; descriptionKey?: string; basePrice: number; unit: string; unitLabelKey: string; maxQuantity?: number; step?: number },
+  s: { key: string; labelKey: string; descriptionKey?: string; basePrice: number; unit: string; unitLabelKey: string; maxQuantity?: number; step?: number; discountTiers?: { minQuantity: number; percent: number }[] },
   en: Record<string, string>,
   ka: Record<string, string>,
   ru: Record<string, string>,
@@ -67,6 +67,7 @@ function buildServiceItem(
     unitLabel: lt(s.unitLabelKey, en, ka, ru),
     ...(s.maxQuantity !== undefined ? { maxQuantity: s.maxQuantity } : {}),
     ...(s.step !== undefined ? { step: s.step } : {}),
+    ...(s.discountTiers?.length ? { discountTiers: s.discountTiers } : {}),
   };
 }
 
@@ -107,6 +108,7 @@ function buildSubcategory(
     key: string; labelKey: string; descriptionKey?: string; iconName: string;
     imageUrl?: string; priceRange: { min: number; max?: number };
     variants?: any[]; services?: any[]; addons?: any[]; additionalServices?: any[];
+    orderDiscountTiers?: { minQuantity: number; percent: number }[];
   },
   en: Record<string, string>,
   ka: Record<string, string>,
@@ -126,6 +128,7 @@ function buildSubcategory(
     services: (sub.services ?? []).map((s) => buildServiceItem(s, en, ka, ru)),
     addons: (sub.addons ?? []).map((a) => buildAddon(a, en, ka, ru)),
     additionalServices: (sub.additionalServices ?? []).map((s) => buildServiceItem(s, en, ka, ru)),
+    ...(sub.orderDiscountTiers?.length ? { orderDiscountTiers: sub.orderDiscountTiers } : {}),
   };
 }
 
@@ -154,9 +157,9 @@ const standardCleaningVariants = [
     key: 'apartment', labelKey: 'catalog.variant_apartment',
     services: [
       { key: 'std_apt_kitchen', labelKey: 'catalog.kitchenCleaning', basePrice: 35, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 2 },
-      { key: 'std_apt_bathroom', labelKey: 'catalog.bathroomCleaning', basePrice: 30, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 3 },
+      { key: 'std_apt_bathroom', labelKey: 'catalog.bathroomCleaning', basePrice: 30, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 3, discountTiers: [{ minQuantity: 2, percent: 10 }, { minQuantity: 3, percent: 15 }] },
       { key: 'std_apt_living', labelKey: 'catalog.livingRoomCleaning', basePrice: 40, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 2 },
-      { key: 'std_apt_bedroom', labelKey: 'catalog.bedroomCleaning', basePrice: 35, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 5 },
+      { key: 'std_apt_bedroom', labelKey: 'catalog.bedroomCleaning', basePrice: 35, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 5, discountTiers: [{ minQuantity: 2, percent: 10 }, { minQuantity: 4, percent: 20 }] },
       { key: 'std_apt_cabinet', labelKey: 'catalog.cabinetRoom', basePrice: 30, unit: 'room', unitLabelKey: 'catalog.unitRoom', maxQuantity: 2 },
       { key: 'std_apt_terrace', labelKey: 'catalog.terraceCleaning', basePrice: 5, unit: 'sqm', unitLabelKey: 'catalog.unitSqm' },
     ],
@@ -318,7 +321,7 @@ const SERVICE_CATALOG = [
         ],
         addons: [cleaningChemicalsAddon],
       },
-      { key: 'standard_cleaning', labelKey: 'catalog.standardCleaning', descriptionKey: 'catalog.standardCleaningDesc', iconName: 'Sparkles', priceRange: { min: 25 }, variants: standardCleaningVariants },
+      { key: 'standard_cleaning', labelKey: 'catalog.standardCleaning', descriptionKey: 'catalog.standardCleaningDesc', iconName: 'Sparkles', priceRange: { min: 25 }, variants: standardCleaningVariants, orderDiscountTiers: [{ minQuantity: 3, percent: 5 }, { minQuantity: 5, percent: 10 }] },
       { key: 'deep_cleaning', labelKey: 'catalog.deepCleaning', descriptionKey: 'catalog.deepCleaningDesc', iconName: 'Layers', priceRange: { min: 35 }, variants: deepCleaningVariants },
       { key: 'window_cleaning', labelKey: 'catalog.windowCleaningSub', descriptionKey: 'catalog.windowCleaningSubDesc', iconName: 'Square', priceRange: { min: 8 }, variants: windowCleaningVariants },
       { key: 'ironing_service', labelKey: 'catalog.ironingServiceSub', descriptionKey: 'catalog.ironingServiceDesc', iconName: 'Shirt', priceRange: { min: 15 },
