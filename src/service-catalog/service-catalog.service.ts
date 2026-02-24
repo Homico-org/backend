@@ -14,11 +14,17 @@ export class ServiceCatalogService {
   // === Public reads ===
 
   async findAll() {
-    return this.catalogModel
+    const categories = await this.catalogModel
       .find({ isActive: true })
       .sort({ sortOrder: 1 })
       .lean()
       .exec();
+    return categories.map((cat) => ({
+      ...cat,
+      subcategories: (cat.subcategories ?? []).filter(
+        (sub) => sub.isActive !== false,
+      ),
+    }));
   }
 
   async findAllAdmin() {
