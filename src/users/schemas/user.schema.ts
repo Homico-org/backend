@@ -156,6 +156,19 @@ export class User extends Document {
     experience: string;
   }[];
 
+  @Prop({ type: [Object], default: [] })
+  servicePricing: {
+    serviceKey: string;
+    categoryKey: string;
+    subcategoryKey: string;
+    variantKey?: string;
+    price: number;
+    isActive: boolean;
+  }[];
+
+  @Prop({ type: Number, default: 0 })
+  registrationStep: number;
+
   // Verification fields
   @Prop({ default: false })
   isEmailVerified: boolean;

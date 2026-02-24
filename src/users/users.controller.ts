@@ -61,6 +61,10 @@ export class UsersController {
       selectedSubcategories: derivedSubcategories,
       selectedServices: userData.selectedServices,
       serviceAddresses: userData.serviceAddresses || [],
+      registrationStep: userData.registrationStep ?? 0,
+      servicePricing: userData.servicePricing || [],
+      isPhoneVerified: userData.isPhoneVerified,
+      isEmailVerified: userData.isEmailVerified,
       // Include verification status for pro users
       ...(userData.role === 'pro' ? { verificationStatus: userData.verificationStatus || 'pending' } : {}),
     };

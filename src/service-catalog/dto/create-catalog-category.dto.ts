@@ -66,6 +66,10 @@ export class CatalogServiceDto {
   @Min(0)
   basePrice: number;
 
+  @IsNumber()
+  @IsOptional()
+  maxPrice?: number;
+
   @IsEnum(ServiceUnit)
   unit: ServiceUnit;
 
@@ -104,6 +108,10 @@ export class CatalogAddonDto {
   @IsNumber()
   @Min(0)
   basePrice: number;
+
+  @IsNumber()
+  @IsOptional()
+  maxPrice?: number;
 
   @IsEnum(ServiceUnit)
   unit: ServiceUnit;

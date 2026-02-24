@@ -63,6 +63,9 @@ export class CatalogService {
   @Prop({ required: true })
   basePrice: number;
 
+  @Prop()
+  maxPrice?: number;
+
   @Prop({ type: String, enum: Object.values(ServiceUnit), required: true })
   unit: ServiceUnit;
 
@@ -92,6 +95,9 @@ export class CatalogAddon {
 
   @Prop({ required: true })
   basePrice: number;
+
+  @Prop()
+  maxPrice?: number;
 
   @Prop({ type: String, enum: Object.values(ServiceUnit), required: true })
   unit: ServiceUnit;
