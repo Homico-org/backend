@@ -95,17 +95,25 @@ export class ServiceCatalogService {
     subKey: string,
     subcategoryData: Record<string, unknown>,
   ) {
-    // Try to update existing subcategory
-    const updated = await this.catalogModel
-      .findOneAndUpdate(
-        { key: categoryKey, 'subcategories.key': subKey },
-        {
-          $set: { 'subcategories.$': { ...subcategoryData, key: subKey } },
-          $inc: { version: 1 },
-        },
-        { new: true },
-      )
-      .exec();
+    // Try to update existing subcategory (merge fields instead of full replace)
+    const setFields: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(subcategoryData)) {
+      if (field === 'key') continue;
+      setFields[`subcategories.$.${field}`] = value;
+    }
+
+    const updated = Object.keys(setFields).length > 0
+      ? await this.catalogModel
+          .findOneAndUpdate(
+            { key: categoryKey, 'subcategories.key': subKey },
+            {
+              $set: setFields,
+              $inc: { version: 1 },
+            },
+            { new: true },
+          )
+          .exec()
+      : null;
 
     if (updated) return updated;
 
@@ -171,10 +179,11 @@ export class ServiceCatalogService {
     ].variants.findIndex((v) => v.key === variantKey);
 
     if (variantIndex >= 0) {
-      (category.subcategories[subIndex].variants as any)[variantIndex] = {
-        ...variantData,
-        key: variantKey,
-      };
+      const existing = category.subcategories[subIndex].variants[variantIndex];
+      for (const [field, value] of Object.entries(variantData)) {
+        if (field === 'key') continue;
+        (existing as any)[field] = value;
+      }
     } else {
       (category.subcategories[subIndex].variants as any).push({
         ...variantData,
@@ -213,6 +222,21 @@ export class ServiceCatalogService {
   }
 
   // === Reorder ===
+
+  async reorderCategories(orderedKeys: string[]) {
+    const categories = await this.catalogModel.find().exec();
+    const catMap = new Map(categories.map((c) => [c.key, c]));
+
+    for (let i = 0; i < orderedKeys.length; i++) {
+      const cat = catMap.get(orderedKeys[i]);
+      if (cat) {
+        cat.sortOrder = i;
+        await cat.save();
+      }
+    }
+
+    return { success: true };
+  }
 
   async reorderSubcategories(categoryKey: string, orderedKeys: string[]) {
     const category = await this.catalogModel

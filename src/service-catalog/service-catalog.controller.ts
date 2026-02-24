@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { ServiceCatalogService } from './service-catalog.service';
 import { CreateCatalogCategoryDto } from './dto/create-catalog-category.dto';
-import { UpdateCatalogCategoryDto } from './dto/update-catalog-category.dto';
+import {
+  UpdateCatalogCategoryDto,
+  UpsertSubcategoryDto,
+  UpsertVariantDto,
+} from './dto/update-catalog-category.dto';
 import { buildSeedData } from './seed-catalog';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -55,6 +59,13 @@ export class ServiceCatalogController {
     return this.catalogService.create(dto as any);
   }
 
+  @Patch('reorder-categories')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  reorderCategories(@Body() body: { keys: string[] }) {
+    return this.catalogService.reorderCategories(body.keys);
+  }
+
   @Patch(':categoryKey')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -85,9 +96,9 @@ export class ServiceCatalogController {
   upsertSubcategory(
     @Param('categoryKey') categoryKey: string,
     @Param('subKey') subKey: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: UpsertSubcategoryDto,
   ) {
-    return this.catalogService.upsertSubcategory(categoryKey, subKey, body);
+    return this.catalogService.upsertSubcategory(categoryKey, subKey, body as any);
   }
 
   @Delete(':categoryKey/subcategories/:subKey')
@@ -107,13 +118,13 @@ export class ServiceCatalogController {
     @Param('categoryKey') categoryKey: string,
     @Param('subKey') subKey: string,
     @Param('variantKey') variantKey: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: UpsertVariantDto,
   ) {
     return this.catalogService.upsertVariant(
       categoryKey,
       subKey,
       variantKey,
-      body,
+      body as any,
     );
   }
 
