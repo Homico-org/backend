@@ -1,7 +1,7 @@
 import { IsString, IsNotEmpty, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, IsBoolean, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { JobBudgetType, JobSizeUnit, JobPropertyType } from '../schemas/job.schema';
+import { JobBudgetType, JobSizeUnit, JobPropertyType, JobType } from '../schemas/job.schema';
 
 export class JobAddressDto {
   @ApiProperty({ example: '12 Rustaveli Ave, Tbilisi, Georgia' })
@@ -59,7 +59,32 @@ class ReferenceDto {
   thumbnail?: string;
 }
 
+class ServiceItemDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  key: string;
+
+  @ApiProperty()
+  @IsNumber()
+  quantity: number;
+
+  @ApiProperty()
+  @IsNumber()
+  unitPrice: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  unit?: string;
+}
+
 export class CreateJobDto {
+  @ApiPropertyOptional({ enum: JobType, description: 'Job type: marketplace or direct_request' })
+  @IsEnum(JobType)
+  @IsOptional()
+  jobType?: JobType;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -96,10 +121,10 @@ export class CreateJobDto {
   @IsOptional()
   address?: JobAddressDto;
 
-  @ApiProperty({ enum: JobPropertyType })
+  @ApiPropertyOptional({ enum: JobPropertyType })
   @IsEnum(JobPropertyType)
-  @IsNotEmpty()
-  propertyType: JobPropertyType;
+  @IsOptional()
+  propertyType?: JobPropertyType;
 
   @ApiPropertyOptional({ description: 'Custom property type when propertyType is "other"' })
   @IsString()
@@ -257,4 +282,17 @@ export class CreateJobDto {
   @IsBoolean()
   @IsOptional()
   occupiedDuringWork?: boolean;
+
+  @ApiPropertyOptional({ description: 'Services selected (for direct_request jobs)' })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ServiceItemDto)
+  @IsOptional()
+  services?: ServiceItemDto[];
+
+  @ApiPropertyOptional({ description: 'Professional IDs to invite' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  invitedPros?: string[];
 }

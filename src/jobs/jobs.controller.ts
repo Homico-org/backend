@@ -215,6 +215,59 @@ export class JobsController {
     return { success: true };
   }
 
+  // ============== DIRECT REQUEST ROUTES (before :id wildcard) ==============
+
+  @Get('direct-requests/my-requests')
+  @ApiOperation({ summary: 'Get pending direct requests for the current pro' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiResponse({ status: 200, description: 'List of direct requests' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  getDirectRequests(
+    @CurrentUser() user: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.jobsService.getDirectRequestsForPro(
+      user.userId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10,
+    );
+  }
+
+  @Get('direct-requests/count')
+  @ApiOperation({ summary: 'Get count of pending direct requests for badge' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Count of pending requests' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  async getDirectRequestCount(@CurrentUser() user: any) {
+    const count = await this.jobsService.getDirectRequestCountForPro(user.userId);
+    return { count };
+  }
+
+  @Post('direct-requests/:jobId/accept')
+  @ApiOperation({ summary: 'Accept a direct request' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Request accepted, pro is hired' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  acceptDirectRequest(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.acceptDirectRequest(jobId, user.userId);
+  }
+
+  @Post('direct-requests/:jobId/decline')
+  @ApiOperation({ summary: 'Decline a direct request' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Request declined' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO)
+  declineDirectRequest(@Param('jobId') jobId: string, @CurrentUser() user: any) {
+    return this.jobsService.declineDirectRequest(jobId, user.userId);
+  }
+
   // Proposal static routes (before :jobId wildcard)
   @Post('proposals/:proposalId/reveal-contact')
   @ApiOperation({ summary: 'Reveal pro contact information' })

@@ -32,8 +32,20 @@ export enum JobPropertyType {
   OTHER = 'other',
 }
 
+export enum JobType {
+  MARKETPLACE = 'marketplace',
+  DIRECT_REQUEST = 'direct_request',
+}
+
 @Schema({ timestamps: true })
 export class Job extends Document {
+  @Prop({
+    type: String,
+    enum: Object.values(JobType),
+    default: JobType.MARKETPLACE,
+  })
+  jobType: JobType;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
 
@@ -83,7 +95,6 @@ export class Job extends Document {
   @Prop({
     type: String,
     enum: Object.values(JobPropertyType),
-    required: true
   })
   propertyType: JobPropertyType;
 
@@ -240,9 +251,30 @@ export class Job extends Document {
   @Prop({ type: Number, default: 0 })
   viewCount: number;
 
+  // Services selected for this job (used by direct_request jobs from mobile order flow)
+  @Prop({
+    type: [{
+      key: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      unitPrice: { type: Number, required: true },
+      unit: { type: String },
+    }],
+    default: [],
+  })
+  services: {
+    key: string;
+    quantity: number;
+    unitPrice: number;
+    unit?: string;
+  }[];
+
   // Professionals who have been invited to this job
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   invitedPros: Types.ObjectId[];
+
+  // Professionals who declined this direct request
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  declinedPros: Types.ObjectId[];
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);

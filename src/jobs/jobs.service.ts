@@ -8,7 +8,7 @@ import { UserRole } from '../users/schemas/user.schema';
 import { SmsService } from '../verification/services/sms.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
-import { Job, JobPropertyType, JobStatus, JobView } from './schemas/job.schema';
+import { Job, JobPropertyType, JobStatus, JobType, JobView } from './schemas/job.schema';
 import { ProjectStage, ProjectTracking } from './schemas/project-tracking.schema';
 import { Proposal, ProposalStatus } from './schemas/proposal.schema';
 import { SavedJob } from './schemas/saved-job.schema';
@@ -29,6 +29,9 @@ export class JobsService {
   // Jobs CRUD
   async createJob(clientId: string, createJobDto: CreateJobDto): Promise<Job> {
     const { Types } = require('mongoose');
+
+    // Extract invitedPros before spreading DTO into job document
+    const { invitedPros: invitedProIds, ...jobData } = createJobDto;
 
     // Prevent duplicate job creation within 30 seconds (same user, same title)
     const recentDuplicateCheck = new Date();
@@ -59,11 +62,23 @@ export class JobsService {
 
     const job = new this.jobModel({
       clientId: new Types.ObjectId(clientId),
-      ...createJobDto,
+      ...jobData,
+      invitedPros: invitedProIds ? invitedProIds.map(id => new Types.ObjectId(id)) : [],
       jobNumber: nextJobNumber,
       expiresAt,
     });
-    return job.save();
+    const savedJob = await job.save();
+
+    // Auto-invite pros if any were specified
+    if (invitedProIds && invitedProIds.length > 0) {
+      try {
+        await this.invitePros(savedJob._id.toString(), clientId, invitedProIds);
+      } catch (error) {
+        console.error('Failed to auto-invite pros:', error);
+      }
+    }
+
+    return savedJob;
   }
 
   async findAllJobs(filters?: {
@@ -109,6 +124,10 @@ export class JobsService {
     } else {
       query.status = JobStatus.OPEN;
     }
+
+    // Exclude direct_request jobs from public browse — they are only visible to invited pros
+    query.jobType = { $ne: JobType.DIRECT_REQUEST };
+
     const andConditions: any[] = [];
 
     // Exclude jobs with expired deadlines (only for open jobs browse)
@@ -387,10 +406,37 @@ export class JobsService {
     }
 
     // Ensure subcategory is set (for backward compatibility with jobs that only have skills)
-    const jobWithSubcategory = {
+    const jobWithSubcategory: any = {
       ...job,
       subcategory: (job as any).subcategory || ((job as any).skills && (job as any).skills[0]) || undefined,
     };
+
+    // For direct_request jobs, populate invited pros with status details
+    if ((job as any).jobType === JobType.DIRECT_REQUEST && (job as any).invitedPros?.length > 0) {
+      const invitedProIds = (job as any).invitedPros.map((id: any) => id.toString ? id.toString() : id);
+      const declinedProIds = ((job as any).declinedPros || []).map((id: any) => id.toString ? id.toString() : id);
+      const hiredProId = (job as any).hiredProId?.toString();
+
+      const proUsers = await this.userModel
+        .find({ _id: { $in: invitedProIds.map((id: string) => new Types.ObjectId(id)) } })
+        .select('_id name avatar title')
+        .lean()
+        .exec();
+
+      jobWithSubcategory.invitedProsDetails = proUsers.map((pro: any) => {
+        const proId = pro._id.toString();
+        let status = 'pending';
+        if (hiredProId && proId === hiredProId) status = 'accepted';
+        else if (declinedProIds.includes(proId)) status = 'declined';
+        return {
+          _id: proId,
+          name: pro.name,
+          avatar: pro.avatar,
+          title: pro.title,
+          status,
+        };
+      });
+    }
 
     // For in_progress or completed jobs, get hired pro info
     if (job.status === 'in_progress' || job.status === 'completed') {
@@ -1514,5 +1560,164 @@ export class JobsService {
     }
 
     return { success: true, invitedCount: newProIds.length };
+  }
+
+  // ============== DIRECT REQUEST METHODS ==============
+
+  async getDirectRequestsForPro(
+    proId: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    data: any[];
+    pagination: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean };
+  }> {
+    const proObjectId = new Types.ObjectId(proId);
+    const skip = (page - 1) * limit;
+
+    const query = {
+      jobType: JobType.DIRECT_REQUEST,
+      status: JobStatus.OPEN,
+      invitedPros: proObjectId,
+      declinedPros: { $ne: proObjectId },
+    };
+
+    const [data, total] = await Promise.all([
+      this.jobModel
+        .find(query)
+        .populate('clientId', 'name email avatar city accountType companyName')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.jobModel.countDocuments(query),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      pagination: { total, page, limit, totalPages, hasMore: page < totalPages },
+    };
+  }
+
+  async getDirectRequestCountForPro(proId: string): Promise<number> {
+    const proObjectId = new Types.ObjectId(proId);
+    return this.jobModel.countDocuments({
+      jobType: JobType.DIRECT_REQUEST,
+      status: JobStatus.OPEN,
+      invitedPros: proObjectId,
+      declinedPros: { $ne: proObjectId },
+    });
+  }
+
+  async acceptDirectRequest(jobId: string, proId: string): Promise<Job> {
+    const proObjectId = new Types.ObjectId(proId);
+
+    // Atomic update: only succeed if job is still OPEN
+    const updatedJob = await this.jobModel.findOneAndUpdate(
+      {
+        _id: new Types.ObjectId(jobId),
+        jobType: JobType.DIRECT_REQUEST,
+        status: JobStatus.OPEN,
+        invitedPros: proObjectId,
+      },
+      {
+        status: JobStatus.IN_PROGRESS,
+        hiredProId: proObjectId,
+      },
+      { new: true },
+    ).exec();
+
+    if (!updatedJob) {
+      throw new NotFoundException('Request not found, already accepted, or you are not invited');
+    }
+
+    // Create project tracking record
+    const now = new Date();
+    await this.projectTrackingModel.create({
+      jobId: new Types.ObjectId(jobId),
+      clientId: updatedJob.clientId,
+      proId: proObjectId,
+      currentStage: ProjectStage.HIRED,
+      progress: 0,
+      hiredAt: now,
+      agreedPrice: updatedJob.budgetAmount,
+      stageHistory: [{ stage: ProjectStage.HIRED, enteredAt: now }],
+    });
+
+    // Notify client
+    try {
+      const pro = await this.userModel.findById(proId).select('name').exec();
+      await this.notificationsService.notify(
+        updatedJob.clientId.toString(),
+        NotificationType.PROPOSAL_ACCEPTED,
+        'მოთხოვნა მიღებულია!',
+        `${pro?.name || 'სპეციალისტმა'} მიიღო თქვენი მოთხოვნა: "${updatedJob.title}"`,
+        {
+          link: `/my-jobs/${jobId}`,
+          referenceId: jobId,
+          referenceModel: 'Job',
+          metadata: {
+            jobId,
+            jobTitle: updatedJob.title,
+            proName: pro?.name,
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Failed to send direct request accepted notification:', error);
+    }
+
+    return updatedJob;
+  }
+
+  async declineDirectRequest(jobId: string, proId: string): Promise<{ declined: boolean; allDeclined: boolean }> {
+    const proObjectId = new Types.ObjectId(proId);
+    const jobObjectId = new Types.ObjectId(jobId);
+
+    const job = await this.jobModel.findOne({
+      _id: jobObjectId,
+      jobType: JobType.DIRECT_REQUEST,
+      status: JobStatus.OPEN,
+      invitedPros: proObjectId,
+    }).exec();
+
+    if (!job) {
+      throw new NotFoundException('Request not found or you are not invited');
+    }
+
+    // Add to declinedPros
+    await this.jobModel.findByIdAndUpdate(jobId, {
+      $addToSet: { declinedPros: proObjectId },
+    });
+
+    // Check if ALL invited pros have now declined
+    const updatedJob = await this.jobModel.findById(jobId).exec();
+    const invitedCount = updatedJob.invitedPros?.length || 0;
+    const declinedCount = updatedJob.declinedPros?.length || 0;
+    const allDeclined = declinedCount >= invitedCount;
+
+    if (allDeclined) {
+      // Notify client that all pros declined
+      try {
+        await this.notificationsService.notify(
+          job.clientId.toString(),
+          NotificationType.PROPOSAL_REJECTED,
+          'ყველა სპეციალისტმა უარყო',
+          `ყველა მოწვეულმა სპეციალისტმა უარყო თქვენი მოთხოვნა: "${job.title}"`,
+          {
+            link: `/my-jobs/${jobId}`,
+            referenceId: jobId,
+            referenceModel: 'Job',
+            metadata: { jobId, jobTitle: job.title },
+          },
+        );
+      } catch (error) {
+        console.error('Failed to send all-declined notification:', error);
+      }
+    }
+
+    return { declined: true, allDeclined };
   }
 }
