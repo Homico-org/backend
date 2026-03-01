@@ -1029,12 +1029,13 @@ export class UsersService {
       updateData.scheduleOverrides = data.scheduleOverrides;
 
     // If pro is still in registration (step 4 = pricing done, schedule not yet saved),
-    // mark registration as complete and verify the pro
-    const current = await this.userModel.findById(userId).select("registrationStep isProfileCompleted role").exec();
-    if (current?.role === 'pro' && current.registrationStep === 4 && !current.isProfileCompleted) {
+    // mark registration as complete and set pending verification for admin approval
+    const current = await this.userModel.findById(userId).select("registrationStep isProfileCompleted role name").exec();
+    const isCompletingRegistration = current?.role === 'pro' && current.registrationStep === 4 && !current.isProfileCompleted;
+    if (isCompletingRegistration) {
       updateData.registrationStep = 5;
       updateData.isProfileCompleted = true;
-      updateData.verificationStatus = 'verified';
+      updateData.verificationStatus = 'pending';
     }
 
     const user = await this.userModel
@@ -1042,6 +1043,24 @@ export class UsersService {
       .select("weeklySchedule scheduleOverrides isProfileCompleted verificationStatus registrationStep")
       .exec();
     if (!user) throw new NotFoundException("User not found");
+
+    // Notify all admins about new pro registration pending approval
+    if (isCompletingRegistration) {
+      const admins = await this.userModel.find({ role: 'admin' }).select('_id').exec();
+      if (admins.length > 0) {
+        const notifications = admins.map((admin) => ({
+          userId: admin._id,
+          type: 'profile_update',
+          title: 'New Pro Registration',
+          message: `${current.name} has completed registration and is awaiting approval`,
+          link: '/admin/pending-pros',
+          referenceId: current._id,
+          referenceModel: 'User',
+        }));
+        await this.notificationModel.insertMany(notifications);
+      }
+    }
+
     return {
       weeklySchedule: user.weeklySchedule || [],
       scheduleOverrides: user.scheduleOverrides || [],
