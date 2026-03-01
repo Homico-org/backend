@@ -146,11 +146,12 @@ export class JobsController {
   @ApiOperation({ summary: 'Get my job postings' })
   @ApiBearerAuth('JWT-auth')
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status: open, in_progress, completed, cancelled' })
+  @ApiQuery({ name: 'source', required: false, description: 'Filter by source: mobile (only jobs with services)' })
   @ApiResponse({ status: 200, description: 'List of my jobs' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
-  findMyJobs(@CurrentUser() user: any, @Query('status') status?: string) {
-    return this.jobsService.findMyJobs(user.userId, status);
+  findMyJobs(@CurrentUser() user: any, @Query('status') status?: string, @Query('source') source?: string) {
+    return this.jobsService.findMyJobs(user.userId, status, source);
   }
 
   @Get('my-proposals/list')
@@ -792,6 +793,15 @@ export class JobsController {
     @Body() body: { proIds: string[] },
   ) {
     return this.jobsService.invitePros(jobId, user.userId, body.proIds);
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a job' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 200, description: 'Job cancelled successfully' })
+  @UseGuards(JwtAuthGuard)
+  async cancelJob(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.jobsService.cancelJob(id, user.userId);
   }
 
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============

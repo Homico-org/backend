@@ -9,6 +9,7 @@ export enum NotificationType {
   JOB_COMPLETED = 'job_completed',
   JOB_CANCELLED = 'job_cancelled',
   JOB_INVITATION = 'job_invitation',
+  DIRECT_REQUEST_TAKEN = 'direct_request_taken',
 
   // Message related
   NEW_MESSAGE = 'new_message',

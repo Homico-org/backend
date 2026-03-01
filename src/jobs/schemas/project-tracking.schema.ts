@@ -3,6 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export enum ProjectStage {
   HIRED = 'hired',
+  EN_ROUTE = 'en_route',
   STARTED = 'started',
   IN_PROGRESS = 'in_progress',
   REVIEW = 'review',

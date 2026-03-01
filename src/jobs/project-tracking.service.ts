@@ -177,6 +177,7 @@ export class ProjectTrackingService {
     // Auto-update progress based on stage
     const stageProgress: Record<ProjectStage, number> = {
       [ProjectStage.HIRED]: 0,
+      [ProjectStage.EN_ROUTE]: 5,
       [ProjectStage.STARTED]: 10,
       [ProjectStage.IN_PROGRESS]: 50,
       [ProjectStage.REVIEW]: 85,
@@ -238,6 +239,12 @@ export class ProjectTrackingService {
           titleKa: "პროექტი შეიქმნა",
           message: "You have been hired",
           messageKa: "თქვენ დაგიქირავეს",
+        },
+        [ProjectStage.EN_ROUTE]: {
+          title: "Professional On The Way",
+          titleKa: "სპეციალისტი მოემართება",
+          message: `${user?.name || "Pro"} is on the way to you for "${job?.title}"`,
+          messageKa: `${user?.name || "სპეციალისტი"} მოემართება თქვენკენ: "${job?.title}"`,
         },
         [ProjectStage.STARTED]: {
           title: "Project Started",
