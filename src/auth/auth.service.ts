@@ -303,10 +303,14 @@ export class AuthService {
         updateData.registrationStep = 2;
         break;
       case 3:
-        if (dto.selectedCategories)
+        if (dto.selectedCategories) {
           updateData.selectedCategories = dto.selectedCategories;
-        if (dto.selectedSubcategories)
+          updateData.categories = dto.selectedCategories;
+        }
+        if (dto.selectedSubcategories) {
           updateData.selectedSubcategories = dto.selectedSubcategories;
+          updateData.subcategories = dto.selectedSubcategories;
+        }
         updateData.registrationStep = 3;
         break;
       case 4:

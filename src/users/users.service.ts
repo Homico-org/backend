@@ -1166,20 +1166,38 @@ export class UsersService {
     }
 
     if (filters?.category) {
-      query.categories = filters.category;
+      query.$and.push({
+        $or: [
+          { categories: filters.category },
+          { selectedCategories: filters.category },
+          { "servicePricing.categoryKey": filters.category },
+        ],
+      });
     }
 
     // Handle multiple subcategories (comma-separated) or single subcategory
     if (filters?.subcategories) {
       const subcatArray = filters.subcategories
         .split(",")
-        .map((s) => s.trim())
+        .map((s: string) => s.trim())
         .filter(Boolean);
       if (subcatArray.length > 0) {
-        query.subcategories = { $in: subcatArray };
+        query.$and.push({
+          $or: [
+            { subcategories: { $in: subcatArray } },
+            { selectedSubcategories: { $in: subcatArray } },
+            { "servicePricing.subcategoryKey": { $in: subcatArray } },
+          ],
+        });
       }
     } else if (filters?.subcategory) {
-      query.subcategories = filters.subcategory;
+      query.$and.push({
+        $or: [
+          { subcategories: filters.subcategory },
+          { selectedSubcategories: filters.subcategory },
+          { "servicePricing.subcategoryKey": filters.subcategory },
+        ],
+      });
     }
 
     if (filters?.serviceArea) {
