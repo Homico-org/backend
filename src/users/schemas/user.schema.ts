@@ -1,42 +1,42 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document } from "mongoose";
 
 export enum UserRole {
-  CLIENT = 'client',
-  PRO = 'pro',
-  ADMIN = 'admin',
+  CLIENT = "client",
+  PRO = "pro",
+  ADMIN = "admin",
 }
 
 export enum AccountType {
-  INDIVIDUAL = 'individual',
-  ORGANIZATION = 'organization',
+  INDIVIDUAL = "individual",
+  ORGANIZATION = "organization",
 }
 
 export enum PricingModel {
   // New canonical values (product requirement)
-  FIXED = 'fixed',
-  RANGE = 'range',
-  BY_AGREEMENT = 'byAgreement',
-  PER_SQUARE_METER = 'per_sqm',
+  FIXED = "fixed",
+  RANGE = "range",
+  BY_AGREEMENT = "byAgreement",
+  PER_SQUARE_METER = "per_sqm",
 
   // Legacy values (backward compatibility; will be normalized on read/write)
-  HOURLY = 'hourly',
-  DAILY = 'daily',
-  SQM = 'sqm',
-  PROJECT_BASED = 'project_based',
-  FROM = 'from',
+  HOURLY = "hourly",
+  DAILY = "daily",
+  SQM = "sqm",
+  PROJECT_BASED = "project_based",
+  FROM = "from",
 }
 
 export enum ProStatus {
-  ACTIVE = 'active',
-  BUSY = 'busy',
-  AWAY = 'away',
+  ACTIVE = "active",
+  BUSY = "busy",
+  AWAY = "away",
 }
 
 // Service address embedded schema
 export class ServiceAddress {
   id: string;
-  label: 'home' | 'work' | 'custom';
+  label: "home" | "work" | "custom";
   customLabel?: string;
   formattedAddress: string;
   lat: number;
@@ -52,7 +52,7 @@ export class ServiceAddress {
 // Payment method embedded schema
 export class PaymentMethod {
   id: string;
-  type: 'card' | 'bank';
+  type: "card" | "bank";
   // For cards: last 4 digits, brand (Visa, Mastercard), expiry
   cardLast4?: string;
   cardBrand?: string;
@@ -75,7 +75,7 @@ export class PortfolioProject {
   images: string[];
   videos?: string[];
   beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
-  source?: 'external' | 'homico'; // 'external' = work done outside Homico, 'homico' = completed via platform
+  source?: "external" | "homico"; // 'external' = work done outside Homico, 'homico' = completed via platform
   jobId?: string; // Reference to original job if done through Homico
 }
 
@@ -99,7 +99,7 @@ export class User extends Document {
   @Prop({
     type: String,
     enum: Object.values(UserRole),
-    default: UserRole.CLIENT
+    default: UserRole.CLIENT,
   })
   role: UserRole;
 
@@ -121,7 +121,7 @@ export class User extends Document {
   @Prop({
     type: String,
     enum: Object.values(AccountType),
-    default: AccountType.INDIVIDUAL
+    default: AccountType.INDIVIDUAL,
   })
   accountType: AccountType;
 
@@ -139,14 +139,16 @@ export class User extends Document {
 
   // Selected services with experience level per service
   @Prop({
-    type: [{
-      key: String,         // Subcategory key
-      categoryKey: String, // Parent category key
-      name: String,        // English name
-      nameKa: String,      // Georgian name
-      experience: String,  // Experience level: '0-1', '1-3', '3-5', '5-10', '10+'
-    }],
-    default: []
+    type: [
+      {
+        key: String, // Subcategory key
+        categoryKey: String, // Parent category key
+        name: String, // English name
+        nameKa: String, // Georgian name
+        experience: String, // Experience level: '0-1', '1-3', '3-5', '5-10', '10+'
+      },
+    ],
+    default: [],
   })
   selectedServices: {
     key: string;
@@ -306,22 +308,30 @@ export class User extends Document {
   @Prop()
   bio: string;
 
-  @Prop({ default: 'personal' })
+  @Prop({ default: "personal" })
   profileType: string; // 'personal' or 'company'
 
   @Prop({
-    type: [{
-      id: String,
-      title: String,
-      description: String,
-      location: String,
-      images: [String],
-      videos: [String],
-      beforeAfterPairs: [{ id: String, beforeImage: String, afterImage: String }],
-      source: { type: String, enum: ['external', 'homico'], default: 'external' },
-      jobId: String
-    }],
-    default: []
+    type: [
+      {
+        id: String,
+        title: String,
+        description: String,
+        location: String,
+        images: [String],
+        videos: [String],
+        beforeAfterPairs: [
+          { id: String, beforeImage: String, afterImage: String },
+        ],
+        source: {
+          type: String,
+          enum: ["external", "homico"],
+          default: "external",
+        },
+        jobId: String,
+      },
+    ],
+    default: [],
   })
   portfolioProjects: PortfolioProject[];
 
@@ -366,20 +376,20 @@ export class User extends Document {
 
   // ID Verification documents
   @Prop()
-  idDocumentUrl: string;  // ID card/passport front
+  idDocumentUrl: string; // ID card/passport front
 
   @Prop()
-  idDocumentBackUrl: string;  // ID card back (optional)
+  idDocumentBackUrl: string; // ID card back (optional)
 
   @Prop()
-  selfieWithIdUrl: string;  // Selfie holding ID
+  selfieWithIdUrl: string; // Selfie holding ID
 
   @Prop()
   verificationSubmittedAt: Date;
 
   // Verification status
-  @Prop({ default: 'pending' })
-  verificationStatus: string;  // pending, submitted, verified, rejected
+  @Prop({ default: "pending" })
+  verificationStatus: string; // pending, submitted, verified, rejected
 
   @Prop()
   verificationNotes: string;
@@ -388,7 +398,7 @@ export class User extends Document {
   verifiedAt: Date;
 
   @Prop()
-  verifiedBy: string;  // Admin user ID who verified
+  verifiedBy: string; // Admin user ID who verified
 
   // Premium status
   @Prop({ default: false })
@@ -397,12 +407,50 @@ export class User extends Document {
   @Prop()
   premiumExpiresAt: Date;
 
-  @Prop({ default: 'none' })
+  @Prop({ default: "none" })
   premiumTier: string;
 
   // Availability (for home-care services)
   @Prop({ type: [String], default: [] })
   availability: string[];
+
+  // Weekly schedule for time-slot booking
+  @Prop({
+    type: [
+      {
+        dayOfWeek: { type: Number, required: true }, // 0=Mon..6=Sun
+        isAvailable: { type: Boolean, required: true },
+        startHour: { type: Number, required: true }, // 0-23
+        endHour: { type: Number, required: true }, // 0-23
+      },
+    ],
+    default: [],
+  })
+  weeklySchedule: {
+    dayOfWeek: number;
+    isAvailable: boolean;
+    startHour: number;
+    endHour: number;
+  }[];
+
+  // Date-specific schedule overrides (blocked days, custom hours)
+  @Prop({
+    type: [
+      {
+        date: { type: String, required: true }, // "2026-03-15"
+        isBlocked: { type: Boolean, required: true },
+        startHour: Number,
+        endHour: Number,
+      },
+    ],
+    default: [],
+  })
+  scheduleOverrides: {
+    date: string;
+    isBlocked: boolean;
+    startHour?: number;
+    endHour?: number;
+  }[];
 
   // Pro profile completion status (set to true when pro completes profile setup)
   @Prop({ default: false })
@@ -416,7 +464,7 @@ export class User extends Document {
   adminApprovedAt: Date;
 
   @Prop()
-  adminApprovedBy: string;  // Admin user ID who approved
+  adminApprovedBy: string; // Admin user ID who approved
 
   @Prop()
   adminRejectionReason: string;
@@ -441,57 +489,75 @@ function normalizePricingModel(
   pricingModel: any,
   basePrice: any,
   maxPrice: any,
-): 'fixed' | 'range' | 'byAgreement' | 'per_sqm' {
+): "fixed" | "range" | "byAgreement" | "per_sqm" {
   // Explicit byAgreement / legacy hourly => byAgreement
-  if (pricingModel === 'byAgreement' || pricingModel === 'hourly') return 'byAgreement';
+  if (pricingModel === "byAgreement" || pricingModel === "hourly")
+    return "byAgreement";
 
-  const base = typeof basePrice === 'number' ? basePrice : basePrice ? Number(basePrice) : null;
-  const max = typeof maxPrice === 'number' ? maxPrice : maxPrice ? Number(maxPrice) : null;
+  const base =
+    typeof basePrice === "number"
+      ? basePrice
+      : basePrice
+        ? Number(basePrice)
+        : null;
+  const max =
+    typeof maxPrice === "number"
+      ? maxPrice
+      : maxPrice
+        ? Number(maxPrice)
+        : null;
 
   const hasBase = base !== null && !Number.isNaN(base) && base > 0;
   const hasMax = max !== null && !Number.isNaN(max) && max > 0;
 
   // Per-square-meter pricing (new canonical or legacy sqm)
-  if (pricingModel === 'per_sqm' || pricingModel === 'sqm') {
-    return (hasBase || hasMax) ? 'per_sqm' : 'byAgreement';
+  if (pricingModel === "per_sqm" || pricingModel === "sqm") {
+    return hasBase || hasMax ? "per_sqm" : "byAgreement";
   }
 
   // Explicit 'range' with valid prices - preserve the user's choice
-  if (pricingModel === 'range' && hasBase && hasMax) {
-    return 'range';
+  if (pricingModel === "range" && hasBase && hasMax) {
+    return "range";
   }
 
   // Explicit 'fixed' with a valid price - preserve the user's choice
-  if (pricingModel === 'fixed' && (hasBase || hasMax)) {
-    return 'fixed';
+  if (pricingModel === "fixed" && (hasBase || hasMax)) {
+    return "fixed";
   }
 
   // Legacy inference: if we have both and they differ, it's a range
-  if (hasBase && hasMax && max !== base) return 'range';
+  if (hasBase && hasMax && max !== base) return "range";
 
   // If we have any numeric price at all, treat as fixed
-  if (hasBase || hasMax) return 'fixed';
+  if (hasBase || hasMax) return "fixed";
 
-  return 'byAgreement';
+  return "byAgreement";
 }
 
 // Normalize pricing model for all API responses
-UserSchema.set('toJSON', {
+UserSchema.set("toJSON", {
   virtuals: true,
   transform: (_doc: any, ret: any) => {
-    const normalized = normalizePricingModel(ret.pricingModel, ret.basePrice, ret.maxPrice);
+    const normalized = normalizePricingModel(
+      ret.pricingModel,
+      ret.basePrice,
+      ret.maxPrice,
+    );
     ret.pricingModel = normalized;
-    if (normalized === 'byAgreement') {
+    if (normalized === "byAgreement") {
       delete ret.basePrice;
       delete ret.maxPrice;
-    } else if (normalized === 'per_sqm') {
+    } else if (normalized === "per_sqm") {
       // Per m² uses a single numeric price (basePrice). Ensure maxPrice doesn't linger.
-      if (ret.basePrice == null && ret.maxPrice != null) ret.basePrice = ret.maxPrice;
+      if (ret.basePrice == null && ret.maxPrice != null)
+        ret.basePrice = ret.maxPrice;
       delete ret.maxPrice;
-    } else if (normalized === 'fixed') {
+    } else if (normalized === "fixed") {
       // Collapse to a single price when possible
-      if (ret.basePrice == null && ret.maxPrice != null) ret.basePrice = ret.maxPrice;
-      if (ret.maxPrice == null && ret.basePrice != null) ret.maxPrice = ret.basePrice;
+      if (ret.basePrice == null && ret.maxPrice != null)
+        ret.basePrice = ret.maxPrice;
+      if (ret.maxPrice == null && ret.basePrice != null)
+        ret.maxPrice = ret.basePrice;
     }
     return ret;
   },

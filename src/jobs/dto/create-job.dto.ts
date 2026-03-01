@@ -1,10 +1,25 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsNumber, IsArray, IsDateString, IsBoolean, ValidateNested } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { JobBudgetType, JobSizeUnit, JobPropertyType, JobType } from '../schemas/job.schema';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from "class-validator";
+import {
+  JobBudgetType,
+  JobPropertyType,
+  JobSizeUnit,
+  JobType,
+} from "../schemas/job.schema";
 
 export class JobAddressDto {
-  @ApiProperty({ example: '12 Rustaveli Ave, Tbilisi, Georgia' })
+  @ApiProperty({ example: "12 Rustaveli Ave, Tbilisi, Georgia" })
   @IsString()
   @IsNotEmpty()
   formattedAddress: string;
@@ -39,9 +54,9 @@ export class JobAddressDto {
 }
 
 class ReferenceDto {
-  @ApiProperty({ enum: ['link', 'image', 'pinterest', 'instagram'] })
+  @ApiProperty({ enum: ["link", "image", "pinterest", "instagram"] })
   @IsString()
-  type: 'link' | 'image' | 'pinterest' | 'instagram';
+  type: "link" | "image" | "pinterest" | "instagram";
 
   @ApiProperty()
   @IsString()
@@ -80,7 +95,10 @@ class ServiceItemDto {
 }
 
 export class CreateJobDto {
-  @ApiPropertyOptional({ enum: JobType, description: 'Job type: marketplace or direct_request' })
+  @ApiPropertyOptional({
+    enum: JobType,
+    description: "Job type: marketplace or direct_request",
+  })
   @IsEnum(JobType)
   @IsOptional()
   jobType?: JobType;
@@ -115,7 +133,7 @@ export class CreateJobDto {
   @IsOptional()
   location?: string;
 
-  @ApiPropertyOptional({ description: 'Structured address with coordinates' })
+  @ApiPropertyOptional({ description: "Structured address with coordinates" })
   @ValidateNested()
   @Type(() => JobAddressDto)
   @IsOptional()
@@ -126,7 +144,9 @@ export class CreateJobDto {
   @IsOptional()
   propertyType?: JobPropertyType;
 
-  @ApiPropertyOptional({ description: 'Custom property type when propertyType is "other"' })
+  @ApiPropertyOptional({
+    description: 'Custom property type when propertyType is "other"',
+  })
   @IsString()
   @IsOptional()
   propertyTypeOther?: string;
@@ -177,120 +197,154 @@ export class CreateJobDto {
   @IsOptional()
   deadline?: string;
 
+  @ApiPropertyOptional({
+    description:
+      "Scheduled date for the service (ISO date string, e.g. 2026-03-15)",
+  })
+  @IsString()
+  @IsOptional()
+  scheduledDate?: string;
+
+  @ApiPropertyOptional({
+    description: "Scheduled time slot",
+    enum: ["09:00-12:00", "12:00-15:00", "15:00-18:00", "18:00-21:00"],
+  })
+  @IsString()
+  @IsOptional()
+  scheduledSlot?: string;
+
   @ApiProperty({ required: false })
   @IsArray()
   @IsOptional()
   images?: string[];
 
   // ====== ARCHITECTURE-SPECIFIC FIELDS ======
-  @ApiPropertyOptional({ description: 'Cadastral registry ID' })
+  @ApiPropertyOptional({ description: "Cadastral registry ID" })
   @IsString()
   @IsOptional()
   cadastralId?: string;
 
-  @ApiPropertyOptional({ description: 'Land plot size in square meters' })
+  @ApiPropertyOptional({ description: "Land plot size in square meters" })
   @IsNumber()
   @IsOptional()
   landArea?: number;
 
-  @ApiPropertyOptional({ description: 'Number of floors' })
+  @ApiPropertyOptional({ description: "Number of floors" })
   @IsNumber()
   @IsOptional()
   floorCount?: number;
 
   // ====== WORK-SPECIFIC FIELDS ======
-  @ApiPropertyOptional({ description: 'Number of electrical/plumbing/lighting points' })
+  @ApiPropertyOptional({
+    description: "Number of electrical/plumbing/lighting points",
+  })
   @IsNumber()
   @IsOptional()
   pointsCount?: number;
 
-  @ApiPropertyOptional({ description: 'Project phase: concept, schematic, detailed, construction' })
+  @ApiPropertyOptional({
+    description: "Project phase: concept, schematic, detailed, construction",
+  })
   @IsString()
   @IsOptional()
   projectPhase?: string;
 
-  @ApiPropertyOptional({ description: 'Building permit needed' })
+  @ApiPropertyOptional({ description: "Building permit needed" })
   @IsBoolean()
   @IsOptional()
   permitRequired?: boolean;
 
-  @ApiPropertyOptional({ description: 'Current condition: empty land, old building, etc.' })
+  @ApiPropertyOptional({
+    description: "Current condition: empty land, old building, etc.",
+  })
   @IsString()
   @IsOptional()
   currentCondition?: string;
 
-  @ApiPropertyOptional({ description: 'Zoning type: residential, commercial, mixed' })
+  @ApiPropertyOptional({
+    description: "Zoning type: residential, commercial, mixed",
+  })
   @IsString()
   @IsOptional()
   zoningType?: string;
 
   // ====== INTERIOR DESIGN-SPECIFIC FIELDS ======
-  @ApiPropertyOptional({ description: 'Design style: modern, minimalist, classic, etc.' })
+  @ApiPropertyOptional({
+    description: "Design style: modern, minimalist, classic, etc.",
+  })
   @IsString()
   @IsOptional()
   designStyle?: string;
 
-  @ApiPropertyOptional({ description: 'Rooms to design' })
+  @ApiPropertyOptional({ description: "Rooms to design" })
   @IsArray()
   @IsOptional()
   roomsToDesign?: string[];
 
-  @ApiPropertyOptional({ description: 'Need furniture selection/purchase' })
+  @ApiPropertyOptional({ description: "Need furniture selection/purchase" })
   @IsBoolean()
   @IsOptional()
   furnitureIncluded?: boolean;
 
-  @ApiPropertyOptional({ description: '3D renders needed' })
+  @ApiPropertyOptional({ description: "3D renders needed" })
   @IsBoolean()
   @IsOptional()
   visualizationNeeded?: boolean;
 
-  @ApiPropertyOptional({ description: 'Design references (links, images, pinterest, instagram)' })
+  @ApiPropertyOptional({
+    description: "Design references (links, images, pinterest, instagram)",
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ReferenceDto)
   @IsOptional()
   references?: ReferenceDto[];
 
-  @ApiPropertyOptional({ description: 'Preferred colors' })
+  @ApiPropertyOptional({ description: "Preferred colors" })
   @IsArray()
   @IsOptional()
   preferredColors?: string[];
 
-  @ApiPropertyOptional({ description: 'Existing furniture: keep all, keep some, replace all' })
+  @ApiPropertyOptional({
+    description: "Existing furniture: keep all, keep some, replace all",
+  })
   @IsString()
   @IsOptional()
   existingFurniture?: string;
 
   // ====== RENOVATION/CONSTRUCTION-SPECIFIC FIELDS ======
-  @ApiPropertyOptional({ description: 'Work types: demolition, walls, electrical, plumbing, etc.' })
+  @ApiPropertyOptional({
+    description: "Work types: demolition, walls, electrical, plumbing, etc.",
+  })
   @IsArray()
   @IsOptional()
   workTypes?: string[];
 
-  @ApiPropertyOptional({ description: 'Client provides materials' })
+  @ApiPropertyOptional({ description: "Client provides materials" })
   @IsBoolean()
   @IsOptional()
   materialsProvided?: boolean;
 
-  @ApiPropertyOptional({ description: 'Notes about materials' })
+  @ApiPropertyOptional({ description: "Notes about materials" })
   @IsString()
   @IsOptional()
   materialsNote?: string;
 
-  @ApiPropertyOptional({ description: 'Will client live there during work' })
+  @ApiPropertyOptional({ description: "Will client live there during work" })
   @IsBoolean()
   @IsOptional()
   occupiedDuringWork?: boolean;
 
-  @ApiPropertyOptional({ description: 'Services selected (for direct_request jobs)' })
+  @ApiPropertyOptional({
+    description: "Services selected (for direct_request jobs)",
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ServiceItemDto)
   @IsOptional()
   services?: ServiceItemDto[];
 
-  @ApiPropertyOptional({ description: 'Professional IDs to invite' })
+  @ApiPropertyOptional({ description: "Professional IDs to invite" })
   @IsArray()
   @IsString({ each: true })
   @IsOptional()

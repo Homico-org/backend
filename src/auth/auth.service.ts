@@ -1,17 +1,24 @@
-import { Injectable, UnauthorizedException, BadRequestException, ConflictException, Inject, forwardRef } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { UsersService } from '../users/users.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
-import { LoginDto } from './dto/login.dto';
-import { PhoneLoginDto } from './dto/phone-login.dto';
-import { ProRegisterDto } from './dto/pro-register.dto';
-import { ProRegistrationStepDto } from './dto/pro-registration-step.dto';
-import { VerificationService } from '../verification/verification.service';
-import { OtpType } from '../verification/dto/send-otp.dto';
-import { User, UserRole } from '../users/schemas/user.schema';
-import { LoggerService, ActivityType } from '../common/logger';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  forwardRef,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { ActivityType, LoggerService } from "../common/logger";
+import { CreateUserDto } from "../users/dto/create-user.dto";
+import { User, UserRole } from "../users/schemas/user.schema";
+import { UsersService } from "../users/users.service";
+import { OtpType } from "../verification/dto/send-otp.dto";
+import { VerificationService } from "../verification/verification.service";
+import { LoginDto } from "./dto/login.dto";
+import { PhoneLoginDto } from "./dto/phone-login.dto";
+import { ProRegisterDto } from "./dto/pro-register.dto";
+import { ProRegistrationStepDto } from "./dto/pro-registration-step.dto";
 
 @Injectable()
 export class AuthService {
@@ -35,9 +42,9 @@ export class AuthService {
       city: user.city,
       selectedCategories: user.selectedCategories || [],
       selectedSubcategories: user.selectedSubcategories || [],
-      accountType: user.accountType || 'individual',
+      accountType: user.accountType || "individual",
       isProfileCompleted: user.isProfileCompleted ?? false,
-      verificationStatus: user.verificationStatus || 'pending',
+      verificationStatus: user.verificationStatus || "pending",
       registrationStep: user.registrationStep ?? 0,
       servicePricing: user.servicePricing || [],
     };
@@ -51,20 +58,23 @@ export class AuthService {
     });
   }
 
-  async register(createUserDto: CreateUserDto, requestMeta?: { ip?: string; userAgent?: string }) {
+  async register(
+    createUserDto: CreateUserDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
     const user = await this.usersService.create(createUserDto);
 
     this.logger.logActivity({
       type: ActivityType.USER_REGISTER,
       userId: user._id.toString(),
-      userEmail: user.email || user.phone || 'unknown',
+      userEmail: user.email || user.phone || "unknown",
       userName: user.name,
       ip: requestMeta?.ip,
       userAgent: requestMeta?.userAgent,
       details: {
         role: user.role,
         phone: user.phone,
-        registrationMethod: user.phone ? 'phone' : 'email',
+        registrationMethod: user.phone ? "phone" : "email",
       },
     });
 
@@ -74,15 +84,22 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto, requestMeta?: { ip?: string; userAgent?: string }) {
-    const user = await this.usersService.findByEmailOrPhone(loginDto.identifier);
+  async login(
+    loginDto: LoginDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
+    const user = await this.usersService.findByEmailOrPhone(
+      loginDto.identifier,
+    );
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     if (!user.password) {
-      throw new UnauthorizedException('This account uses Google login. Please sign in with Google or use "Forgot Password" to set a password.');
+      throw new UnauthorizedException(
+        'This account uses Google login. Please sign in with Google or use "Forgot Password" to set a password.',
+      );
     }
 
     const isPasswordValid = await this.usersService.validatePassword(
@@ -91,16 +108,16 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     await this.usersService.updateLastLogin(user._id.toString());
 
-    const loginMethod = loginDto.identifier?.includes('@') ? 'email' : 'phone';
+    const loginMethod = loginDto.identifier?.includes("@") ? "email" : "phone";
     this.logger.logActivity({
       type: ActivityType.USER_LOGIN,
       userId: user._id.toString(),
-      userEmail: user.email || user.phone || 'unknown',
+      userEmail: user.email || user.phone || "unknown",
       userName: user.name,
       ip: requestMeta?.ip,
       userAgent: requestMeta?.userAgent,
@@ -117,7 +134,10 @@ export class AuthService {
     };
   }
 
-  async phoneLogin(dto: PhoneLoginDto, requestMeta?: { ip?: string; userAgent?: string }) {
+  async phoneLogin(
+    dto: PhoneLoginDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
     // Verify OTP
     await this.verificationService.verifyOtp({
       identifier: dto.phone,
@@ -134,11 +154,11 @@ export class AuthService {
       this.logger.logActivity({
         type: ActivityType.USER_LOGIN,
         userId: existing._id.toString(),
-        userEmail: existing.email || existing.phone || 'unknown',
+        userEmail: existing.email || existing.phone || "unknown",
         userName: existing.name,
         ip: requestMeta?.ip,
         userAgent: requestMeta?.userAgent,
-        details: { role: existing.role, loginMethod: 'phone_otp' },
+        details: { role: existing.role, loginMethod: "phone_otp" },
       });
 
       return {
@@ -149,7 +169,7 @@ export class AuthService {
 
     // New user — name is required
     if (!dto.name) {
-      throw new BadRequestException('Name is required for new users');
+      throw new BadRequestException("Name is required for new users");
     }
 
     // Generate UID
@@ -171,11 +191,11 @@ export class AuthService {
     this.logger.logActivity({
       type: ActivityType.USER_REGISTER,
       userId: user._id.toString(),
-      userEmail: user.phone || 'unknown',
+      userEmail: user.phone || "unknown",
       userName: user.name,
       ip: requestMeta?.ip,
       userAgent: requestMeta?.userAgent,
-      details: { role: user.role, registrationMethod: 'phone_otp' },
+      details: { role: user.role, registrationMethod: "phone_otp" },
     });
 
     return {
@@ -184,7 +204,10 @@ export class AuthService {
     };
   }
 
-  async proRegister(dto: ProRegisterDto, requestMeta?: { ip?: string; userAgent?: string }) {
+  async proRegister(
+    dto: ProRegisterDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
     // Verify OTP
     await this.verificationService.verifyOtp({
       identifier: dto.phone,
@@ -197,13 +220,15 @@ export class AuthService {
     if (existing) {
       // Already a pro
       if (existing.role === UserRole.PRO) {
-        throw new ConflictException('This phone is already registered as a professional');
+        throw new ConflictException(
+          "This phone is already registered as a professional",
+        );
       }
 
       // Upgrade client to pro
       existing.role = UserRole.PRO;
       existing.name = dto.name;
-      existing.registrationStep = 2;
+      existing.registrationStep = 1;
       existing.isPhoneVerified = true;
       existing.phoneVerifiedAt = new Date();
       await existing.save();
@@ -211,11 +236,15 @@ export class AuthService {
       this.logger.logActivity({
         type: ActivityType.USER_REGISTER,
         userId: existing._id.toString(),
-        userEmail: existing.phone || 'unknown',
+        userEmail: existing.phone || "unknown",
         userName: existing.name,
         ip: requestMeta?.ip,
         userAgent: requestMeta?.userAgent,
-        details: { role: UserRole.PRO, registrationMethod: 'phone_otp', upgradedFromClient: true },
+        details: {
+          role: UserRole.PRO,
+          registrationMethod: "phone_otp",
+          upgradedFromClient: true,
+        },
       });
 
       return {
@@ -238,17 +267,17 @@ export class AuthService {
       role: UserRole.PRO,
       isPhoneVerified: true,
       phoneVerifiedAt: new Date(),
-      registrationStep: 2,
+      registrationStep: 1,
     }).save();
 
     this.logger.logActivity({
       type: ActivityType.USER_REGISTER,
       userId: user._id.toString(),
-      userEmail: user.phone || 'unknown',
+      userEmail: user.phone || "unknown",
       userName: user.name,
       ip: requestMeta?.ip,
       userAgent: requestMeta?.userAgent,
-      details: { role: UserRole.PRO, registrationMethod: 'phone_otp' },
+      details: { role: UserRole.PRO, registrationMethod: "phone_otp" },
     });
 
     return {
@@ -261,7 +290,7 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
 
     if (!user || user.role !== UserRole.PRO) {
-      throw new BadRequestException('User must be a professional');
+      throw new BadRequestException("User must be a professional");
     }
 
     const updateData: Record<string, any> = {};
@@ -274,24 +303,23 @@ export class AuthService {
         updateData.registrationStep = 2;
         break;
       case 3:
-        if (dto.selectedCategories) updateData.selectedCategories = dto.selectedCategories;
-        if (dto.selectedSubcategories) updateData.selectedSubcategories = dto.selectedSubcategories;
+        if (dto.selectedCategories)
+          updateData.selectedCategories = dto.selectedCategories;
+        if (dto.selectedSubcategories)
+          updateData.selectedSubcategories = dto.selectedSubcategories;
         updateData.registrationStep = 3;
         break;
       case 4:
         if (dto.servicePricing) updateData.servicePricing = dto.servicePricing;
         updateData.registrationStep = 4;
-        updateData.isProfileCompleted = true;
         break;
       default:
-        throw new BadRequestException('Invalid step number');
+        throw new BadRequestException("Invalid step number");
     }
 
-    const updated = await this.userModel.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { new: true },
-    ).exec();
+    const updated = await this.userModel
+      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
+      .exec();
 
     return { user: this.buildUserResponse(updated) };
   }

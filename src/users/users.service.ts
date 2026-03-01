@@ -8,6 +8,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import * as bcrypt from "bcrypt";
 import { Model } from "mongoose";
 import { v4 as uuidv4 } from "uuid";
+import { ActivityType, LoggerService } from "../common/logger";
 import { Conversation } from "../conversation/schemas/conversation.schema";
 import { Job } from "../jobs/schemas/job.schema";
 import { Proposal } from "../jobs/schemas/proposal.schema";
@@ -22,7 +23,6 @@ import { Review } from "../review/schemas/review.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { PaymentMethod, ServiceAddress, User } from "./schemas/user.schema";
-import { LoggerService, ActivityType } from "../common/logger";
 
 @Injectable()
 export class UsersService {
@@ -66,7 +66,7 @@ export class UsersService {
       });
       if (existingUserByPhone) {
         throw new ConflictException(
-          "User with this phone number already exists"
+          "User with this phone number already exists",
         );
       }
     }
@@ -100,7 +100,7 @@ export class UsersService {
           status: "completed",
           projectType: "project",
           displayOrder: index,
-        })
+        }),
       );
 
       await this.portfolioItemModel.insertMany(portfolioItems);
@@ -201,7 +201,7 @@ export class UsersService {
 
   async validatePassword(
     password: string,
-    hashedPassword: string
+    hashedPassword: string,
   ): Promise<boolean> {
     return bcrypt.compare(password, hashedPassword);
   }
@@ -209,28 +209,38 @@ export class UsersService {
   async changePassword(
     userId: string,
     currentPassword: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<{ success: boolean }> {
-    const user = await this.userModel.findById(userId).select('+password').exec();
+    const user = await this.userModel
+      .findById(userId)
+      .select("+password")
+      .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Check if user has a password (might be OAuth user)
     if (!user.password) {
-      throw new BadRequestException('Cannot change password for OAuth accounts');
+      throw new BadRequestException(
+        "Cannot change password for OAuth accounts",
+      );
     }
 
     // Validate current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
     if (!isCurrentPasswordValid) {
-      throw new ConflictException('Current password is incorrect');
+      throw new ConflictException("Current password is incorrect");
     }
 
     // Hash new password and update
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    await this.userModel.findByIdAndUpdate(userId, { password: hashedNewPassword });
+    await this.userModel.findByIdAndUpdate(userId, {
+      password: hashedNewPassword,
+    });
 
     return { success: true };
   }
@@ -273,7 +283,7 @@ export class UsersService {
 
   async checkExists(
     field: "email" | "phone",
-    value: string
+    value: string,
   ): Promise<{ exists: boolean }> {
     let normalizedValue = value;
     if (field === "email") {
@@ -329,7 +339,7 @@ export class UsersService {
         isVisible?: boolean;
         displayOrder?: number;
       }>;
-    }
+    },
   ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 
@@ -343,7 +353,7 @@ export class UsersService {
 
     if (user.role !== "client") {
       throw new ConflictException(
-        "Only clients can upgrade to professional status"
+        "Only clients can upgrade to professional status",
       );
     }
 
@@ -408,7 +418,7 @@ export class UsersService {
 
   async setPendingEmail(
     userId: string,
-    email: string
+    email: string,
   ): Promise<{ success: boolean; message: string }> {
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -435,7 +445,10 @@ export class UsersService {
       .findByIdAndUpdate(userId, { pendingEmail: normalizedEmail })
       .exec();
 
-    return { success: true, message: "Pending email set. Please verify with OTP." };
+    return {
+      success: true,
+      message: "Pending email set. Please verify with OTP.",
+    };
   }
 
   async confirmEmailChange(userId: string): Promise<User> {
@@ -457,7 +470,7 @@ export class UsersService {
           isEmailVerified: true,
           emailVerifiedAt: new Date(),
         },
-        { new: true }
+        { new: true },
       )
       .exec();
 
@@ -503,7 +516,7 @@ export class UsersService {
   async addServiceAddress(
     userId: string,
     dto: {
-      label: 'home' | 'work' | 'custom';
+      label: "home" | "work" | "custom";
       customLabel?: string;
       formattedAddress: string;
       lat: number;
@@ -513,7 +526,7 @@ export class UsersService {
       entrance?: string;
       notes?: string;
       setAsDefault?: boolean;
-    }
+    },
   ): Promise<ServiceAddress> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -553,7 +566,7 @@ export class UsersService {
     userId: string,
     addressId: string,
     dto: Partial<{
-      label: 'home' | 'work' | 'custom';
+      label: "home" | "work" | "custom";
       customLabel: string;
       formattedAddress: string;
       lat: number;
@@ -563,7 +576,7 @@ export class UsersService {
       entrance: string;
       notes: string;
       setAsDefault: boolean;
-    }>
+    }>,
   ): Promise<ServiceAddress> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -571,7 +584,7 @@ export class UsersService {
     }
 
     const addressIndex = user.serviceAddresses?.findIndex(
-      (addr) => addr.id === addressId
+      (addr) => addr.id === addressId,
     );
     if (addressIndex === undefined || addressIndex === -1) {
       throw new NotFoundException("Address not found");
@@ -582,7 +595,9 @@ export class UsersService {
       ...existing,
       ...(dto.label !== undefined && { label: dto.label }),
       ...(dto.customLabel !== undefined && { customLabel: dto.customLabel }),
-      ...(dto.formattedAddress !== undefined && { formattedAddress: dto.formattedAddress }),
+      ...(dto.formattedAddress !== undefined && {
+        formattedAddress: dto.formattedAddress,
+      }),
       ...(dto.lat !== undefined && { lat: dto.lat }),
       ...(dto.lng !== undefined && { lng: dto.lng }),
       ...(dto.apartment !== undefined && { apartment: dto.apartment }),
@@ -605,17 +620,14 @@ export class UsersService {
     return updated;
   }
 
-  async deleteServiceAddress(
-    userId: string,
-    addressId: string
-  ): Promise<void> {
+  async deleteServiceAddress(userId: string, addressId: string): Promise<void> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
       throw new NotFoundException("User not found");
     }
 
     const addressIndex = user.serviceAddresses?.findIndex(
-      (addr) => addr.id === addressId
+      (addr) => addr.id === addressId,
     );
     if (addressIndex === undefined || addressIndex === -1) {
       throw new NotFoundException("Address not found");
@@ -634,7 +646,7 @@ export class UsersService {
 
   async setDefaultServiceAddress(
     userId: string,
-    addressId: string
+    addressId: string,
   ): Promise<ServiceAddress> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -642,7 +654,7 @@ export class UsersService {
     }
 
     const addressIndex = user.serviceAddresses?.findIndex(
-      (addr) => addr.id === addressId
+      (addr) => addr.id === addressId,
     );
     if (addressIndex === undefined || addressIndex === -1) {
       throw new NotFoundException("Address not found");
@@ -672,7 +684,7 @@ export class UsersService {
     cardNumber: string,
     cardExpiry: string,
     cardholderName: string,
-    setAsDefault: boolean = false
+    setAsDefault: boolean = false,
   ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -712,7 +724,7 @@ export class UsersService {
     userId: string,
     bankName: string,
     iban: string,
-    setAsDefault: boolean = false
+    setAsDefault: boolean = false,
   ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -748,7 +760,7 @@ export class UsersService {
 
   async deletePaymentMethod(
     userId: string,
-    paymentMethodId: string
+    paymentMethodId: string,
   ): Promise<void> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -756,7 +768,7 @@ export class UsersService {
     }
 
     const methodIndex = user.paymentMethods?.findIndex(
-      (pm) => pm.id === paymentMethodId
+      (pm) => pm.id === paymentMethodId,
     );
     if (methodIndex === undefined || methodIndex === -1) {
       throw new NotFoundException("Payment method not found");
@@ -775,7 +787,7 @@ export class UsersService {
 
   async setDefaultPaymentMethod(
     userId: string,
-    paymentMethodId: string
+    paymentMethodId: string,
   ): Promise<PaymentMethod> {
     const user = await this.userModel.findById(userId).exec();
     if (!user) {
@@ -783,7 +795,7 @@ export class UsersService {
     }
 
     const methodIndex = user.paymentMethods?.findIndex(
-      (pm) => pm.id === paymentMethodId
+      (pm) => pm.id === paymentMethodId,
     );
     if (methodIndex === undefined || methodIndex === -1) {
       throw new NotFoundException("Payment method not found");
@@ -904,7 +916,9 @@ export class UsersService {
 
     type RegionData = { en: string; cities: string[]; citiesEn: string[] };
 
-    const buildCityMapping = (regions: Record<string, RegionData>): Record<string, string> => {
+    const buildCityMapping = (
+      regions: Record<string, RegionData>,
+    ): Record<string, string> => {
       // Build a mapping from any city name (ka or en) to the current locale's display name
       const mapping: Record<string, string> = {};
       for (const regionData of Object.values(regions)) {
@@ -935,7 +949,9 @@ export class UsersService {
       }
 
       // Build city mapping for translating saved serviceAreas
-      const cityMapping = buildCityMapping(data.regions as Record<string, RegionData>);
+      const cityMapping = buildCityMapping(
+        data.regions as Record<string, RegionData>,
+      );
 
       return {
         country: isGeorgian ? data.country.ka : data.country.en,
@@ -952,7 +968,7 @@ export class UsersService {
     const defaultData = this.LOCATIONS_DATA["Georgia"];
     const regions: Record<string, string[]> = {};
     for (const [regionKa, regionData] of Object.entries(
-      defaultData.regions
+      defaultData.regions,
     ) as [string, RegionData][]) {
       const regionName = isGeorgian ? regionKa : regionData.en;
       const cities = isGeorgian ? regionData.cities : regionData.citiesEn;
@@ -960,7 +976,9 @@ export class UsersService {
     }
 
     // Build city mapping for translating saved serviceAreas
-    const cityMapping = buildCityMapping(defaultData.regions as Record<string, RegionData>);
+    const cityMapping = buildCityMapping(
+      defaultData.regions as Record<string, RegionData>,
+    );
 
     return {
       country: isGeorgian ? defaultData.country.ka : defaultData.country.en,
@@ -972,6 +990,63 @@ export class UsersService {
       regions,
       cityMapping,
       emoji: defaultData.emoji,
+    };
+  }
+
+  async getSchedule(userId: string) {
+    const user = await this.userModel
+      .findById(userId)
+      .select("weeklySchedule scheduleOverrides")
+      .exec();
+    if (!user) throw new NotFoundException("User not found");
+    return {
+      weeklySchedule: user.weeklySchedule || [],
+      scheduleOverrides: user.scheduleOverrides || [],
+    };
+  }
+
+  async updateSchedule(
+    userId: string,
+    data: {
+      weeklySchedule?: {
+        dayOfWeek: number;
+        isAvailable: boolean;
+        startHour: number;
+        endHour: number;
+      }[];
+      scheduleOverrides?: {
+        date: string;
+        isBlocked: boolean;
+        startHour?: number;
+        endHour?: number;
+      }[];
+    },
+  ) {
+    const updateData: any = {};
+    if (data.weeklySchedule !== undefined)
+      updateData.weeklySchedule = data.weeklySchedule;
+    if (data.scheduleOverrides !== undefined)
+      updateData.scheduleOverrides = data.scheduleOverrides;
+
+    // If pro is still in registration (step 4 = pricing done, schedule not yet saved),
+    // mark registration as complete and verify the pro
+    const current = await this.userModel.findById(userId).select("registrationStep isProfileCompleted role").exec();
+    if (current?.role === 'pro' && current.registrationStep === 4 && !current.isProfileCompleted) {
+      updateData.registrationStep = 5;
+      updateData.isProfileCompleted = true;
+      updateData.verificationStatus = 'verified';
+    }
+
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
+      .select("weeklySchedule scheduleOverrides isProfileCompleted verificationStatus registrationStep")
+      .exec();
+    if (!user) throw new NotFoundException("User not found");
+    return {
+      weeklySchedule: user.weeklySchedule || [],
+      scheduleOverrides: user.scheduleOverrides || [],
+      isProfileCompleted: user.isProfileCompleted,
+      verificationStatus: user.verificationStatus,
     };
   }
 
@@ -988,6 +1063,8 @@ export class UsersService {
     page?: number;
     limit?: number;
     excludeUserId?: string;
+    scheduledDate?: string;
+    scheduledSlot?: string;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1059,7 +1136,7 @@ export class UsersService {
           ],
         },
         // Only show verified professionals
-        { verificationStatus: 'verified' },
+        { verificationStatus: "verified" },
       ],
     };
 
@@ -1075,7 +1152,10 @@ export class UsersService {
 
     // Handle multiple subcategories (comma-separated) or single subcategory
     if (filters?.subcategories) {
-      const subcatArray = filters.subcategories.split(',').map(s => s.trim()).filter(Boolean);
+      const subcatArray = filters.subcategories
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (subcatArray.length > 0) {
         query.subcategories = { $in: subcatArray };
       }
@@ -1131,14 +1211,59 @@ export class UsersService {
       }
     }
 
-    const total = await this.userModel.countDocuments(query).exec();
-    const users = await this.userModel
+    // When filtering by schedule, fetch more results and filter in-memory
+    const hasScheduleFilter = filters?.scheduledDate && filters?.scheduledSlot;
+    const fetchLimit = hasScheduleFilter ? limit * 5 : limit;
+    const fetchSkip = hasScheduleFilter ? 0 : skip;
+
+    let total = await this.userModel.countDocuments(query).exec();
+    let users = await this.userModel
       .find(query)
       .select("-password")
       .sort(sortObj)
-      .skip(skip)
-      .limit(limit)
+      .skip(fetchSkip)
+      .limit(fetchLimit)
       .exec();
+
+    // Post-query filter by schedule availability
+    if (hasScheduleFilter) {
+      const date = new Date(filters.scheduledDate + "T00:00:00");
+      // JavaScript getDay: 0=Sun..6=Sat → convert to 0=Mon..6=Sun
+      const jsDay = date.getDay();
+      const dayOfWeek = jsDay === 0 ? 6 : jsDay - 1;
+
+      const slotParts = filters.scheduledSlot.split("-");
+      const slotStart = parseInt(slotParts[0].split(":")[0], 10);
+      const slotEnd = parseInt(slotParts[1].split(":")[0], 10);
+
+      users = users.filter((pro) => {
+        // Check date override first
+        const overrides = pro.scheduleOverrides || [];
+        const override = overrides.find(
+          (o) => o.date === filters.scheduledDate,
+        );
+        if (override) {
+          if (override.isBlocked) return false;
+          if (override.startHour != null && override.endHour != null) {
+            return (
+              override.startHour <= slotStart && override.endHour >= slotEnd
+            );
+          }
+        }
+
+        // Check weekly schedule
+        const schedule = pro.weeklySchedule || [];
+        if (schedule.length === 0) return true; // No schedule = available for all
+
+        const dayEntry = schedule.find((s) => s.dayOfWeek === dayOfWeek);
+        if (!dayEntry) return true; // No entry for this day = available
+        if (!dayEntry.isAvailable) return false;
+        return dayEntry.startHour <= slotStart && dayEntry.endHour >= slotEnd;
+      });
+
+      total = users.length;
+      users = users.slice(skip, skip + limit);
+    }
 
     // Get portfolio counts from PortfolioItem collection for all users
     const userIds = users.map((u) => u._id);
@@ -1156,7 +1281,8 @@ export class UsersService {
     // Add portfolioItemCount to each user
     const data = users.map((user) => {
       const userObj = user.toObject() as any;
-      const portfolioItemCount = portfolioCountMap.get(user._id.toString()) || 0;
+      const portfolioItemCount =
+        portfolioCountMap.get(user._id.toString()) || 0;
       // Use the max of embedded portfolioProjects and separate PortfolioItem count
       const embeddedCount = userObj.portfolioProjects?.length || 0;
       userObj.portfolioItemCount = Math.max(portfolioItemCount, embeddedCount);
@@ -1245,19 +1371,25 @@ export class UsersService {
     return user;
   }
 
-  async updateRating(userId: string, newRating: number, weight: number = 1): Promise<void> {
+  async updateRating(
+    userId: string,
+    newRating: number,
+    weight: number = 1,
+  ): Promise<void> {
     const user = await this.findById(userId);
     const currentTotalReviews = user.totalReviews || 0;
     const currentRating = user.avgRating || 0;
-    
+
     // Weight affects how much this review contributes to the average
     // weight=1 for Homico reviews, weight=0.7 for external reviews
     const weightedNewRating = newRating * weight;
     const totalWeight = currentTotalReviews + weight;
-    
-    const avgRating = totalWeight > 0
-      ? (currentRating * currentTotalReviews + weightedNewRating) / totalWeight
-      : newRating;
+
+    const avgRating =
+      totalWeight > 0
+        ? (currentRating * currentTotalReviews + weightedNewRating) /
+          totalWeight
+        : newRating;
 
     await this.userModel.findByIdAndUpdate(userId, {
       avgRating,
@@ -1270,7 +1402,7 @@ export class UsersService {
 
     if (user.role !== "pro") {
       throw new BadRequestException(
-        "Only pro users can update their pro profile"
+        "Only pro users can update their pro profile",
       );
     }
 
@@ -1296,22 +1428,24 @@ export class UsersService {
     if (proData.selectedServices !== undefined) {
       updateData.selectedServices = proData.selectedServices;
       // Also derive subcategories and selectedSubcategories from selectedServices for backwards compatibility
-      const subcategoryKeys = proData.selectedServices.map(s => s.key);
+      const subcategoryKeys = proData.selectedServices.map((s) => s.key);
       if (subcategoryKeys.length > 0) {
         updateData.subcategories = subcategoryKeys;
         updateData.selectedSubcategories = subcategoryKeys;
       }
       // Derive max yearsExperience from selectedServices
       const experienceToYears: Record<string, number> = {
-        '0-1': 1,
-        '1-3': 3,
-        '3-5': 5,
-        '5-10': 10,
-        '10+': 15,
+        "0-1": 1,
+        "1-3": 3,
+        "3-5": 5,
+        "5-10": 10,
+        "10+": 15,
       };
       const maxExperience = Math.max(
-        ...proData.selectedServices.map(s => experienceToYears[s.experience] || 0),
-        0
+        ...proData.selectedServices.map(
+          (s) => experienceToYears[s.experience] || 0,
+        ),
+        0,
       );
       if (maxExperience > 0) {
         updateData.yearsExperience = maxExperience;
@@ -1326,57 +1460,72 @@ export class UsersService {
       const base = proData.basePrice;
       const max = proData.maxPrice;
 
-      const hasBase = typeof base === 'number' ? base > 0 : base !== null && base !== undefined && Number(base) > 0;
-      const hasMax = typeof max === 'number' ? max > 0 : max !== null && max !== undefined && Number(max) > 0;
+      const hasBase =
+        typeof base === "number"
+          ? base > 0
+          : base !== null && base !== undefined && Number(base) > 0;
+      const hasMax =
+        typeof max === "number"
+          ? max > 0
+          : max !== null && max !== undefined && Number(max) > 0;
 
-      let normalized: 'fixed' | 'range' | 'byAgreement' | 'per_sqm' = 'byAgreement';
-      if (incoming === 'byAgreement' || incoming === 'hourly') {
-        normalized = 'byAgreement';
-      } else if (incoming === 'per_sqm' || incoming === 'sqm') {
-        normalized = (hasBase || hasMax) ? 'per_sqm' : 'byAgreement';
-      } else if (incoming === 'range') {
-        normalized = (hasBase && hasMax) ? 'range' : (hasBase || hasMax) ? 'fixed' : 'byAgreement';
-      } else if (incoming === 'fixed') {
-        normalized = (hasBase || hasMax) ? 'fixed' : 'byAgreement';
+      let normalized: "fixed" | "range" | "byAgreement" | "per_sqm" =
+        "byAgreement";
+      if (incoming === "byAgreement" || incoming === "hourly") {
+        normalized = "byAgreement";
+      } else if (incoming === "per_sqm" || incoming === "sqm") {
+        normalized = hasBase || hasMax ? "per_sqm" : "byAgreement";
+      } else if (incoming === "range") {
+        normalized =
+          hasBase && hasMax
+            ? "range"
+            : hasBase || hasMax
+              ? "fixed"
+              : "byAgreement";
+      } else if (incoming === "fixed") {
+        normalized = hasBase || hasMax ? "fixed" : "byAgreement";
       } else {
         // Legacy or unknown: infer from numbers
-        if (hasBase && hasMax && Number(max) !== Number(base)) normalized = 'range';
-        else if (hasBase || hasMax) normalized = 'fixed';
-        else normalized = 'byAgreement';
+        if (hasBase && hasMax && Number(max) !== Number(base))
+          normalized = "range";
+        else if (hasBase || hasMax) normalized = "fixed";
+        else normalized = "byAgreement";
       }
 
       updateData.pricingModel = normalized;
 
       // If by agreement, force-clear any prices
-      if (normalized === 'byAgreement') {
-        unsetData.basePrice = '';
-        unsetData.maxPrice = '';
+      if (normalized === "byAgreement") {
+        unsetData.basePrice = "";
+        unsetData.maxPrice = "";
       }
 
       // If fixed, ensure old range maxPrice doesn't linger (otherwise UI will still show range)
-      if (normalized === 'fixed') {
+      if (normalized === "fixed") {
         // If client didn't explicitly set a maxPrice, unset it.
         // If they did set it, collapse it to basePrice to keep "fixed" semantics.
         if (proData.maxPrice === undefined || proData.maxPrice === null) {
-          unsetData.maxPrice = '';
+          unsetData.maxPrice = "";
         } else if (hasBase) {
           updateData.maxPrice = Number(base);
         }
       }
 
       // If per_sqm, ensure maxPrice doesn't linger
-      if (normalized === 'per_sqm') {
-        unsetData.maxPrice = '';
+      if (normalized === "per_sqm") {
+        unsetData.maxPrice = "";
         delete updateData.maxPrice;
       }
     }
 
     // Pricing numbers: allow explicit unsetting when client sends null (e.g., "by agreement")
-    if (proData.basePrice === null) unsetData.basePrice = '';
-    else if (proData.basePrice !== undefined) updateData.basePrice = proData.basePrice;
+    if (proData.basePrice === null) unsetData.basePrice = "";
+    else if (proData.basePrice !== undefined)
+      updateData.basePrice = proData.basePrice;
 
-    if (proData.maxPrice === null) unsetData.maxPrice = '';
-    else if (proData.maxPrice !== undefined) updateData.maxPrice = proData.maxPrice;
+    if (proData.maxPrice === null) unsetData.maxPrice = "";
+    else if (proData.maxPrice !== undefined)
+      updateData.maxPrice = proData.maxPrice;
     if (proData.serviceAreas !== undefined)
       updateData.serviceAreas = proData.serviceAreas;
     if (proData.portfolioProjects !== undefined)
@@ -1399,10 +1548,14 @@ export class UsersService {
     // Social links
     if (proData.whatsapp !== undefined) updateData.whatsapp = proData.whatsapp;
     if (proData.telegram !== undefined) updateData.telegram = proData.telegram;
-    if (proData.instagramUrl !== undefined) updateData.instagramUrl = proData.instagramUrl;
-    if (proData.facebookUrl !== undefined) updateData.facebookUrl = proData.facebookUrl;
-    if (proData.linkedinUrl !== undefined) updateData.linkedinUrl = proData.linkedinUrl;
-    if (proData.websiteUrl !== undefined) updateData.websiteUrl = proData.websiteUrl;
+    if (proData.instagramUrl !== undefined)
+      updateData.instagramUrl = proData.instagramUrl;
+    if (proData.facebookUrl !== undefined)
+      updateData.facebookUrl = proData.facebookUrl;
+    if (proData.linkedinUrl !== undefined)
+      updateData.linkedinUrl = proData.linkedinUrl;
+    if (proData.websiteUrl !== undefined)
+      updateData.websiteUrl = proData.websiteUrl;
 
     // Check if profile has required fields to be considered complete
     // Required: bio/description, categories, serviceAreas
@@ -1441,7 +1594,10 @@ export class UsersService {
         unsetFields: Object.keys(unsetData),
         before: (() => {
           const fields = Array.from(
-            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+            new Set([
+              ...Object.keys(updateData || {}),
+              ...Object.keys(unsetData || {}),
+            ]),
           );
           const snapshot: Record<string, any> = {};
           for (const field of fields) snapshot[field] = (user as any)?.[field];
@@ -1449,15 +1605,22 @@ export class UsersService {
         })(),
         after: (() => {
           const fields = Array.from(
-            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+            new Set([
+              ...Object.keys(updateData || {}),
+              ...Object.keys(unsetData || {}),
+            ]),
           );
           const snapshot: Record<string, any> = {};
-          for (const field of fields) snapshot[field] = (updatedUser as any)?.[field];
+          for (const field of fields)
+            snapshot[field] = (updatedUser as any)?.[field];
           return snapshot;
         })(),
         changes: (() => {
           const fields = Array.from(
-            new Set([...Object.keys(updateData || {}), ...Object.keys(unsetData || {})]),
+            new Set([
+              ...Object.keys(updateData || {}),
+              ...Object.keys(unsetData || {}),
+            ]),
           );
           const diffs: Array<{ field: string; from: any; to: any }> = [];
           for (const field of fields) {
@@ -1538,7 +1701,10 @@ export class UsersService {
     // Finally, delete the user document
     await this.userModel.findByIdAndDelete(userId).exec();
 
-    this.logger.log(`User account deleted successfully: ${user.email}`, 'UsersService');
+    this.logger.log(
+      `User account deleted successfully: ${user.email}`,
+      "UsersService",
+    );
   }
 
   // ============== PRO PROFILE DEACTIVATION ==============
@@ -1546,7 +1712,7 @@ export class UsersService {
   async deactivateProProfile(
     userId: string,
     deactivateUntil?: Date,
-    reason?: string
+    reason?: string,
   ): Promise<User> {
     const user = await this.userModel.findById(userId).exec();
 
@@ -1556,7 +1722,7 @@ export class UsersService {
 
     if (user.role !== "pro") {
       throw new BadRequestException(
-        "Only pro users can deactivate their profile"
+        "Only pro users can deactivate their profile",
       );
     }
 
@@ -1607,7 +1773,7 @@ export class UsersService {
 
     if (user.role !== "pro") {
       throw new BadRequestException(
-        "Only pro users can reactivate their profile"
+        "Only pro users can reactivate their profile",
       );
     }
 
@@ -1629,7 +1795,7 @@ export class UsersService {
             deactivationReason: 1,
           },
         },
-        { new: true }
+        { new: true },
       )
       .select("-password")
       .exec();

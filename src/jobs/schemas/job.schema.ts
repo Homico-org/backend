@@ -1,40 +1,40 @@
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
 
 export enum JobStatus {
-  OPEN = 'open',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-  EXPIRED = 'expired',
+  OPEN = "open",
+  IN_PROGRESS = "in_progress",
+  COMPLETED = "completed",
+  CANCELLED = "cancelled",
+  EXPIRED = "expired",
 }
 
 export enum JobBudgetType {
-  FIXED = 'fixed',
-  RANGE = 'range',
-  PER_SQUARE_METER = 'per_sqm',
-  NEGOTIABLE = 'negotiable',
+  FIXED = "fixed",
+  RANGE = "range",
+  PER_SQUARE_METER = "per_sqm",
+  NEGOTIABLE = "negotiable",
 }
 
 export enum JobSizeUnit {
-  SQUARE_METER = 'sqm',
-  ROOM = 'room',
-  UNIT = 'unit',
-  FLOOR = 'floor',
-  ITEM = 'item',
+  SQUARE_METER = "sqm",
+  ROOM = "room",
+  UNIT = "unit",
+  FLOOR = "floor",
+  ITEM = "item",
 }
 
 export enum JobPropertyType {
-  APARTMENT = 'apartment',
-  OFFICE = 'office',
-  BUILDING = 'building',
-  HOUSE = 'house',
-  OTHER = 'other',
+  APARTMENT = "apartment",
+  OFFICE = "office",
+  BUILDING = "building",
+  HOUSE = "house",
+  OTHER = "other",
 }
 
 export enum JobType {
-  MARKETPLACE = 'marketplace',
-  DIRECT_REQUEST = 'direct_request',
+  MARKETPLACE = "marketplace",
+  DIRECT_REQUEST = "direct_request",
 }
 
 @Schema({ timestamps: true })
@@ -46,7 +46,7 @@ export class Job extends Document {
   })
   jobType: JobType;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: Types.ObjectId, ref: "User", required: true })
   clientId: Types.ObjectId;
 
   @Prop({ type: Number, unique: true })
@@ -141,16 +141,22 @@ export class Job extends Document {
   visualizationNeeded: boolean; // 3D renders needed
 
   @Prop({
-    type: [{
-      type: { type: String, enum: ['link', 'image', 'pinterest', 'instagram'], default: 'link' },
-      url: { type: String, required: true },
-      title: { type: String },
-      thumbnail: { type: String },
-    }],
-    default: []
+    type: [
+      {
+        type: {
+          type: String,
+          enum: ["link", "image", "pinterest", "instagram"],
+          default: "link",
+        },
+        url: { type: String, required: true },
+        title: { type: String },
+        thumbnail: { type: String },
+      },
+    ],
+    default: [],
   })
   references: {
-    type: 'link' | 'image' | 'pinterest' | 'instagram';
+    type: "link" | "image" | "pinterest" | "instagram";
     url: string;
     title?: string;
     thumbnail?: string;
@@ -192,7 +198,7 @@ export class Job extends Document {
   @Prop({
     type: String,
     enum: Object.values(JobBudgetType),
-    default: JobBudgetType.NEGOTIABLE
+    default: JobBudgetType.NEGOTIABLE,
   })
   budgetType: JobBudgetType;
 
@@ -214,15 +220,21 @@ export class Job extends Document {
   @Prop({ type: Date })
   deadline: Date;
 
+  @Prop({ type: String })
+  scheduledDate: string; // "2026-03-15"
+
+  @Prop({ type: String })
+  scheduledSlot: string; // "09:00-12:00" | "12:00-15:00" | "15:00-18:00" | "18:00-21:00"
+
   @Prop({
     type: String,
     enum: Object.values(JobStatus),
-    default: JobStatus.OPEN
+    default: JobStatus.OPEN,
   })
   status: JobStatus;
 
   // The hired professional's user ID (set when a proposal is accepted)
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: Types.ObjectId, ref: "User" })
   hiredProId: Types.ObjectId;
 
   @Prop({ type: Date })
@@ -232,15 +244,17 @@ export class Job extends Document {
   images: string[];
 
   @Prop({
-    type: [{
-      type: { type: String, enum: ['image', 'video'], default: 'image' },
-      url: { type: String, required: true },
-      thumbnail: { type: String },
-    }],
-    default: []
+    type: [
+      {
+        type: { type: String, enum: ["image", "video"], default: "image" },
+        url: { type: String, required: true },
+        thumbnail: { type: String },
+      },
+    ],
+    default: [],
   })
   media: {
-    type: 'image' | 'video';
+    type: "image" | "video";
     url: string;
     thumbnail?: string;
   }[];
@@ -253,12 +267,14 @@ export class Job extends Document {
 
   // Services selected for this job (used by direct_request jobs from mobile order flow)
   @Prop({
-    type: [{
-      key: { type: String, required: true },
-      quantity: { type: Number, required: true },
-      unitPrice: { type: Number, required: true },
-      unit: { type: String },
-    }],
+    type: [
+      {
+        key: { type: String, required: true },
+        quantity: { type: Number, required: true },
+        unitPrice: { type: Number, required: true },
+        unit: { type: String },
+      },
+    ],
     default: [],
   })
   services: {
@@ -269,11 +285,11 @@ export class Job extends Document {
   }[];
 
   // Professionals who have been invited to this job
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  @Prop({ type: [{ type: Types.ObjectId, ref: "User" }], default: [] })
   invitedPros: Types.ObjectId[];
 
   // Professionals who declined this direct request
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  @Prop({ type: [{ type: Types.ObjectId, ref: "User" }], default: [] })
   declinedPros: Types.ObjectId[];
 }
 
@@ -282,10 +298,10 @@ export const JobSchema = SchemaFactory.createForClass(Job);
 // Schema for tracking unique job views
 @Schema({ timestamps: true })
 export class JobView extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'Job', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: "Job", required: true, index: true })
   jobId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', index: true })
+  @Prop({ type: Types.ObjectId, ref: "User", index: true })
   userId?: Types.ObjectId;
 
   @Prop({ type: String, index: true })
