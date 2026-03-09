@@ -33,6 +33,12 @@ export enum NotificationType {
   // Admin actions
   PROFILE_APPROVED = 'profile_approved',
   PROFILE_REJECTED = 'profile_rejected',
+
+  // Booking related
+  NEW_BOOKING = 'new_booking',
+  BOOKING_CONFIRMED = 'booking_confirmed',
+  BOOKING_CANCELLED = 'booking_cancelled',
+  BOOKING_COMPLETED = 'booking_completed',
 }
 
 @Schema({ timestamps: true })
@@ -62,7 +68,7 @@ export class Notification extends Document {
   @Prop({ type: Types.ObjectId, refPath: 'referenceModel' })
   referenceId?: Types.ObjectId;
 
-  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal'] })
+  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking'] })
   referenceModel?: string;
 
   @Prop({ type: Object })
