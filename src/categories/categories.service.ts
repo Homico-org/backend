@@ -1,17 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { AiService } from '../ai/ai.service';
-import { Category } from './schemas/category.schema';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import { AiService } from "../ai/ai.service";
+import { Category } from "./schemas/category.schema";
 import {
   CategoryDoc,
-  SubcategoryDoc,
-  SubSubcategoryDoc,
   FlatCategoryItem,
   SearchResult,
-} from './types/category.types';
+  SubcategoryDoc,
+  SubSubcategoryDoc,
+} from "./types/category.types";
 
-interface AiSearchResult {
+export interface AiSearchResult {
   subcategories: { key: string; category: string }[];
   fromCache: boolean;
 }
@@ -20,7 +20,10 @@ interface AiSearchResult {
 export class CategoriesService {
   private readonly logger = new Logger(CategoriesService.name);
   // In-memory cache: query+locale → { result, timestamp }
-  private aiSearchCache = new Map<string, { result: AiSearchResult; ts: number }>();
+  private aiSearchCache = new Map<
+    string,
+    { result: AiSearchResult; ts: number }
+  >();
   private readonly CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
   constructor(
@@ -37,15 +40,15 @@ export class CategoriesService {
       .exec();
 
     // Filter out inactive subcategories and sub-subcategories
-    return categories.map(cat => ({
+    return categories.map((cat) => ({
       ...cat,
       subcategories: (cat.subcategories || [])
-        .filter(sub => sub.isActive !== false)
+        .filter((sub) => sub.isActive !== false)
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-        .map(sub => ({
+        .map((sub) => ({
           ...sub,
           children: (sub.children || [])
-            .filter(child => child.isActive !== false)
+            .filter((child) => child.isActive !== false)
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
         })),
     }));
@@ -53,7 +56,10 @@ export class CategoriesService {
 
   // Get a single category by key
   async findByKey(key: string): Promise<CategoryDoc | null> {
-    return this.categoryModel.findOne({ key, isActive: true }).lean<CategoryDoc>().exec();
+    return this.categoryModel
+      .findOne({ key, isActive: true })
+      .lean<CategoryDoc>()
+      .exec();
   }
 
   // Get multiple categories by keys
@@ -74,12 +80,15 @@ export class CategoriesService {
     if (!category) return [];
 
     return (category.subcategories || [])
-      .filter(sub => sub.isActive !== false)
+      .filter((sub) => sub.isActive !== false)
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }
 
   // Get sub-subcategories (children) for a specific subcategory
-  async getSubSubcategories(categoryKey: string, subcategoryKey: string): Promise<SubSubcategoryDoc[]> {
+  async getSubSubcategories(
+    categoryKey: string,
+    subcategoryKey: string,
+  ): Promise<SubSubcategoryDoc[]> {
     const category = await this.categoryModel
       .findOne({ key: categoryKey, isActive: true })
       .lean<CategoryDoc>()
@@ -88,34 +97,41 @@ export class CategoriesService {
     if (!category) return [];
 
     const subcategory = (category.subcategories || []).find(
-      sub => sub.key === subcategoryKey && sub.isActive !== false
+      (sub) => sub.key === subcategoryKey && sub.isActive !== false,
     );
 
     if (!subcategory) return [];
 
     return (subcategory.children || [])
-      .filter(child => child.isActive !== false)
+      .filter((child) => child.isActive !== false)
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   }
 
   // Search categories, subcategories, and sub-subcategories by keyword
   async search(query: string): Promise<SearchResult> {
-    const searchRegex = new RegExp(query, 'i');
+    const searchRegex = new RegExp(query, "i");
     const categories = await this.categoryModel
       .find({ isActive: true })
       .lean<CategoryDoc[]>()
       .exec();
 
     const matchedCategories: CategoryDoc[] = [];
-    const matchedSubcategories: { category: string; subcategory: SubcategoryDoc }[] = [];
-    const matchedSubSubcategories: { category: string; subcategory: string; subSubcategory: SubSubcategoryDoc }[] = [];
+    const matchedSubcategories: {
+      category: string;
+      subcategory: SubcategoryDoc;
+    }[] = [];
+    const matchedSubSubcategories: {
+      category: string;
+      subcategory: string;
+      subSubcategory: SubSubcategoryDoc;
+    }[] = [];
 
     for (const cat of categories) {
       // Check category match
       if (
         searchRegex.test(cat.name) ||
         searchRegex.test(cat.nameKa) ||
-        (cat.keywords || []).some(k => searchRegex.test(k))
+        (cat.keywords || []).some((k) => searchRegex.test(k))
       ) {
         matchedCategories.push(cat);
       }
@@ -127,7 +143,7 @@ export class CategoriesService {
         if (
           searchRegex.test(sub.name) ||
           searchRegex.test(sub.nameKa) ||
-          (sub.keywords || []).some(k => searchRegex.test(k))
+          (sub.keywords || []).some((k) => searchRegex.test(k))
         ) {
           matchedSubcategories.push({ category: cat.key, subcategory: sub });
         }
@@ -139,7 +155,7 @@ export class CategoriesService {
           if (
             searchRegex.test(child.name) ||
             searchRegex.test(child.nameKa) ||
-            (child.keywords || []).some(k => searchRegex.test(k))
+            (child.keywords || []).some((k) => searchRegex.test(k))
           ) {
             matchedSubSubcategories.push({
               category: cat.key,
@@ -168,7 +184,7 @@ export class CategoriesService {
         key: cat.key,
         name: cat.name,
         nameKa: cat.nameKa,
-        type: 'category',
+        type: "category",
         icon: cat.icon,
       });
 
@@ -177,7 +193,7 @@ export class CategoriesService {
           key: sub.key,
           name: sub.name,
           nameKa: sub.nameKa,
-          type: 'subcategory',
+          type: "subcategory",
           parentKey: cat.key,
           icon: sub.icon,
         });
@@ -187,7 +203,7 @@ export class CategoriesService {
             key: child.key,
             name: child.name,
             nameKa: child.nameKa,
-            type: 'subsubcategory',
+            type: "subsubcategory",
             parentKey: cat.key,
             parentSubKey: sub.key,
             icon: child.icon,
@@ -200,7 +216,10 @@ export class CategoriesService {
   }
 
   // AI-powered semantic search: maps user query to matching subcategory keys
-  async aiSearch(query: string, locale: string = 'en'): Promise<AiSearchResult> {
+  async aiSearch(
+    query: string,
+    locale: string = "en",
+  ): Promise<AiSearchResult> {
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
       return { subcategories: [], fromCache: false };
@@ -218,40 +237,47 @@ export class CategoriesService {
     const categoryLines: string[] = [];
     for (const cat of categories) {
       for (const sub of cat.subcategories || []) {
-        categoryLines.push(`${cat.key}/${sub.key}: ${sub.name} (${sub.nameKa})`);
+        categoryLines.push(
+          `${cat.key}/${sub.key}: ${sub.name} (${sub.nameKa})`,
+        );
       }
     }
 
     try {
       const response = await this.aiService.completionRaw({
-        model: 'gpt-4o-mini',
+        model: "gpt-4o-mini",
         temperature: 0,
         max_tokens: 100,
         messages: [
           {
-            role: 'system',
-            content: `You match user search queries to service categories. Reply ONLY with matching "category/subcategory" keys, comma-separated. If no match, reply "none".\n\nCategories:\n${categoryLines.join('\n')}`,
+            role: "system",
+            content: `You match user search queries to service categories. Reply ONLY with matching "category/subcategory" keys, comma-separated. If no match, reply "none".\n\nCategories:\n${categoryLines.join("\n")}`,
           },
           {
-            role: 'user',
+            role: "user",
             content: trimmed,
           },
         ],
       });
 
       const text = response.trim();
-      if (text === 'none' || !text) {
+      if (text === "none" || !text) {
         const result: AiSearchResult = { subcategories: [], fromCache: false };
         this.aiSearchCache.set(cacheKey, { result, ts: Date.now() });
         return result;
       }
 
-      const pairs = text.split(',').map(s => s.trim()).filter(Boolean);
+      const pairs = text
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const subcategories = pairs
-        .map(pair => {
-          const [category, ...rest] = pair.split('/');
-          const key = rest.join('/');
-          return category && key ? { category: category.trim(), key: key.trim() } : null;
+        .map((pair) => {
+          const [category, ...rest] = pair.split("/");
+          const key = rest.join("/");
+          return category && key
+            ? { category: category.trim(), key: key.trim() }
+            : null;
         })
         .filter((v): v is { category: string; key: string } => v !== null);
 

@@ -1,71 +1,79 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
-import { CategoriesService } from './categories.service';
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import { ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { AiSearchResult, CategoriesService } from "./categories.service";
 import {
   CategoryDoc,
-  SubcategoryDoc,
-  SubSubcategoryDoc,
   FlatCategoryItem,
   SearchResult,
-} from './types/category.types';
+  SubcategoryDoc,
+  SubSubcategoryDoc,
+} from "./types/category.types";
 
-@ApiTags('categories')
-@Controller('categories')
+@ApiTags("categories")
+@Controller("categories")
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all active categories with subcategories' })
+  @ApiOperation({ summary: "Get all active categories with subcategories" })
   async findAll(): Promise<CategoryDoc[]> {
     return this.categoriesService.findAll();
   }
 
-  @Get('flat')
-  @ApiOperation({ summary: 'Get flattened list of all categories for dropdowns' })
+  @Get("flat")
+  @ApiOperation({
+    summary: "Get flattened list of all categories for dropdowns",
+  })
   async getFlatList(): Promise<FlatCategoryItem[]> {
     return this.categoriesService.getFlatList();
   }
 
-  @Get('search')
-  @ApiOperation({ summary: 'Search categories by keyword' })
-  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
-  async search(@Query('q') query: string): Promise<SearchResult> {
+  @Get("search")
+  @ApiOperation({ summary: "Search categories by keyword" })
+  @ApiQuery({ name: "q", required: true, description: "Search query" })
+  async search(@Query("q") query: string): Promise<SearchResult> {
     return this.categoriesService.search(query);
   }
 
-  @Get('ai-search')
-  @ApiOperation({ summary: 'AI-powered semantic category search' })
-  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
-  @ApiQuery({ name: 'locale', required: false, description: 'User locale (en, ka, ru)' })
-  async aiSearch(
-    @Query('q') query: string,
-    @Query('locale') locale?: string,
-  ) {
-    return this.categoriesService.aiSearch(query, locale || 'en');
+  @Get("ai-search")
+  @ApiOperation({ summary: "AI-powered semantic category search" })
+  @ApiQuery({ name: "q", required: true, description: "Search query" })
+  @ApiQuery({
+    name: "locale",
+    required: false,
+    description: "User locale (en, ka, ru)",
+  })
+  async aiSearch(@Query("q") query: string, @Query("locale") locale?: string): Promise<AiSearchResult> {
+    return this.categoriesService.aiSearch(query, locale || "en");
   }
 
-  @Get(':key')
-  @ApiOperation({ summary: 'Get a single category by key' })
-  @ApiParam({ name: 'key', description: 'Category key' })
-  async findByKey(@Param('key') key: string): Promise<CategoryDoc | null> {
+  @Get(":key")
+  @ApiOperation({ summary: "Get a single category by key" })
+  @ApiParam({ name: "key", description: "Category key" })
+  async findByKey(@Param("key") key: string): Promise<CategoryDoc | null> {
     return this.categoriesService.findByKey(key);
   }
 
-  @Get(':key/subcategories')
-  @ApiOperation({ summary: 'Get subcategories for a category' })
-  @ApiParam({ name: 'key', description: 'Category key' })
-  async getSubcategories(@Param('key') key: string): Promise<SubcategoryDoc[]> {
+  @Get(":key/subcategories")
+  @ApiOperation({ summary: "Get subcategories for a category" })
+  @ApiParam({ name: "key", description: "Category key" })
+  async getSubcategories(@Param("key") key: string): Promise<SubcategoryDoc[]> {
     return this.categoriesService.getSubcategories(key);
   }
 
-  @Get(':categoryKey/:subcategoryKey/children')
-  @ApiOperation({ summary: 'Get sub-subcategories (children) for a subcategory' })
-  @ApiParam({ name: 'categoryKey', description: 'Category key' })
-  @ApiParam({ name: 'subcategoryKey', description: 'Subcategory key' })
+  @Get(":categoryKey/:subcategoryKey/children")
+  @ApiOperation({
+    summary: "Get sub-subcategories (children) for a subcategory",
+  })
+  @ApiParam({ name: "categoryKey", description: "Category key" })
+  @ApiParam({ name: "subcategoryKey", description: "Subcategory key" })
   async getSubSubcategories(
-    @Param('categoryKey') categoryKey: string,
-    @Param('subcategoryKey') subcategoryKey: string,
+    @Param("categoryKey") categoryKey: string,
+    @Param("subcategoryKey") subcategoryKey: string,
   ): Promise<SubSubcategoryDoc[]> {
-    return this.categoriesService.getSubSubcategories(categoryKey, subcategoryKey);
+    return this.categoriesService.getSubSubcategories(
+      categoryKey,
+      subcategoryKey,
+    );
   }
 }
