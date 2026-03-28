@@ -744,4 +744,27 @@ Keep responses concise but helpful.`;
       throw error;
     }
   }
+
+  /**
+   * Raw completion call for lightweight AI tasks
+   */
+  async completionRaw(params: {
+    model: string;
+    messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+    temperature?: number;
+    max_tokens?: number;
+  }): Promise<string> {
+    if (!this.isConfigured()) {
+      throw new Error('OpenAI not configured');
+    }
+
+    const response = await this.openai.chat.completions.create({
+      model: params.model,
+      messages: params.messages,
+      temperature: params.temperature ?? 0,
+      max_tokens: params.max_tokens ?? 100,
+    });
+
+    return response.choices[0]?.message?.content || '';
+  }
 }

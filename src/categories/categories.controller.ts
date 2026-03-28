@@ -33,6 +33,17 @@ export class CategoriesController {
     return this.categoriesService.search(query);
   }
 
+  @Get('ai-search')
+  @ApiOperation({ summary: 'AI-powered semantic category search' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  @ApiQuery({ name: 'locale', required: false, description: 'User locale (en, ka, ru)' })
+  async aiSearch(
+    @Query('q') query: string,
+    @Query('locale') locale?: string,
+  ) {
+    return this.categoriesService.aiSearch(query, locale || 'en');
+  }
+
   @Get(':key')
   @ApiOperation({ summary: 'Get a single category by key' })
   @ApiParam({ name: 'key', description: 'Category key' })
