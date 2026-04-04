@@ -746,9 +746,10 @@ async function scrapeCategoryPage(categoryId: number, slug: string, page: number
     const $ = cheerio.load(data);
     const productIds: number[] = [];
 
-    $('a[href*="/ka/product/detail/"]').each((_: number, el: any) => {
+    // Only match links inside product cards (not sidebar/recommended)
+    $(".product-card a[href*='/product/view/']").each((_: number, el: any) => {
       const href = $(el).attr("href") || "";
-      const match = href.match(/\/ka\/product\/detail\/(\d+)\//);
+      const match = href.match(/\/product\/view\/(\d+)/);
       if (match) {
         const id = parseInt(match[1], 10);
         if (!isNaN(id) && !productIds.includes(id)) {
@@ -814,43 +815,38 @@ async function crawlCategory(
 ): Promise<void> {
   console.log(`\n  -- Crawling category ${entry.categoryId}: ${entry.slug} (${entry.homicoCategory}/${entry.homicoSubcategory})`);
 
-  let page = 1;
   let totalForCategory = 0;
 
-  while (true) {
-    const productIds = await scrapeCategoryPage(entry.categoryId, entry.slug, page);
+  // Servisebi.ge loads all listings on page 1 (no real pagination — further pages return sidebar links only)
+  const productIds = await scrapeCategoryPage(entry.categoryId, entry.slug, 1);
 
-    if (productIds.length === 0) {
-      if (page === 1) {
-        console.log(`     No listings found on page 1, skipping category`);
-      } else {
-        console.log(`     No more listings on page ${page}, done (${totalForCategory} found in category)`);
-      }
-      break;
+  if (productIds.length === 0) {
+    console.log(`     No listings found, skipping`);
+    return;
+  }
+
+  console.log(`     Found ${productIds.length} listings`);
+
+  for (const id of productIds) {
+    const result = await processProduct(id, phoneMap, seenIds, entry);
+    if (result.found) {
+      stats.total++;
+      totalForCategory++;
+    } else if (result.skipped) {
+      stats.skipped++;
     }
 
-    console.log(`     Page ${page}: ${productIds.length} listings`);
-
-    for (const id of productIds) {
-      const result = await processProduct(id, phoneMap, seenIds, entry);
-      if (result.found) {
-        stats.total++;
-        totalForCategory++;
-      } else if (result.skipped) {
-        stats.skipped++;
-      }
-
-      // Save every 50 new finds
-      if (stats.total > 0 && stats.total % 50 === 0) {
-        saveFiles(phoneMap, outputDir);
-        console.log(`  -- Saved ${phoneMap.size} providers to disk`);
-      }
-
-      await sleep(delay);
+    // Save every 50 new finds
+    if (stats.total > 0 && stats.total % 50 === 0) {
+      saveFiles(phoneMap, outputDir);
+      console.log(`  -- Saved ${phoneMap.size} providers to disk`);
     }
 
-    page++;
     await sleep(delay);
+  }
+
+  if (totalForCategory > 0) {
+    console.log(`     → ${totalForCategory} new providers from this category`);
   }
 }
 
