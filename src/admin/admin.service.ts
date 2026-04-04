@@ -6,6 +6,7 @@ import { Proposal } from "../jobs/schemas/proposal.schema";
 import { Notification } from "../notifications/schemas/notification.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
 import { User } from "../users/schemas/user.schema";
+import { InviteToken } from "../invite/schemas/invite-token.schema";
 import { SmsService } from "../verification/services/sms.service";
 
 interface PaginationOptions {
@@ -31,6 +32,12 @@ interface PendingProsOptions extends PaginationOptions {
   status?: "pending" | "approved" | "rejected" | "all";
 }
 
+interface InviteListOptions extends PaginationOptions {
+  status?: string;
+  type?: string;
+  category?: string;
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -40,6 +47,8 @@ export class AdminService {
     @InjectModel(SupportTicket.name) private ticketModel: Model<SupportTicket>,
     @InjectModel(Notification.name)
     private notificationModel: Model<Notification>,
+    @InjectModel(InviteToken.name)
+    private inviteTokenModel: Model<InviteToken>,
     private readonly smsService: SmsService,
   ) {}
 
@@ -922,6 +931,133 @@ export class AdminService {
     }));
 
     return populatedProposals;
+  }
+
+  // ============== INVITE MANAGEMENT ==============
+
+  async getInvites(options: InviteListOptions) {
+    const { page, limit, search, status, type, category } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<InviteToken> = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (status && status !== "all") {
+      query.status = status;
+    }
+
+    if (type && type !== "all") {
+      query.type = type;
+    }
+
+    if (category) {
+      query.category = { $regex: category, $options: "i" };
+    }
+
+    const [items, total] = await Promise.all([
+      this.inviteTokenModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.inviteTokenModel.countDocuments(query),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getInviteStats() {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+
+    const [
+      total,
+      pending,
+      smsSent,
+      opened,
+      activated,
+      typeProfessional,
+      typeService,
+      typeToolRental,
+      todaySent,
+      todayOpened,
+      todayActivated,
+    ] = await Promise.all([
+      this.inviteTokenModel.countDocuments(),
+      this.inviteTokenModel.countDocuments({ status: "pending" }),
+      this.inviteTokenModel.countDocuments({ status: "sms_sent" }),
+      this.inviteTokenModel.countDocuments({ status: "opened" }),
+      this.inviteTokenModel.countDocuments({ status: "activated" }),
+      this.inviteTokenModel.countDocuments({ type: "professional" }),
+      this.inviteTokenModel.countDocuments({ type: "service" }),
+      this.inviteTokenModel.countDocuments({ type: "tool-rental" }),
+      this.inviteTokenModel.countDocuments({ smsSentAt: { $gte: startOfToday } }),
+      this.inviteTokenModel.countDocuments({ openedAt: { $gte: startOfToday } }),
+      this.inviteTokenModel.countDocuments({ activatedAt: { $gte: startOfToday } }),
+    ]);
+
+    const smsSentOrLater = smsSent + opened + activated;
+    const conversionRate = total > 0 ? Math.round((activated / total) * 100) : 0;
+    const openRate =
+      smsSentOrLater > 0
+        ? Math.round(((opened + activated) / smsSentOrLater) * 100)
+        : 0;
+
+    return {
+      total,
+      byStatus: { pending, sms_sent: smsSent, opened, activated },
+      byType: {
+        professional: typeProfessional,
+        service: typeService,
+        "tool-rental": typeToolRental,
+      },
+      conversionRate,
+      openRate,
+      todaySent,
+      todayOpened,
+      todayActivated,
+    };
+  }
+
+  async deleteInvite(id: string) {
+    const invite = await this.inviteTokenModel.findById(id);
+    if (!invite) {
+      throw new Error("Invite token not found");
+    }
+    await this.inviteTokenModel.findByIdAndDelete(id);
+    return { message: "Invite deleted successfully" };
+  }
+
+  async resendInviteSms(id: string) {
+    const invite = await this.inviteTokenModel.findById(id);
+    if (!invite) {
+      throw new Error("Invite token not found");
+    }
+
+    invite.status = "pending";
+    invite.smsSentAt = undefined;
+    invite.smsFailedAt = undefined;
+    invite.smsError = undefined;
+    await invite.save();
+
+    return { message: "Invite marked for resend" };
   }
 
   // ============== MIGRATIONS ==============

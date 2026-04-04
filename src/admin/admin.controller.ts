@@ -340,6 +340,58 @@ export class AdminController {
     return this.adminService.getJobProposals(jobId);
   }
 
+  // ============== INVITE MANAGEMENT ==============
+
+  @Get('invites')
+  @ApiOperation({ summary: 'Get invite tokens with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by name or phone' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: pending, sms_sent, opened, activated, all' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by type: professional, service, tool-rental, all' })
+  @ApiQuery({ name: 'category', required: false, description: 'Filter by category' })
+  @ApiResponse({ status: 200, description: 'Paginated invite tokens list' })
+  getInvites(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('category') category?: string,
+  ) {
+    return this.adminService.getInvites({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+      type,
+      category,
+    });
+  }
+
+  @Get('invites/stats')
+  @ApiOperation({ summary: 'Get invite token statistics' })
+  @ApiResponse({ status: 200, description: 'Invite statistics' })
+  getInviteStats() {
+    return this.adminService.getInviteStats();
+  }
+
+  @Delete('invites/:id')
+  @ApiOperation({ summary: 'Delete an invite token' })
+  @ApiResponse({ status: 200, description: 'Invite deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Invite not found' })
+  deleteInvite(@Param('id') id: string) {
+    return this.adminService.deleteInvite(id);
+  }
+
+  @Patch('invites/:id/resend')
+  @ApiOperation({ summary: 'Resend SMS for an invite token' })
+  @ApiResponse({ status: 200, description: 'Invite marked for SMS resend' })
+  @ApiResponse({ status: 404, description: 'Invite not found' })
+  resendInviteSms(@Param('id') id: string) {
+    return this.adminService.resendInviteSms(id);
+  }
+
   // ============== MIGRATIONS ==============
 
   @Patch('migrate/sync-verification-status')
