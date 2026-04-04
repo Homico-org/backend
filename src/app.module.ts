@@ -33,6 +33,7 @@ import { BusinessModule } from './business/business.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { InviteModule } from './invite/invite.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -120,6 +121,7 @@ import { APP_GUARD } from '@nestjs/core';
     AnalyticsModule,
     ServiceCatalogModule,
     BookingsModule,
+    InviteModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default
