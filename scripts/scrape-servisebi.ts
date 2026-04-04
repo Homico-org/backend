@@ -2,15 +2,18 @@
  * Scrape & normalize listings from servisebi.ge into DB-ready format
  *
  * Outputs:
- *   - scrape-output/providers.json       (deduplicated, normalized, DB-ready)
- *   - scrape-output/professionals.txt    (human-readable)
- *   - scrape-output/services.txt
- *   - scrape-output/tool-rentals.txt
- *   - scrape-output/shops.txt
- *   - scrape-output/other.txt
+ *   - scrape-output/professionals.json
+ *   - scrape-output/services.json
+ *   - scrape-output/tool-rentals.json
+ *   - scrape-output/shops.json
+ *   - scrape-output/others.json
  *
  * Usage:
- *   npx ts-node scripts/scrape-servisebi.ts [--start=20000] [--end=47500] [--delay=250]
+ *   npx ts-node scripts/scrape-servisebi.ts [--mode=all|categories|ids] [--start=20000] [--end=47500] [--delay=250]
+ *
+ *   --mode=categories  Only crawl category pages
+ *   --mode=ids         Only iterate product IDs (legacy behavior)
+ *   --mode=all         First crawl categories, then iterate IDs (default)
  */
 
 import axios from "axios";
@@ -24,9 +27,14 @@ const getArg = (name: string, def: number) => {
   const found = args.find((a) => a.startsWith(`--${name}=`));
   return found ? parseInt(found.split("=")[1], 10) : def;
 };
+const getStringArg = (name: string, def: string) => {
+  const found = args.find((a) => a.startsWith(`--${name}=`));
+  return found ? found.split("=")[1] : def;
+};
 const startId = getArg("start", 20000);
 const endId = getArg("end", 47500);
 const delay = getArg("delay", 250);
+const mode = getStringArg("mode", "all") as "all" | "categories" | "ids";
 
 // ============================================================
 // HOMICO TYPE: professional | service | tool-rental | shop
@@ -35,15 +43,15 @@ const delay = getArg("delay", 250);
 type HomicoType = "professional" | "service" | "tool-rental" | "shop" | "other";
 
 // ============================================================
-// CATEGORY MAPPING: servisebi.ge Georgian keywords → Homico category/subcategory
+// CATEGORY MAPPING: servisebi.ge Georgian keywords -> Homico category/subcategory
 // ============================================================
 
 interface CategoryMapping {
   homicoType: HomicoType;
-  category: string;       // Homico category key
-  subcategory: string;    // Homico subcategory key
-  categoryKa: string;     // Georgian display name
-  skip?: boolean;         // true = not relevant to Homico, skip
+  category: string;
+  subcategory: string;
+  categoryKa: string;
+  skip?: boolean;
   subcategoryKa: string;
 }
 
@@ -52,41 +60,43 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   // ── RENOVATION / PROFESSIONALS ──────────────────────────
 
   // Plumbing
-  [["სანტექნიკ", "კანალიზაცი"], {
+  [["სანტექნიკ", "კანალიზაცი", "წყალი", "მილ", "ონკანი", "წყალგაყვანილობ"], {
     homicoType: "professional", category: "renovation", subcategory: "plumbing",
     categoryKa: "რემონტი", subcategoryKa: "სანტექნიკა",
   }],
 
   // Electricity
-  [["ელექტრიკ", "ელექტრო"], {
+  [["ელექტრიკ", "ელექტრო", "გაყვანილობ", "სადენ", "ავტომატი", "შუქ", "განათებ"], {
     homicoType: "professional", category: "renovation", subcategory: "electricity",
     categoryKa: "რემონტი", subcategoryKa: "ელექტროობა",
   }],
 
   // Painting / Mural
-  [["მალიარ", "სამღებრო", "შპალერ", "ფითხ", "გაშპაკვლ"], {
+  [["მალიარ", "სამღებრო", "შპალერ", "ფითხ", "გაშპაკვლ", "საღებავ"], {
     homicoType: "professional", category: "renovation", subcategory: "mural",
     categoryKa: "რემონტი", subcategoryKa: "მალიარი",
   }],
 
   // Roofing
-  [["გადახურვა", "სახურავ", "ტოლით"], {
+  [["გადახურვა", "სახურავ", "ტოლით", "ჰიდროიზოლაცი", "თბოიზოლაცი"], {
     homicoType: "professional", category: "renovation", subcategory: "roofing",
     categoryKa: "რემონტი", subcategoryKa: "სახურავი",
   }],
 
-  // Tile / Ceiling
+  // Tile / Tiling
   [["კაფელ", "მეტლახ", "მოზაიკ"], {
     homicoType: "professional", category: "renovation", subcategory: "tiling",
     categoryKa: "რემონტი", subcategoryKa: "კაფელ-მეტლახი",
   }],
-  [["გასაჭიმი ჭერ", "ხის ჭერ", "ამსტრონგ", "თაბაშირ", "გიფსოკარდონ"], {
+
+  // Ceiling / Drywall
+  [["გასაჭიმი ჭერ", "ხის ჭერ", "ამსტრონგ", "თაბაშირ", "გიფსოკარდონ", "გასაჭიმ"], {
     homicoType: "professional", category: "renovation", subcategory: "tile",
     categoryKa: "რემონტი", subcategoryKa: "ჭერი",
   }],
 
   // Flooring
-  [["იატაკ", "ლამინატ", "პარკეტ", "სტიაშკ", "ციკლოვკ"], {
+  [["იატაკ", "ლამინატ", "პარკეტ", "სტიაშკ", "ციკლოვკ", "მოპირკეთება"], {
     homicoType: "professional", category: "renovation", subcategory: "flooring",
     categoryKa: "რემონტი", subcategoryKa: "იატაკი",
   }],
@@ -104,19 +114,19 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   }],
 
   // Ironwork
-  [["ლითონ", "რკინა", "სვარკა", "არგონ"], {
+  [["ლითონ", "რკინა", "სვარკა", "არგონ", "ლითონის ნაკეთობ"], {
     homicoType: "professional", category: "renovation", subcategory: "iron",
     categoryKa: "რემონტი", subcategoryKa: "რკინის სამუშაოები",
   }],
 
   // Woodwork
-  [["ხის სამუშაო", "დურგალ", "ავეჯის დამზადება", "ავეჯის რესტავრაცი"], {
+  [["ხის სამუშაო", "დურგალ", "ავეჯის დამზადება", "ავეჯის რესტავრაცი", "ხის კარ"], {
     homicoType: "professional", category: "renovation", subcategory: "woodwork",
     categoryKa: "რემონტი", subcategoryKa: "ხის სამუშაოები",
   }],
 
   // Glasswork
-  [["მინა", "მინის", "სარკე", "შხაპკაბინა", "ტიხრ"], {
+  [["მინა", "მინის", "სარკე", "შხაპკაბინა", "ტიხრ", "მინაზე"], {
     homicoType: "professional", category: "renovation", subcategory: "glasswork",
     categoryKa: "რემონტი", subcategoryKa: "მინის სამუშაოები",
   }],
@@ -136,7 +146,7 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   // Full renovation
   [["სრული სარემონტო", "სრული რემონტ", "გარემონტება"], {
     homicoType: "professional", category: "renovation", subcategory: "full-renovation",
-    categoryKa: "რემონტი", subcategoryKa: "სრული რემონტი",
+    categoryKa: "რემონტი", subcategoryKa: "სრული რემონტი", skip: true,
   }],
 
   // Gas
@@ -152,21 +162,39 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   }],
 
   // Windows/Doors
-  [["კარ-ფანჯარა", "კარის ხელოსან", "ჟალუზ"], {
+  [["კარ-ფანჯარა", "კარის ხელოსან", "ჟალუზ", "მეტალოპლასტმას", "ფანჯარ", "კარის მონტაჟ"], {
     homicoType: "professional", category: "renovation", subcategory: "doors-windows",
     categoryKa: "რემონტი", subcategoryKa: "კარ-ფანჯარა",
   }],
 
-  // House building
-  [["სახლ მშენებლობა", "კარკას"], {
+  // House building / Construction
+  [["სახლ მშენებლობა", "კარკას", "მშენებლობ"], {
     homicoType: "professional", category: "renovation", subcategory: "construction",
     categoryKa: "რემონტი", subcategoryKa: "მშენებლობა",
   }],
 
   // Measurement
-  [["აზომვ", "დაკვალვა"], {
+  [["აზომვ", "დაკვალვა", "ნახაზ"], {
     homicoType: "professional", category: "renovation", subcategory: "measurement",
     categoryKa: "რემონტი", subcategoryKa: "აზომვა",
+  }],
+
+  // High-rise work
+  [["სიმაღლეზე მუშაობ", "სიმაღლეზე სამუშაო", "ალპინისტ"], {
+    homicoType: "professional", category: "renovation", subcategory: "high-rise",
+    categoryKa: "რემონტი", subcategoryKa: "სიმაღლეზე მუშაობა",
+  }],
+
+  // Lift installation
+  [["ლიფტის მონტაჟ", "ლიფტის"], {
+    homicoType: "professional", category: "renovation", subcategory: "lift-installation",
+    categoryKa: "რემონტი", subcategoryKa: "ლიფტის მონტაჟი",
+  }],
+
+  // Lathe work
+  [["გაჩარხვა", "ტოკარ"], {
+    homicoType: "professional", category: "renovation", subcategory: "lathe-work",
+    categoryKa: "რემონტი", subcategoryKa: "გაჩარხვა/ტოკარი",
   }],
 
   // ── DESIGN ──────────────────────────
@@ -186,7 +214,7 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   // ── SERVICES ──────────────────────────
 
   // Cleaning
-  [["დამლაგებელ", "დალაგება", "ქიმწმენდა"], {
+  [["დამლაგებელ", "დალაგება", "ქიმწმენდ", "დასუფთავება", "სველი წმენდა", "მოწესრიგება"], {
     homicoType: "service", category: "services", subcategory: "cleaning",
     categoryKa: "სერვისები", subcategoryKa: "დალაგება",
   }],
@@ -199,14 +227,20 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
 
   // Appliance Repair
   [["მაცივარ", "სარეცხი მანქანა", "გაზქურა", "საყოფაცხოვრებო", "ტელევიზორ", "სატელიტურ",
-    "კარტრიჯ", "პრინტერ", "კომპიუტერ", "ტელეფონ", "ვინდოუს", "ფლეისთეიშენ",
-    "ანტენ"], {
+    "კარტრიჯ", "პრინტერ", "კომპიუტერ", "ტელეფონ", "ფლეისთეიშენ",
+    "ანტენ", "ტექნიკის შეკეთება"], {
     homicoType: "professional", category: "services", subcategory: "appliance-repair",
     categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება",
   }],
 
+  // IT Support
+  [["ვინდოუს", "ვინდოუსის გადაყენება"], {
+    homicoType: "professional", category: "services", subcategory: "it-support",
+    categoryKa: "სერვისები", subcategoryKa: "IT მხარდაჭერა",
+  }],
+
   // Pest control / Disinfection
-  [["დეზინფექცი", "დეზინსექცი"], {
+  [["დეზინფექცი", "დეზინსექცი", "მავნებელ"], {
     homicoType: "service", category: "services", subcategory: "pest-control",
     categoryKa: "სერვისები", subcategoryKa: "დეზინსექცია",
   }],
@@ -214,7 +248,67 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
   // Photo / Video
   [["ფოტო", "ვიდეო", "დრონ", "გადაღება"], {
     homicoType: "professional", category: "services", subcategory: "photo-video",
-    categoryKa: "სერვისები", subcategoryKa: "ფოტო/ვიდეო",
+    categoryKa: "სერვისები", subcategoryKa: "ფოტო/ვიდეო", skip: true,
+  }],
+
+  // Security
+  [["დაცვის სამსახურ", "კერძო დაცვ", "უსაფრთხოებ", "დაცვა"], {
+    homicoType: "service", category: "services", subcategory: "security",
+    categoryKa: "სერვისები", subcategoryKa: "დაცვა",
+  }],
+
+  // Smart home
+  [["ჭკვიანი სახლ", "სმარტ"], {
+    homicoType: "professional", category: "services", subcategory: "smart-home",
+    categoryKa: "სერვისები", subcategoryKa: "ჭკვიანი სახლი",
+  }],
+
+  // Gardening / Landscaping
+  [["ეზოს მოწყობა", "ბაღ", "გამწვანება", "ლანდშაფტ"], {
+    homicoType: "service", category: "services", subcategory: "gardening",
+    categoryKa: "სერვისები", subcategoryKa: "ბაღი/ეზო",
+  }],
+
+  // Housekeeper
+  [["დიასახლის"], {
+    homicoType: "service", category: "services", subcategory: "housekeeper",
+    categoryKa: "სერვისები", subcategoryKa: "დიასახლისი", skip: true,
+  }],
+
+  // Nanny
+  [["ძიძა", "მომვლელ"], {
+    homicoType: "service", category: "services", subcategory: "nanny",
+    categoryKa: "სერვისები", subcategoryKa: "ძიძა", skip: true,
+  }],
+
+  // Elderly care
+  [["მოხუცის მოვლა", "მწოლიარის მოვლა", "მოხუც", "მწოლიარ"], {
+    homicoType: "service", category: "services", subcategory: "elderly-care",
+    categoryKa: "სერვისები", subcategoryKa: "მოხუცის მოვლა", skip: true,
+  }],
+
+  // Courier
+  [["საკურიერო", "კურიერ"], {
+    homicoType: "service", category: "services", subcategory: "courier",
+    categoryKa: "სერვისები", subcategoryKa: "საკურიერო", skip: true,
+  }],
+
+  // Tailor
+  [["კერვა", "თეთრეულ", "ფარდ", "ტანსაცმლ"], {
+    homicoType: "service", category: "services", subcategory: "tailor",
+    categoryKa: "სერვისები", subcategoryKa: "კერვა", skip: true,
+  }],
+
+  // Locksmith
+  [["გასაღებ", "საკეტ"], {
+    homicoType: "service", category: "services", subcategory: "locksmith",
+    categoryKa: "სერვისები", subcategoryKa: "გასაღებების დამზადება",
+  }],
+
+  // Labor hire
+  [["მუშების დაქირავება", "მუშა", "მოსამსახურე"], {
+    homicoType: "service", category: "services", subcategory: "labor-hire",
+    categoryKa: "სერვისები", subcategoryKa: "მუშების დაქირავება",
   }],
 
   // ── VEHICLE SERVICES ──────────────────────────
@@ -317,6 +411,164 @@ const CATEGORY_MAP: [string[], CategoryMapping][] = [
 ];
 
 // ============================================================
+// CATEGORY PAGES: servisebi.ge category pages to crawl
+// ============================================================
+
+interface CategoryPageEntry {
+  categoryId: number;
+  slug: string;
+  homicoCategory: string;
+  homicoSubcategory: string;
+  categoryKa: string;
+  subcategoryKa: string;
+  homicoType: HomicoType;
+}
+
+const CATEGORY_PAGES: CategoryPageEntry[] = [
+  // ── RENOVATION ──────────────────────────
+
+  // Plumbing
+  { categoryId: 33, slug: "სანტექნიკი-გამოძახებით", homicoCategory: "renovation", homicoSubcategory: "plumbing", categoryKa: "რემონტი", subcategoryKa: "სანტექნიკა", homicoType: "professional" },
+  { categoryId: 383, slug: "კანალიზაციის-გაწმენდა", homicoCategory: "renovation", homicoSubcategory: "plumbing", categoryKa: "რემონტი", subcategoryKa: "სანტექნიკა", homicoType: "professional" },
+
+  // Electricity
+  { categoryId: 70, slug: "ელექტრიკი", homicoCategory: "renovation", homicoSubcategory: "electricity", categoryKa: "რემონტი", subcategoryKa: "ელექტროობა", homicoType: "professional" },
+
+  // Mural / Painting
+  { categoryId: 127, slug: "ფითხის-შპალერის-და-სამღებრო-სამუშაოები", homicoCategory: "renovation", homicoSubcategory: "mural", categoryKa: "რემონტი", subcategoryKa: "მალიარი", homicoType: "professional" },
+
+  // Roofing
+  { categoryId: 126, slug: "გადახურვა-ჰიდრო-და-თბოიზოლაცია", homicoCategory: "renovation", homicoSubcategory: "roofing", categoryKa: "რემონტი", subcategoryKa: "სახურავი", homicoType: "professional" },
+
+  // Tiling
+  { categoryId: 134, slug: "კაფელმეტლახი-მოზაიკა", homicoCategory: "renovation", homicoSubcategory: "tiling", categoryKa: "რემონტი", subcategoryKa: "კაფელ-მეტლახი", homicoType: "professional" },
+
+  // Drywall / Ceiling
+  { categoryId: 124, slug: "თაბაშირ-მუყაოს-ხელოსანი", homicoCategory: "renovation", homicoSubcategory: "tile", categoryKa: "რემონტი", subcategoryKa: "ჭერი", homicoType: "professional" },
+  { categoryId: 392, slug: "ხის-ჭერის-გაკვრა", homicoCategory: "renovation", homicoSubcategory: "tile", categoryKa: "რემონტი", subcategoryKa: "ჭერი", homicoType: "professional" },
+  { categoryId: 393, slug: "ამსტრონგის-ჭერის-მონტაჟი", homicoCategory: "renovation", homicoSubcategory: "tile", categoryKa: "რემონტი", subcategoryKa: "ჭერი", homicoType: "professional" },
+  { categoryId: 395, slug: "გასაჭიმი-ჭერი", homicoCategory: "renovation", homicoSubcategory: "tile", categoryKa: "რემონტი", subcategoryKa: "ჭერი", homicoType: "professional" },
+
+  // Flooring
+  { categoryId: 29, slug: "იატაკი-მოპირკეთება", homicoCategory: "renovation", homicoSubcategory: "flooring", categoryKa: "რემონტი", subcategoryKa: "იატაკი", homicoType: "professional" },
+
+  // Plastering / Masonry
+  { categoryId: 101, slug: "კედლების-აშენება-ლესვა-ბრიზგი", homicoCategory: "renovation", homicoSubcategory: "plastering", categoryKa: "რემონტი", subcategoryKa: "მლესავი", homicoType: "professional" },
+
+  // HVAC
+  { categoryId: 28, slug: "გათბობის-ხელოსანი", homicoCategory: "renovation", homicoSubcategory: "hvac", categoryKa: "რემონტი", subcategoryKa: "გათბობა/გაგრილება", homicoType: "professional" },
+  { categoryId: 182, slug: "კონდიციონერის-ხელოსანი", homicoCategory: "renovation", homicoSubcategory: "hvac", categoryKa: "რემონტი", subcategoryKa: "გათბობა/გაგრილება", homicoType: "professional" },
+
+  // Ironwork
+  { categoryId: 32, slug: "ლითონის-ნაკეთობები", homicoCategory: "renovation", homicoSubcategory: "iron", categoryKa: "რემონტი", subcategoryKa: "რკინის სამუშაოები", homicoType: "professional" },
+  { categoryId: 109, slug: "არგონის-სვარკა", homicoCategory: "renovation", homicoSubcategory: "iron", categoryKa: "რემონტი", subcategoryKa: "რკინის სამუშაოები", homicoType: "professional" },
+
+  // Woodwork
+  { categoryId: 68, slug: "ავეჯის-დამზადება", homicoCategory: "renovation", homicoSubcategory: "woodwork", categoryKa: "რემონტი", subcategoryKa: "ხის სამუშაოები", homicoType: "professional" },
+  { categoryId: 398, slug: "ავეჯის-რესტავრაცია", homicoCategory: "renovation", homicoSubcategory: "woodwork", categoryKa: "რემონტი", subcategoryKa: "ხის სამუშაოები", homicoType: "professional" },
+
+  // Doors / Windows
+  { categoryId: 115, slug: "კარის-ხელოსანი", homicoCategory: "renovation", homicoSubcategory: "doors-windows", categoryKa: "რემონტი", subcategoryKa: "კარ-ფანჯარა", homicoType: "professional" },
+  { categoryId: 35, slug: "მეტალოპლასტმასის-კარ-ფანჯარა", homicoCategory: "renovation", homicoSubcategory: "doors-windows", categoryKa: "რემონტი", subcategoryKa: "კარ-ფანჯარა", homicoType: "professional" },
+  { categoryId: 420, slug: "ჟალუზები", homicoCategory: "renovation", homicoSubcategory: "doors-windows", categoryKa: "რემონტი", subcategoryKa: "კარ-ფანჯარა", homicoType: "professional" },
+
+  // Glasswork
+  { categoryId: 137, slug: "მინაზე-სამუშაოები", homicoCategory: "renovation", homicoSubcategory: "glasswork", categoryKa: "რემონტი", subcategoryKa: "მინის სამუშაოები", homicoType: "professional" },
+
+  // Demolition
+  { categoryId: 130, slug: "დემონტაჟი", homicoCategory: "renovation", homicoSubcategory: "demolition", categoryKa: "რემონტი", subcategoryKa: "დემონტაჟი", homicoType: "professional" },
+
+  // Gas
+  { categoryId: 14, slug: "გაზის-მონტაჟი", homicoCategory: "renovation", homicoSubcategory: "gas", categoryKa: "რემონტი", subcategoryKa: "გაზის სამუშაოები", homicoType: "professional" },
+
+  // Fireplace
+  { categoryId: 128, slug: "ბუხრის-აშენება-გაწმენდა-მოპირკეთება", homicoCategory: "renovation", homicoSubcategory: "fireplace", categoryKa: "რემონტი", subcategoryKa: "ბუხარი", homicoType: "professional" },
+
+  // Construction
+  { categoryId: 196, slug: "სახლების-მშენებლობა", homicoCategory: "renovation", homicoSubcategory: "construction", categoryKa: "რემონტი", subcategoryKa: "მშენებლობა", homicoType: "professional" },
+
+  // Measurement
+  { categoryId: 27, slug: "აზომვითი-ნახაზები", homicoCategory: "renovation", homicoSubcategory: "measurement", categoryKa: "რემონტი", subcategoryKa: "აზომვა", homicoType: "professional" },
+
+  // High-rise work
+  { categoryId: 136, slug: "სიმაღლეზე-მუშაობა", homicoCategory: "renovation", homicoSubcategory: "high-rise", categoryKa: "რემონტი", subcategoryKa: "სიმაღლეზე მუშაობა", homicoType: "professional" },
+
+  // Lift installation
+  { categoryId: 400, slug: "ლიფტის-მონტაჟი", homicoCategory: "renovation", homicoSubcategory: "lift-installation", categoryKa: "რემონტი", subcategoryKa: "ლიფტის მონტაჟი", homicoType: "professional" },
+
+  // Lathe work
+  { categoryId: 95, slug: "გაჩარხვა-ტოკარი", homicoCategory: "renovation", homicoSubcategory: "lathe-work", categoryKa: "რემონტი", subcategoryKa: "გაჩარხვა/ტოკარი", homicoType: "professional" },
+
+  // Landscaping / Gardening
+  { categoryId: 30, slug: "ეზოს-მოწყობა", homicoCategory: "services", homicoSubcategory: "gardening", categoryKa: "სერვისები", subcategoryKa: "ბაღი/ეზო", homicoType: "service" },
+
+  // ── DESIGN ──────────────────────────
+
+  { categoryId: 208, slug: "ინტერიერის-დიზაინი", homicoCategory: "design", homicoSubcategory: "interior", categoryKa: "დიზაინი", subcategoryKa: "ინტერიერი", homicoType: "professional" },
+
+  // ── ARCHITECTURE ──────────────────────────
+
+  { categoryId: 31, slug: "არქიტექტორის-მომსახურება", homicoCategory: "architecture", homicoSubcategory: "residential-architecture", categoryKa: "არქიტექტურა", subcategoryKa: "საცხოვრებელი", homicoType: "professional" },
+
+  // ── SERVICES ──────────────────────────
+
+  // Cleaning
+  { categoryId: 17, slug: "დამლაგებელი", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+  { categoryId: 119, slug: "ავეჯის-ქიმწმენდა", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+  { categoryId: 347, slug: "ტანსაცმლის-ქიმწმენდა", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+  { categoryId: 350, slug: "თეთრეულის-და-ტანსაცმლის-სამრეცხაო", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+  { categoryId: 411, slug: "ქიმწმენდა", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+  { categoryId: 92, slug: "მანქანის-ქიმწმენდა", homicoCategory: "services", homicoSubcategory: "cleaning", categoryKa: "სერვისები", subcategoryKa: "დალაგება", homicoType: "service" },
+
+  // Moving
+  { categoryId: 26, slug: "ავეჯის-გადაზიდვა", homicoCategory: "services", homicoSubcategory: "moving", categoryKa: "სერვისები", subcategoryKa: "გადაზიდვა", homicoType: "service" },
+  { categoryId: 19, slug: "სამშენებლო-ნარჩენების-გატანა", homicoCategory: "services", homicoSubcategory: "moving", categoryKa: "სერვისები", subcategoryKa: "გადაზიდვა", homicoType: "service" },
+
+  // Labor hire
+  { categoryId: 387, slug: "მუშების-დაქირავება", homicoCategory: "services", homicoSubcategory: "labor-hire", categoryKa: "სერვისები", subcategoryKa: "მუშების დაქირავება", homicoType: "service" },
+
+  // Appliance repair
+  { categoryId: 174, slug: "სარეცხი-მანქანის-ხელოსანი", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 112, slug: "მაცივრის-შეკეთება", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 201, slug: "გაზქურის-ხელოსანი", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 405, slug: "ტელევიზორის-ხელოსანი", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 194, slug: "წვრილი-საყოფაცხოვრებო-ტექნიკის-შეკეთება", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 46, slug: "კომპიუტერების-ტელეფონების-შეკეთება", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 191, slug: "სატელიტური-ანტენების-შეკეთებამონტაჟი", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+  { categoryId: 197, slug: "ტელევიზორის-მონტაჟი", homicoCategory: "services", homicoSubcategory: "appliance-repair", categoryKa: "სერვისები", subcategoryKa: "ტექნიკის შეკეთება", homicoType: "professional" },
+
+  // IT Support
+  { categoryId: 388, slug: "ვინდოუსის-გადაყენება", homicoCategory: "services", homicoSubcategory: "it-support", categoryKa: "სერვისები", subcategoryKa: "IT მხარდაჭერა", homicoType: "professional" },
+
+  // Pest control
+  { categoryId: 346, slug: "დეზინფექცია", homicoCategory: "services", homicoSubcategory: "pest-control", categoryKa: "სერვისები", subcategoryKa: "დეზინსექცია", homicoType: "service" },
+
+  // Security
+  { categoryId: 320, slug: "დაცვის-სამსახურის-მომსახურება", homicoCategory: "services", homicoSubcategory: "security", categoryKa: "სერვისები", subcategoryKa: "დაცვა", homicoType: "service" },
+  { categoryId: 321, slug: "კერძო-დაცვა", homicoCategory: "services", homicoSubcategory: "security", categoryKa: "სერვისები", subcategoryKa: "დაცვა", homicoType: "service" },
+
+  // Smart home
+  { categoryId: 399, slug: "ჭკვიანი-სახლი", homicoCategory: "services", homicoSubcategory: "smart-home", categoryKa: "სერვისები", subcategoryKa: "ჭკვიანი სახლი", homicoType: "professional" },
+
+  // Locksmith
+  { categoryId: 180, slug: "მანქანის-გასაღების-დამზადება", homicoCategory: "services", homicoSubcategory: "locksmith", categoryKa: "სერვისები", subcategoryKa: "გასაღებების დამზადება", homicoType: "service" },
+
+  // ── TOOL RENTALS ──────────────────────────
+
+  { categoryId: 16, slug: "ტრაქტორის-დაქირავება", homicoCategory: "rentals", homicoSubcategory: "heavy-equipment", categoryKa: "გაქირავება", subcategoryKa: "მძიმე ტექნიკა", homicoType: "tool-rental" },
+  { categoryId: 22, slug: "ამწე-ლიფტი", homicoCategory: "rentals", homicoSubcategory: "crane-lift", categoryKa: "გაქირავება", subcategoryKa: "ამწე/კრანი", homicoType: "tool-rental" },
+  { categoryId: 202, slug: "ამწე-კალათა", homicoCategory: "rentals", homicoSubcategory: "crane-lift", categoryKa: "გაქირავება", subcategoryKa: "ამწე/კრანი", homicoType: "tool-rental" },
+  { categoryId: 406, slug: "ელექტრო-ამწე-კალათა", homicoCategory: "rentals", homicoSubcategory: "crane-lift", categoryKa: "გაქირავება", subcategoryKa: "ამწე/კრანი", homicoType: "tool-rental" },
+  { categoryId: 408, slug: "ამწე-კრანი", homicoCategory: "rentals", homicoSubcategory: "crane-lift", categoryKa: "გაქირავება", subcategoryKa: "ამწე/კრანი", homicoType: "tool-rental" },
+  { categoryId: 203, slug: "კომპრესორის-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "compressor", categoryKa: "გაქირავება", subcategoryKa: "კომპრესორი", homicoType: "tool-rental" },
+  { categoryId: 195, slug: "სატვირთოს-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "equipment", categoryKa: "გაქირავება", subcategoryKa: "აღჭურვილობა", homicoType: "tool-rental" },
+  { categoryId: 200, slug: "სამშენებლოსარემონტო-ინვენტარის-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "equipment", categoryKa: "გაქირავება", subcategoryKa: "აღჭურვილობა", homicoType: "tool-rental" },
+  { categoryId: 366, slug: "ტექნიკის-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "equipment", categoryKa: "გაქირავება", subcategoryKa: "აღჭურვილობა", homicoType: "tool-rental" },
+  { categoryId: 199, slug: "სამედიცინო-ინვენტარის-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "equipment", categoryKa: "გაქირავება", subcategoryKa: "აღჭურვილობა", homicoType: "tool-rental" },
+  { categoryId: 312, slug: "ბიო-ტულატების-გაქირავება", homicoCategory: "rentals", homicoSubcategory: "equipment", categoryKa: "გაქირავება", subcategoryKa: "აღჭურვილობა", homicoType: "tool-rental" },
+];
+
+// ============================================================
 // Normalized output type
 // ============================================================
 
@@ -324,14 +576,14 @@ interface NormalizedProvider {
   servisebiId: number;
   type: HomicoType;
   name: string;
-  phone: string;           // +995XXXXXXXXX
+  phone: string;
   city: string | null;
-  cityKey: string | null;  // tbilisi, batumi, kutaisi...
-  category: string;        // Homico category key
-  subcategory: string;     // Homico subcategory key
+  cityKey: string | null;
+  category: string;
+  subcategory: string;
   categoryKa: string;
   subcategoryKa: string;
-  originalCategory: string | null;  // servisebi.ge category (for debugging)
+  originalCategory: string | null;
   rating: number;
   reviewCount: number;
 }
@@ -394,7 +646,6 @@ function classify(category: string | null, name: string): CategoryMapping | null
     }
   }
 
-  // Skip irrelevant categories entirely
   if (!bestMapping || bestMapping.skip) return null;
 
   return bestMapping;
@@ -421,14 +672,12 @@ async function scrapePage(productId: number): Promise<Omit<NormalizedProvider, "
       { maxRedirects: 5 },
     );
 
-    // Detect redirect to homepage
     if (data.includes("<title>სერვისები | servisebi</title>") || !data.includes("product-card")) {
       return null;
     }
 
     const $ = cheerio.load(data);
 
-    // Name
     const clientLink = $('a[href^="/client/"]').first();
     const rawName = clientLink.length
       ? clientLink.clone().children().remove().end().text().trim() || clientLink.text().trim()
@@ -436,23 +685,19 @@ async function scrapePage(productId: number): Promise<Omit<NormalizedProvider, "
     const name = rawName.replace(/\s+/g, " ").trim();
     if (!name) return null;
 
-    // City
     const rawCity = $(".product-card-location").first().text().trim() || null;
     const cleanCity = rawCity ? rawCity.replace(/\s+/g, " ").trim().split(",")[0].trim() : null;
     const { city, cityKey } = normalizeCity(cleanCity);
 
-    // Category
     const rawCat = $(".product-card-tag").first().text().trim() || null;
     const originalCategory = rawCat ? rawCat.replace(/\s+/g, " ").trim() : null;
 
-    // Rating
     const ratingText = $(".rating-counter").text().trim();
     const rm = ratingText.match(/([\d.]+)/);
     const rating = rm ? parseFloat(rm[1]) : 0;
     const rvm = ratingText.match(/\((\d+)\)/);
     const reviewCount = rvm ? parseInt(rvm[1], 10) : 0;
 
-    // Classify — skip irrelevant categories
     const mapping = classify(originalCategory, name);
     if (!mapping) return null;
 
@@ -488,15 +733,137 @@ async function revealPhone(productId: number): Promise<string | null> {
 }
 
 // ============================================================
+// Category page crawler
+// ============================================================
+
+async function scrapeCategoryPage(categoryId: number, slug: string, page: number): Promise<number[]> {
+  try {
+    const url = `https://servisebi.ge/ka/product/${categoryId}/${slug}?page=${page}`;
+    const { data } = await http.get(url, { maxRedirects: 5 });
+
+    if (!data || typeof data !== "string") return [];
+
+    const $ = cheerio.load(data);
+    const productIds: number[] = [];
+
+    $('a[href*="/ka/product/detail/"]').each((_: number, el: any) => {
+      const href = $(el).attr("href") || "";
+      const match = href.match(/\/ka\/product\/detail\/(\d+)\//);
+      if (match) {
+        const id = parseInt(match[1], 10);
+        if (!isNaN(id) && !productIds.includes(id)) {
+          productIds.push(id);
+        }
+      }
+    });
+
+    return productIds;
+  } catch {
+    return [];
+  }
+}
+
+async function processProduct(
+  productId: number,
+  phoneMap: Map<string, NormalizedProvider>,
+  seenIds: Set<number>,
+  categoryOverride: CategoryPageEntry | null,
+): Promise<{ found: boolean; skipped: boolean }> {
+  if (seenIds.has(productId)) return { found: false, skipped: true };
+  seenIds.add(productId);
+
+  const listing = await scrapePage(productId);
+  if (!listing) return { found: false, skipped: true };
+
+  const phone = await revealPhone(productId);
+  if (!phone) return { found: false, skipped: true };
+
+  const fullPhone = `+995${phone}`;
+
+  // Apply category override from CATEGORY_PAGES if available (takes priority over keyword classify)
+  let finalListing = listing;
+  if (categoryOverride) {
+    finalListing = {
+      ...listing,
+      type: categoryOverride.homicoType,
+      category: categoryOverride.homicoCategory,
+      subcategory: categoryOverride.homicoSubcategory,
+      categoryKa: categoryOverride.categoryKa,
+      subcategoryKa: categoryOverride.subcategoryKa,
+    };
+  }
+
+  if (!phoneMap.has(fullPhone)) {
+    phoneMap.set(fullPhone, { ...finalListing, phone: fullPhone } as NormalizedProvider);
+  }
+
+  const typeTag = finalListing.type.toUpperCase().padEnd(13);
+  console.log(
+    `[${productId}] ${typeTag} ${finalListing.name} | ${fullPhone} | ${finalListing.city || "?"} | ${finalListing.categoryKa}->${finalListing.subcategoryKa}`,
+  );
+
+  return { found: true, skipped: false };
+}
+
+async function crawlCategory(
+  entry: CategoryPageEntry,
+  phoneMap: Map<string, NormalizedProvider>,
+  seenIds: Set<number>,
+  stats: { total: number; skipped: number },
+  outputDir: string,
+): Promise<void> {
+  console.log(`\n  -- Crawling category ${entry.categoryId}: ${entry.slug} (${entry.homicoCategory}/${entry.homicoSubcategory})`);
+
+  let page = 1;
+  let totalForCategory = 0;
+
+  while (true) {
+    const productIds = await scrapeCategoryPage(entry.categoryId, entry.slug, page);
+
+    if (productIds.length === 0) {
+      if (page === 1) {
+        console.log(`     No listings found on page 1, skipping category`);
+      } else {
+        console.log(`     No more listings on page ${page}, done (${totalForCategory} found in category)`);
+      }
+      break;
+    }
+
+    console.log(`     Page ${page}: ${productIds.length} listings`);
+
+    for (const id of productIds) {
+      const result = await processProduct(id, phoneMap, seenIds, entry);
+      if (result.found) {
+        stats.total++;
+        totalForCategory++;
+      } else if (result.skipped) {
+        stats.skipped++;
+      }
+
+      // Save every 50 new finds
+      if (stats.total > 0 && stats.total % 50 === 0) {
+        saveFiles(phoneMap, outputDir);
+        console.log(`  -- Saved ${phoneMap.size} providers to disk`);
+      }
+
+      await sleep(delay);
+    }
+
+    page++;
+    await sleep(delay);
+  }
+}
+
+// ============================================================
 // Output
 // ============================================================
 
 const TYPE_LABELS: Record<HomicoType, string> = {
-  professional: "👷 PROFESSIONALS",
-  service: "🚗 SERVICES",
-  "tool-rental": "🔧 TOOL RENTALS",
-  shop: "🏪 SHOPS",
-  other: "📋 OTHER",
+  professional: "PROFESSIONALS",
+  service: "SERVICES",
+  "tool-rental": "TOOL RENTALS",
+  shop: "SHOPS",
+  other: "OTHER",
 };
 
 // ============================================================
@@ -517,14 +884,9 @@ function saveFiles(phoneMap: Map<string, NormalizedProvider>, outputDir: string)
   return { providers, byType };
 }
 
-async function main() {
-  console.log(`\n🔍 Scraping servisebi.ge  IDs ${startId}→${endId}  (delay: ${delay}ms)\n`);
-
-  const outputDir = resolve(__dirname, "../scrape-output");
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-  // Load existing data to avoid duplicates across runs
+function loadExisting(outputDir: string): Map<string, NormalizedProvider> {
   const phoneMap = new Map<string, NormalizedProvider>();
+  if (!fs.existsSync(outputDir)) return phoneMap;
   for (const file of fs.readdirSync(outputDir).filter((f) => f.endsWith(".json"))) {
     try {
       const existing: NormalizedProvider[] = JSON.parse(fs.readFileSync(resolve(outputDir, file), "utf-8"));
@@ -533,53 +895,76 @@ async function main() {
       }
     } catch {}
   }
+  return phoneMap;
+}
+
+async function main() {
+  console.log(`\nScraping servisebi.ge  mode=${mode}  delay=${delay}ms\n`);
+
+  const outputDir = resolve(__dirname, "../scrape-output");
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  // Load existing data to resume / avoid duplicates
+  const phoneMap = loadExisting(outputDir);
   if (phoneMap.size > 0) {
     console.log(`  Loaded ${phoneMap.size} existing providers (will skip duplicates)\n`);
   }
 
-  let total = 0;
-  let skipped = 0;
+  // Track already-processed product IDs to avoid re-scraping within this run
+  const seenIds = new Set<number>();
 
-  for (let id = startId; id <= endId; id++) {
-    const listing = await scrapePage(id);
+  // Pre-populate seenIds from existing data
+  for (const p of phoneMap.values()) {
+    seenIds.add(p.servisebiId);
+  }
 
-    if (!listing) {
-      skipped++;
-      if ((id - startId) % 500 === 0 && id > startId) {
-        console.log(`  ... ${id}/${endId} | found: ${total} | unique: ${phoneMap.size} | skipped: ${skipped}`);
+  const stats = { total: 0, skipped: 0 };
+
+  // ── Phase 1: Category-based crawling ──
+  if (mode === "categories" || mode === "all") {
+    console.log(`=== PHASE 1: Crawling ${CATEGORY_PAGES.length} category pages ===\n`);
+
+    for (const entry of CATEGORY_PAGES) {
+      await crawlCategory(entry, phoneMap, seenIds, stats, outputDir);
+    }
+
+    // Save after all categories
+    saveFiles(phoneMap, outputDir);
+    console.log(`\n  Category crawl complete. Total: ${stats.total} | Unique phones: ${phoneMap.size}\n`);
+  }
+
+  // ── Phase 2: ID-based iteration (legacy) ──
+  if (mode === "ids" || mode === "all") {
+    console.log(`=== PHASE 2: Iterating IDs ${startId} -> ${endId} ===\n`);
+
+    for (let id = startId; id <= endId; id++) {
+      if (seenIds.has(id)) {
+        if ((id - startId) % 500 === 0 && id > startId) {
+          console.log(`  ... ${id}/${endId} | found: ${stats.total} | unique: ${phoneMap.size} | skipped: ${stats.skipped}`);
+        }
+        await sleep(80);
+        continue;
       }
-      await sleep(80);
-      continue;
+
+      const result = await processProduct(id, phoneMap, seenIds, null);
+      if (result.found) {
+        stats.total++;
+      } else {
+        stats.skipped++;
+      }
+
+      if ((id - startId) % 500 === 0 && id > startId) {
+        console.log(`  ... ${id}/${endId} | found: ${stats.total} | unique: ${phoneMap.size} | skipped: ${stats.skipped}`);
+      }
+
+      // Save every 50 new finds
+      if (stats.total > 0 && stats.total % 50 === 0) {
+        saveFiles(phoneMap, outputDir);
+        console.log(`  -- Saved ${phoneMap.size} providers to disk`);
+      }
+
+      await sleep(result.found ? delay : 80);
     }
-
-    // Reveal phone
-    const phone = await revealPhone(id);
-    if (!phone) {
-      skipped++;
-      await sleep(delay);
-      continue;
-    }
-
-    const fullPhone = `+995${phone}`;
-    total++;
-
-    // Deduplicate by phone
-    if (!phoneMap.has(fullPhone)) {
-      phoneMap.set(fullPhone, { ...listing, phone: fullPhone } as NormalizedProvider);
-    }
-
-    const typeTag = listing.type.toUpperCase().padEnd(13);
-    console.log(
-      `[${id}] ${typeTag} ${listing.name} | ${fullPhone} | ${listing.city || "?"} | ${listing.categoryKa}→${listing.subcategoryKa}`,
-    );
-
-    // Save every 50 new finds
-    if (total % 50 === 0) {
-      saveFiles(phoneMap, outputDir);
-      console.log(`  💾 Saved ${phoneMap.size} providers to disk`);
-    }
-
-    await sleep(delay);
   }
 
   // Final save
@@ -589,10 +974,10 @@ async function main() {
   const counts: Record<string, number> = {};
   providers.forEach((p) => { counts[p.type] = (counts[p.type] || 0) + 1; });
 
-  console.log(`\n✅ DONE\n`);
-  console.log(`  Total found:     ${total}`);
+  console.log(`\nDONE\n`);
+  console.log(`  Total found:     ${stats.total}`);
   console.log(`  Unique phones:   ${providers.length}`);
-  console.log(`  Skipped:         ${skipped}`);
+  console.log(`  Skipped:         ${stats.skipped}`);
   console.log(`  ─────────────────────────`);
   for (const [type, label] of Object.entries(TYPE_LABELS)) {
     console.log(`  ${label}: ${counts[type] || 0}`);
@@ -600,7 +985,7 @@ async function main() {
   console.log(`\n  Files saved to: ${outputDir}/`);
   for (const [type, items] of byType) {
     const fname = type === "tool-rental" ? "tool-rentals" : `${type}s`;
-    console.log(`  → ${fname}.json (${items.length})`);
+    console.log(`  -> ${fname}.json (${items.length})`);
   }
 }
 
