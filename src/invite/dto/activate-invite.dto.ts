@@ -1,4 +1,4 @@
-import { IsString } from "class-validator";
+import { IsOptional, IsString, MinLength } from "class-validator";
 
 export class ActivateInviteDto {
   @IsString()
@@ -9,4 +9,9 @@ export class ActivateInviteDto {
 
   @IsString()
   code: string;
+
+  @IsString()
+  @MinLength(6)
+  @IsOptional()
+  password?: string;
 }

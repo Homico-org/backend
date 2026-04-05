@@ -7,6 +7,7 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { JwtService } from "@nestjs/jwt";
 import { Model } from "mongoose";
+import * as bcrypt from "bcrypt";
 import { InviteToken } from "./schemas/invite-token.schema";
 import { User, UserRole } from "../users/schemas/user.schema";
 import { VerificationService } from "../verification/verification.service";
@@ -108,12 +109,20 @@ export class InviteService {
       type: OtpType.PHONE,
     });
 
+    // Hash password if provided
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
+
     // Check if user already exists
     const existing = await this.userModel.findOne({ phone: dto.phone });
 
     if (existing) {
       if (existing.role === UserRole.PRO) {
-        // Already a pro — just activate invite and return token
+        // Already a pro — update password if provided, activate invite
+        if (hashedPassword) existing.password = hashedPassword;
+        await existing.save();
+
         invite.status = "activated";
         invite.activatedAt = new Date();
         invite.userId = existing._id;
@@ -134,6 +143,7 @@ export class InviteService {
       existing.isPhoneVerified = true;
       (existing as any).phoneVerifiedAt = new Date();
       existing.registrationStep = 1;
+      if (hashedPassword) existing.password = hashedPassword;
       await existing.save();
 
       invite.status = "activated";
@@ -167,6 +177,7 @@ export class InviteService {
       registrationStep: 1,
       avgRating: invite.rating || 0,
       totalReviews: invite.reviewCount || 0,
+      ...(hashedPassword ? { password: hashedPassword } : {}),
     }).save();
 
     invite.status = "activated";
