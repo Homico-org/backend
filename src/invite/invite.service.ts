@@ -7,6 +7,7 @@ import {
 import { InjectModel } from "@nestjs/mongoose";
 import { JwtService } from "@nestjs/jwt";
 import { Model } from "mongoose";
+import * as bcrypt from "bcrypt";
 import { InviteToken } from "./schemas/invite-token.schema";
 import { User, UserRole } from "../users/schemas/user.schema";
 import { VerificationService } from "../verification/verification.service";
@@ -26,12 +27,11 @@ export class InviteService {
     private jwtService: JwtService,
   ) {}
 
-  private signToken(user: any) {
-    return this.jwtService.sign({
-      sub: user._id,
-      email: user.email,
-      role: user.role,
-    });
+  private generateTokens(user: any) {
+    const payload = { sub: user._id, email: user.email, role: user.role };
+    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
+    return { access_token, refresh_token };
   }
 
   private buildUserResponse(user: any) {
@@ -108,19 +108,27 @@ export class InviteService {
       type: OtpType.PHONE,
     });
 
+    // Hash password if provided
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
+
     // Check if user already exists
     const existing = await this.userModel.findOne({ phone: dto.phone });
 
     if (existing) {
       if (existing.role === UserRole.PRO) {
-        // Already a pro — just activate invite and return token
+        // Already a pro — update password if provided, activate invite
+        if (hashedPassword) existing.password = hashedPassword;
+        await existing.save();
+
         invite.status = "activated";
         invite.activatedAt = new Date();
         invite.userId = existing._id;
         await invite.save();
 
         return {
-          access_token: this.signToken(existing),
+          ...this.generateTokens(existing),
           user: this.buildUserResponse(existing),
         };
       }
@@ -134,6 +142,7 @@ export class InviteService {
       existing.isPhoneVerified = true;
       (existing as any).phoneVerifiedAt = new Date();
       existing.registrationStep = 1;
+      if (hashedPassword) existing.password = hashedPassword;
       await existing.save();
 
       invite.status = "activated";
@@ -142,7 +151,7 @@ export class InviteService {
       await invite.save();
 
       return {
-        access_token: this.signToken(existing),
+        ...this.generateTokens(existing),
         user: this.buildUserResponse(existing),
       };
     }
@@ -165,8 +174,9 @@ export class InviteService {
       isPhoneVerified: true,
       phoneVerifiedAt: new Date(),
       registrationStep: 1,
-      avgRating: invite.rating || 0,
-      totalReviews: invite.reviewCount || 0,
+      avgRating: 0,
+      totalReviews: 0,
+      ...(hashedPassword ? { password: hashedPassword } : {}),
     }).save();
 
     invite.status = "activated";
@@ -175,7 +185,7 @@ export class InviteService {
     await invite.save();
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
   }

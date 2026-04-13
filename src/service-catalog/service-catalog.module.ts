@@ -6,6 +6,7 @@ import {
   ServiceCatalogCategory,
   ServiceCatalogCategorySchema,
 } from './schemas/service-catalog.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
   imports: [
@@ -13,6 +14,10 @@ import {
       {
         name: ServiceCatalogCategory.name,
         schema: ServiceCatalogCategorySchema,
+      },
+      {
+        name: User.name,
+        schema: UserSchema,
       },
     ]),
   ],

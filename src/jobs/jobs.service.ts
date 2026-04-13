@@ -96,7 +96,60 @@ export class JobsService {
       }
     }
 
+    // Notify matching professionals about the new job
+    this.notifyMatchingPros(savedJob).catch((err) =>
+      console.error("Failed to notify matching pros:", err),
+    );
+
     return savedJob;
+  }
+
+  /**
+   * Find professionals whose services match the job's category/subcategory
+   * and send them a notification about the new job.
+   */
+  private async notifyMatchingPros(job: Job): Promise<void> {
+    const subcategory = (job as any).subcategory || (job as any).category;
+    if (!subcategory) return;
+
+    // Find verified pros matching the job's subcategory
+    const matchingPros = await this.userModel
+      .find({
+        role: "pro",
+        verificationStatus: "verified",
+        isDeactivated: { $ne: true },
+        $or: [
+          { selectedSubcategories: subcategory },
+          { subcategories: subcategory },
+          { "servicePricing.subcategoryKey": subcategory },
+        ],
+        _id: { $ne: (job as any).clientId },
+      })
+      .select("_id")
+      .limit(50)
+      .lean()
+      .exec();
+
+    if (matchingPros.length === 0) return;
+
+    // Send notification to each matching pro
+    for (const pro of matchingPros) {
+      try {
+        await this.notificationsService.notify(
+          pro._id.toString(),
+          NotificationType.JOB_MATCH,
+          (job as any).title || "New job posted",
+          `${(job as any).category || ""} — ${subcategory}${(job as any).budgetMin ? ` · ${(job as any).budgetMin}₾` : (job as any).budgetMax ? ` · ${(job as any).budgetMax}₾` : ''}`,
+          {
+            referenceId: (job as any)._id?.toString(),
+            referenceModel: "Job",
+            link: `/jobs/${(job as any)._id}`,
+          },
+        );
+      } catch {
+        // Notification failed for this pro — continue with others
+      }
+    }
   }
 
   async findAllJobs(filters?: {
@@ -876,17 +929,6 @@ export class JobsService {
       throw new NotFoundException("სამუშაო ვერ მოიძებნა");
     }
 
-    // Only allow proposals for high-level categories (design, architecture)
-    const HIGH_LEVEL_CATEGORIES = ["design", "architecture"];
-    if (
-      !job.category ||
-      !HIGH_LEVEL_CATEGORIES.includes(job.category.toLowerCase())
-    ) {
-      throw new ForbiddenException(
-        "წინადადებების გაგზავნა შესაძლებელია მხოლოდ დიზაინისა და არქიტექტურის კატეგორიის სამუშაოებზე. სხვა კატეგორიებისთვის გამოიყენეთ კომენტარები.",
-      );
-    }
-
     // Prevent submitting proposal to own job
     if (job.clientId.toString() === proId) {
       throw new ForbiddenException("საკუთარ თავს ვერ გაუგზავნით წინადადებას");
@@ -934,6 +976,34 @@ export class JobsService {
       );
     } catch (error) {
       console.error("Failed to send new proposal notification:", error);
+    }
+
+    // Update pro's average response time
+    try {
+      const allProposals = await this.proposalModel
+        .find({ proId })
+        .populate("jobId", "createdAt")
+        .lean()
+        .exec();
+      const responseTimes = allProposals
+        .filter((p: any) => p.jobId?.createdAt && p.createdAt)
+        .map((p: any) => {
+          const proposalTime = new Date(p.createdAt).getTime();
+          const jobTime = new Date(p.jobId.createdAt).getTime();
+          return (proposalTime - jobTime) / (1000 * 60 * 60); // hours
+        })
+        .filter((h: number) => h >= 0);
+      if (responseTimes.length > 0) {
+        const avg =
+          responseTimes.reduce((a: number, b: number) => a + b, 0) /
+          responseTimes.length;
+        await this.userModel.updateOne(
+          { _id: proId },
+          { avgResponseTime: Math.round(avg * 10) / 10 },
+        );
+      }
+    } catch (error) {
+      console.error("Failed to update avg response time:", error);
     }
 
     return proposal;

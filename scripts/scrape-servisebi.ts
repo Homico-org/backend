@@ -665,7 +665,7 @@ const http = axios.create({
   },
 });
 
-async function scrapePage(productId: number): Promise<Omit<NormalizedProvider, "phone"> & { phone: string | null } | null> {
+async function scrapePage(productId: number, allowUnclassified = false): Promise<Omit<NormalizedProvider, "phone"> & { phone: string | null } | null> {
   try {
     const { data } = await http.get(
       `https://servisebi.ge/ka/product/detail/${productId}/x`,
@@ -699,19 +699,19 @@ async function scrapePage(productId: number): Promise<Omit<NormalizedProvider, "
     const reviewCount = rvm ? parseInt(rvm[1], 10) : 0;
 
     const mapping = classify(originalCategory, name);
-    if (!mapping) return null;
+    if (!mapping && !allowUnclassified) return null;
 
     return {
       servisebiId: productId,
-      type: mapping.homicoType,
+      type: mapping?.homicoType || "professional",
       name,
       phone: null,
       city,
       cityKey,
-      category: mapping.category,
-      subcategory: mapping.subcategory,
-      categoryKa: mapping.categoryKa,
-      subcategoryKa: mapping.subcategoryKa,
+      category: mapping?.category || "unknown",
+      subcategory: mapping?.subcategory || "unknown",
+      categoryKa: mapping?.categoryKa || "",
+      subcategoryKa: mapping?.subcategoryKa || "",
       originalCategory,
       rating,
       reviewCount,
@@ -736,28 +736,65 @@ async function revealPhone(productId: number): Promise<string | null> {
 // Category page crawler
 // ============================================================
 
-async function scrapeCategoryPage(categoryId: number, slug: string, page: number): Promise<number[]> {
+interface CategoryCard {
+  productId: number;
+  name: string;
+  city: string | null;
+  cityKey: string | null;
+  rating: number;
+  reviewCount: number;
+}
+
+function scrapeCategoryPageCards(html: string): CategoryCard[] {
+  const $ = cheerio.load(html);
+  const cards: CategoryCard[] = [];
+  const seen = new Set<number>();
+
+  $(".product-card").each((_: number, card: any) => {
+    // Get product ID from phone button or view link
+    const phoneBtn = $(card).find("[data-product-id]").first();
+    const viewLink = $(card).find("a[href*='/product/view/']").first();
+
+    let productId = 0;
+    if (phoneBtn.length) {
+      productId = parseInt(phoneBtn.attr("data-product-id") || "0", 10);
+    } else if (viewLink.length) {
+      const m = (viewLink.attr("href") || "").match(/\/product\/view\/(\d+)/);
+      if (m) productId = parseInt(m[1], 10);
+    }
+    if (!productId || seen.has(productId)) return;
+    seen.add(productId);
+
+    // Provider name from data attribute or client name element
+    const name = phoneBtn.attr("data-product-client-name")
+      || $(card).find(".product-card-client-name").first().text().trim()
+      || "";
+    if (!name) return;
+
+    // City
+    const rawCity = $(card).find(".product-card-location").first().text().trim() || null;
+    const cleanCity = rawCity ? rawCity.replace(/\s+/g, " ").trim().split(",")[0].trim() : null;
+    const { city, cityKey } = normalizeCity(cleanCity);
+
+    // Rating
+    const ratingText = $(card).find(".rating-counter").text().trim();
+    const rm = ratingText.match(/([\d.]+)/);
+    const rating = rm ? parseFloat(rm[1]) : 0;
+    const rvm = ratingText.match(/\((\d+)\)/);
+    const reviewCount = rvm ? parseInt(rvm[1], 10) : 0;
+
+    cards.push({ productId, name, city, cityKey, rating, reviewCount });
+  });
+
+  return cards;
+}
+
+async function fetchCategoryPage(categoryId: number, slug: string): Promise<CategoryCard[]> {
   try {
-    const url = `https://servisebi.ge/ka/product/${categoryId}/${slug}?page=${page}`;
+    const url = `https://servisebi.ge/ka/product/${categoryId}/${slug}`;
     const { data } = await http.get(url, { maxRedirects: 5 });
-
     if (!data || typeof data !== "string") return [];
-
-    const $ = cheerio.load(data);
-    const productIds: number[] = [];
-
-    $('a[href*="/ka/product/detail/"]').each((_: number, el: any) => {
-      const href = $(el).attr("href") || "";
-      const match = href.match(/\/ka\/product\/detail\/(\d+)\//);
-      if (match) {
-        const id = parseInt(match[1], 10);
-        if (!isNaN(id) && !productIds.includes(id)) {
-          productIds.push(id);
-        }
-      }
-    });
-
-    return productIds;
+    return scrapeCategoryPageCards(data);
   } catch {
     return [];
   }
@@ -772,7 +809,7 @@ async function processProduct(
   if (seenIds.has(productId)) return { found: false, skipped: true };
   seenIds.add(productId);
 
-  const listing = await scrapePage(productId);
+  const listing = await scrapePage(productId, !!categoryOverride);
   if (!listing) return { found: false, skipped: true };
 
   const phone = await revealPhone(productId);
@@ -793,16 +830,27 @@ async function processProduct(
     };
   }
 
-  if (!phoneMap.has(fullPhone)) {
+  const isNew = !phoneMap.has(fullPhone);
+
+  if (isNew) {
     phoneMap.set(fullPhone, { ...finalListing, phone: fullPhone } as NormalizedProvider);
+  } else if (categoryOverride) {
+    // Category page crawl: update existing provider's category to match the category page
+    const existing = phoneMap.get(fullPhone)!;
+    existing.type = categoryOverride.homicoType as any;
+    existing.category = categoryOverride.homicoCategory;
+    existing.subcategory = categoryOverride.homicoSubcategory;
+    existing.categoryKa = categoryOverride.categoryKa;
+    existing.subcategoryKa = categoryOverride.subcategoryKa;
   }
 
   const typeTag = finalListing.type.toUpperCase().padEnd(13);
+  const marker = isNew ? "" : " (reclassified)";
   console.log(
-    `[${productId}] ${typeTag} ${finalListing.name} | ${fullPhone} | ${finalListing.city || "?"} | ${finalListing.categoryKa}->${finalListing.subcategoryKa}`,
+    `[${productId}] ${typeTag} ${finalListing.name} | ${fullPhone} | ${finalListing.city || "?"} | ${finalListing.categoryKa}->${finalListing.subcategoryKa}${marker}`,
   );
 
-  return { found: true, skipped: false };
+  return { found: isNew, skipped: false };
 }
 
 async function crawlCategory(
@@ -814,43 +862,74 @@ async function crawlCategory(
 ): Promise<void> {
   console.log(`\n  -- Crawling category ${entry.categoryId}: ${entry.slug} (${entry.homicoCategory}/${entry.homicoSubcategory})`);
 
-  let page = 1;
-  let totalForCategory = 0;
+  const cards = await fetchCategoryPage(entry.categoryId, entry.slug);
 
-  while (true) {
-    const productIds = await scrapeCategoryPage(entry.categoryId, entry.slug, page);
+  if (cards.length === 0) {
+    console.log(`     No listings found, skipping`);
+    return;
+  }
 
-    if (productIds.length === 0) {
-      if (page === 1) {
-        console.log(`     No listings found on page 1, skipping category`);
-      } else {
-        console.log(`     No more listings on page ${page}, done (${totalForCategory} found in category)`);
-      }
-      break;
+  console.log(`     Found ${cards.length} listings`);
+  let newCount = 0;
+  let reclassCount = 0;
+
+  for (const card of cards) {
+    if (seenIds.has(card.productId)) {
+      stats.skipped++;
+      continue;
     }
+    seenIds.add(card.productId);
 
-    console.log(`     Page ${page}: ${productIds.length} listings`);
-
-    for (const id of productIds) {
-      const result = await processProduct(id, phoneMap, seenIds, entry);
-      if (result.found) {
-        stats.total++;
-        totalForCategory++;
-      } else if (result.skipped) {
-        stats.skipped++;
-      }
-
-      // Save every 50 new finds
-      if (stats.total > 0 && stats.total % 50 === 0) {
-        saveFiles(phoneMap, outputDir);
-        console.log(`  -- Saved ${phoneMap.size} providers to disk`);
-      }
-
+    // Reveal phone
+    const phone = await revealPhone(card.productId);
+    if (!phone) {
       await sleep(delay);
+      continue;
+    }
+    const fullPhone = `+995${phone}`;
+
+    const provider: NormalizedProvider = {
+      servisebiId: card.productId,
+      type: entry.homicoType as any,
+      name: card.name,
+      phone: fullPhone,
+      city: card.city,
+      cityKey: card.cityKey,
+      category: entry.homicoCategory,
+      subcategory: entry.homicoSubcategory,
+      categoryKa: entry.categoryKa,
+      subcategoryKa: entry.subcategoryKa,
+      originalCategory: entry.slug,
+      rating: card.rating,
+      reviewCount: card.reviewCount,
+    };
+
+    if (!phoneMap.has(fullPhone)) {
+      phoneMap.set(fullPhone, provider);
+      stats.total++;
+      newCount++;
+      console.log(`[${card.productId}] ${entry.homicoType.toUpperCase().padEnd(13)} ${card.name} | ${fullPhone} | ${card.city || "?"} | ${entry.categoryKa}->${entry.subcategoryKa}`);
+    } else {
+      // Reclassify existing provider to this category
+      const existing = phoneMap.get(fullPhone)!;
+      existing.type = entry.homicoType as any;
+      existing.category = entry.homicoCategory;
+      existing.subcategory = entry.homicoSubcategory;
+      existing.categoryKa = entry.categoryKa;
+      existing.subcategoryKa = entry.subcategoryKa;
+      reclassCount++;
     }
 
-    page++;
+    if (stats.total > 0 && stats.total % 50 === 0) {
+      saveFiles(phoneMap, outputDir);
+      console.log(`  -- Saved ${phoneMap.size} providers to disk`);
+    }
+
     await sleep(delay);
+  }
+
+  if (newCount > 0 || reclassCount > 0) {
+    console.log(`     → ${newCount} new, ${reclassCount} reclassified`);
   }
 }
 

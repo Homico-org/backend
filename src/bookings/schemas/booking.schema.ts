@@ -4,6 +4,7 @@ import { Document, Types } from 'mongoose';
 export enum BookingStatus {
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
+  IN_PROGRESS = 'in_progress',
   CANCELLED = 'cancelled',
   COMPLETED = 'completed',
 }
@@ -40,6 +41,39 @@ export class Booking extends Document {
 
   @Prop()
   cancelReason?: string;
+
+  @Prop({ type: [Object], default: [] })
+  services: {
+    serviceKey: string;
+    name: string;
+    nameKa: string;
+    quantity: number;
+    unitPrice: number;
+    unit: string;
+    discount: number;
+    subtotal: number;
+  }[];
+
+  @Prop({ default: 0 })
+  totalAmount: number;
+
+  @Prop()
+  address?: string;
+
+  @Prop({ type: [String], default: [] })
+  beforePhotos: string[];
+
+  @Prop({ type: [String], default: [] })
+  afterPhotos: string[];
+
+  @Prop({ type: [String], default: [] })
+  videos: string[];
+
+  @Prop()
+  startedAt: Date;
+
+  @Prop()
+  completedAt: Date;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);

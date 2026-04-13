@@ -4,6 +4,21 @@ import { Model, Types } from 'mongoose';
 import { PortfolioItem, ProjectSource, ProjectStatus, ProjectType } from './schemas/portfolio-item.schema';
 import { CreatePortfolioItemDto } from './dto/create-portfolio-item.dto';
 
+export interface CreateFromBookingData {
+  proId: string;
+  bookingId: string;
+  title: string;
+  images: string[];
+  beforeAfterPairs?: { before: string; after: string }[];
+  category?: string;
+  location?: string;
+  clientId?: string;
+  clientName?: string;
+  completedDate?: Date;
+  rating?: number;
+  review?: string;
+}
+
 export interface CreateFromJobData {
   proId: string;
   jobId: string;
@@ -47,6 +62,7 @@ export class PortfolioService {
   async findByProId(proId: string): Promise<PortfolioItem[]> {
     return this.portfolioItemModel
       .find({ proId: new Types.ObjectId(proId) })
+      .populate('clientId', 'name avatar city')
       .sort({ displayOrder: 1, createdAt: -1 })
       .exec();
   }
@@ -124,5 +140,53 @@ export class PortfolioService {
     return this.portfolioItemModel.findOne({
       jobId: new Types.ObjectId(jobId),
     }).exec();
+  }
+
+  // Create portfolio item from a completed Homico booking
+  async createFromBooking(data: CreateFromBookingData): Promise<PortfolioItem> {
+    // Check if portfolio item already exists for this booking
+    const existing = await this.portfolioItemModel.findOne({
+      bookingId: new Types.ObjectId(data.bookingId),
+    }).exec();
+
+    if (existing) {
+      if (data.images && data.images.length > 0) {
+        existing.images = data.images;
+        existing.imageUrl = data.images[0];
+      }
+      if (data.beforeAfterPairs && data.beforeAfterPairs.length > 0) {
+        existing.beforeAfter = data.beforeAfterPairs;
+      }
+      if (data.rating) existing.rating = data.rating;
+      if (data.review) existing.review = data.review;
+      return existing.save();
+    }
+
+    const imageUrl = (data.images && data.images[0])
+      || (data.beforeAfterPairs && data.beforeAfterPairs[0]?.after)
+      || '';
+
+    const item = new this.portfolioItemModel({
+      proId: new Types.ObjectId(data.proId),
+      bookingId: new Types.ObjectId(data.bookingId),
+      title: data.title,
+      description: '',
+      imageUrl,
+      images: data.images,
+      beforeAfter: data.beforeAfterPairs || [],
+      category: data.category,
+      location: data.location,
+      clientId: data.clientId ? new Types.ObjectId(data.clientId) : undefined,
+      clientName: data.clientName,
+      completedDate: data.completedDate || new Date(),
+      projectDate: data.completedDate || new Date(),
+      rating: data.rating,
+      review: data.review,
+      source: ProjectSource.HOMICO,
+      status: ProjectStatus.COMPLETED,
+      projectType: ProjectType.QUICK,
+    });
+
+    return item.save();
   }
 }

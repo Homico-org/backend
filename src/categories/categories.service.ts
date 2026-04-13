@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject, Logger, forwardRef } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { AiService } from "../ai/ai.service";
+import { ServiceCatalogService } from "../service-catalog/service-catalog.service";
 import { Category } from "./schemas/category.schema";
 import {
   CategoryDoc,
@@ -29,6 +30,8 @@ export class CategoriesService {
   constructor(
     @InjectModel(Category.name) private categoryModel: Model<Category>,
     private readonly aiService: AiService,
+    @Inject(forwardRef(() => ServiceCatalogService))
+    private readonly serviceCatalogService: ServiceCatalogService,
   ) {}
 
   // Get all active categories with their subcategories
@@ -232,14 +235,23 @@ export class CategoriesService {
       return { ...cached.result, fromCache: true };
     }
 
-    // Build compact category map for the prompt
-    const categories = await this.findAll();
+    // Build compact service catalog for the prompt (from Service Catalog, not old Categories DB)
+    const catalogCategories = await this.serviceCatalogService.findAllAsCategories();
     const categoryLines: string[] = [];
-    for (const cat of categories) {
+    for (const cat of catalogCategories) {
       for (const sub of cat.subcategories || []) {
-        categoryLines.push(
-          `${cat.key}/${sub.key}: ${sub.name} (${sub.nameKa})`,
-        );
+        const services = sub.services || [];
+        if (services.length > 0) {
+          for (const svc of services) {
+            categoryLines.push(
+              `${cat.key}/${sub.key}/${svc.key}: ${svc.name} (${svc.nameKa})`,
+            );
+          }
+        } else {
+          categoryLines.push(
+            `${cat.key}/${sub.key}: ${sub.name} (${sub.nameKa})`,
+          );
+        }
       }
     }
 
@@ -247,11 +259,11 @@ export class CategoriesService {
       const response = await this.aiService.completionRaw({
         model: "gpt-4o-mini",
         temperature: 0,
-        max_tokens: 100,
+        max_tokens: 200,
         messages: [
           {
             role: "system",
-            content: `You match user search queries to service categories. Reply ONLY with matching "category/subcategory" keys, comma-separated. If no match, reply "none".\n\nCategories:\n${categoryLines.join("\n")}`,
+            content: `You match user search queries to home services. Reply ONLY with matching keys from the list below, comma-separated. Use the most specific level available (service > subcategory). If no match, reply "none".\n\nServices:\n${categoryLines.join("\n")}`,
           },
           {
             role: "user",
@@ -273,11 +285,15 @@ export class CategoriesService {
         .filter(Boolean);
       const subcategories = pairs
         .map((pair) => {
-          const [category, ...rest] = pair.split("/");
-          const key = rest.join("/");
-          return category && key
-            ? { category: category.trim(), key: key.trim() }
-            : null;
+          const parts = pair.split("/").map(p => p.trim());
+          if (parts.length >= 3) {
+            // category/subcategory/service — return service key
+            return { category: parts[0], key: parts[2] };
+          } else if (parts.length === 2) {
+            // category/subcategory
+            return { category: parts[0], key: parts[1] };
+          }
+          return null;
         })
         .filter((v): v is { category: string; key: string } => v !== null);
 

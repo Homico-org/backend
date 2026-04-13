@@ -180,6 +180,24 @@ export class UsersService {
     return user;
   }
 
+  async savePushToken(userId: string, token: string, platform: string): Promise<void> {
+    // Remove existing token if present (prevent duplicates), then add
+    await this.userModel.updateOne(
+      { _id: userId },
+      {
+        $pull: { pushTokens: { token } },
+      },
+    );
+    await this.userModel.updateOne(
+      { _id: userId },
+      {
+        $push: {
+          pushTokens: { token, platform, updatedAt: new Date() },
+        },
+      },
+    );
+  }
+
   async findPublicProfile(id: string) {
     const user = await this.userModel.findById(id).lean().exec();
 
@@ -264,20 +282,24 @@ export class UsersService {
   }
 
   async getDemoAccounts(): Promise<
-    { email: string; role: string; name: string }[]
+    { name: string; phone: string; email: string; role: string; avatar: string; title: string }[]
   > {
     const users = await this.userModel
       .find({
-        email: { $regex: /@demo\.com$/ },
+        email: { $regex: /@demo\.(com|ge)$/ },
       })
-      .select("email role name")
-      .sort({ role: 1, email: 1 })
+      .select("name phone email role avatar title")
+      .sort({ role: 1, name: 1 })
+      .lean()
       .exec();
 
     return users.map((u) => ({
-      email: u.email,
-      role: u.role,
-      name: u.name,
+      name: u.name || '',
+      phone: u.phone || '',
+      email: u.email || '',
+      role: u.role || '',
+      avatar: u.avatar || '',
+      title: (u as Record<string, unknown>).title as string || '',
     }));
   }
 
@@ -1084,6 +1106,9 @@ export class UsersService {
     excludeUserId?: string;
     scheduledDate?: string;
     scheduledSlot?: string;
+    serviceKey?: string;
+    serviceMinPrice?: number;
+    serviceMaxPrice?: number;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1175,7 +1200,8 @@ export class UsersService {
       });
     }
 
-    // Handle multiple subcategories (comma-separated) or single subcategory
+    // Handle multiple subcategories/services (comma-separated) or single
+    // Keys can be subcategory-level OR service-level, so check all relevant fields
     if (filters?.subcategories) {
       const subcatArray = filters.subcategories
         .split(",")
@@ -1187,6 +1213,8 @@ export class UsersService {
             { subcategories: { $in: subcatArray } },
             { selectedSubcategories: { $in: subcatArray } },
             { "servicePricing.subcategoryKey": { $in: subcatArray } },
+            { "servicePricing.serviceKey": { $in: subcatArray } },
+            { "selectedServices.key": { $in: subcatArray } },
           ],
         });
       }
@@ -1196,12 +1224,30 @@ export class UsersService {
           { subcategories: filters.subcategory },
           { selectedSubcategories: filters.subcategory },
           { "servicePricing.subcategoryKey": filters.subcategory },
+          { "servicePricing.serviceKey": filters.subcategory },
+          { "selectedServices.key": filters.subcategory },
         ],
       });
     }
 
     if (filters?.serviceArea) {
       query.serviceAreas = filters.serviceArea;
+    }
+
+    // Service-level filters on servicePricing array
+    if (filters?.serviceKey || filters?.serviceMinPrice !== undefined || filters?.serviceMaxPrice !== undefined) {
+      const elemMatch: any = {};
+      if (filters?.serviceKey) {
+        elemMatch.serviceKey = filters.serviceKey;
+      }
+      elemMatch.isActive = true;
+      if (filters?.serviceMinPrice !== undefined) {
+        elemMatch.price = { ...elemMatch.price, $gte: filters.serviceMinPrice };
+      }
+      if (filters?.serviceMaxPrice !== undefined) {
+        elemMatch.price = { ...elemMatch.price, $lte: filters.serviceMaxPrice };
+      }
+      query.$and.push({ servicePricing: { $elemMatch: elemMatch } });
     }
 
     if (filters?.minRating) {
@@ -1302,27 +1348,87 @@ export class UsersService {
       users = users.slice(skip, skip + limit);
     }
 
-    // Get portfolio counts from PortfolioItem collection for all users
+    // Get portfolio counts + preview images from PortfolioItem collection
     const userIds = users.map((u) => u._id);
-    const portfolioCounts = await this.portfolioItemModel.aggregate([
-      { $match: { proId: { $in: userIds } } },
-      { $group: { _id: "$proId", count: { $sum: 1 } } },
+    const [portfolioCounts, portfolioPreviews] = await Promise.all([
+      this.portfolioItemModel.aggregate([
+        { $match: { proId: { $in: userIds } } },
+        { $group: { _id: "$proId", count: { $sum: 1 } } },
+      ]),
+      // Fetch up to 6 portfolio items per pro for preview media
+      this.portfolioItemModel.aggregate([
+        { $match: { proId: { $in: userIds }, status: 'completed' } },
+        { $sort: { createdAt: -1 } },
+        { $group: {
+          _id: "$proId",
+          items: { $push: { images: "$images", videos: "$videos", beforeAfter: "$beforeAfter" } },
+        }},
+        { $project: { items: { $slice: ["$items", 6] } } },
+      ]),
     ]);
 
-    // Create a map of userId -> portfolioCount
     const portfolioCountMap = new Map<string, number>();
     portfolioCounts.forEach((item) => {
       portfolioCountMap.set(item._id.toString(), item.count);
     });
 
-    // Add portfolioItemCount to each user
+    // Build preview media map: proId -> { images, videos, beforeAfterPairs }
+    const previewMap = new Map<string, {
+      images: string[];
+      videos: string[];
+      beforeAfterPairs: { before: string; after: string }[];
+    }>();
+    portfolioPreviews.forEach((entry) => {
+      const images: string[] = [];
+      const videos: string[] = [];
+      const beforeAfterPairs: { before: string; after: string }[] = [];
+      for (const item of entry.items) {
+        for (const img of (item.images || [])) {
+          if (images.length < 10) images.push(img);
+        }
+        for (const vid of (item.videos || [])) {
+          if (videos.length < 3) videos.push(vid);
+        }
+        for (const ba of (item.beforeAfter || [])) {
+          if (beforeAfterPairs.length < 3) {
+            beforeAfterPairs.push({ before: ba.before, after: ba.after });
+          }
+        }
+      }
+      previewMap.set(entry._id.toString(), { images, videos, beforeAfterPairs });
+    });
+
+    // Add portfolioItemCount and preview media to each user
     const data = users.map((user) => {
       const userObj = user.toObject() as any;
       const portfolioItemCount =
         portfolioCountMap.get(user._id.toString()) || 0;
-      // Use the max of embedded portfolioProjects and separate PortfolioItem count
       const embeddedCount = userObj.portfolioProjects?.length || 0;
       userObj.portfolioItemCount = Math.max(portfolioItemCount, embeddedCount);
+      // Merge preview media: prefer PortfolioItem collection, fall back to embedded
+      const collectionPreview = previewMap.get(user._id.toString());
+      if (collectionPreview && (collectionPreview.images.length > 0 || collectionPreview.beforeAfterPairs.length > 0)) {
+        userObj.portfolioPreviewImages = collectionPreview.images;
+        userObj.portfolioPreviewVideos = collectionPreview.videos;
+        userObj.portfolioPreviewBeforeAfter = collectionPreview.beforeAfterPairs;
+      } else {
+        // Fallback: extract from embedded portfolioProjects
+        const embeddedImages: string[] = [];
+        const embeddedBA: { before: string; after: string }[] = [];
+        for (const proj of (userObj.portfolioProjects || [])) {
+          for (const img of (proj.images || [])) {
+            embeddedImages.push(img);
+          }
+          for (const ba of (proj.beforeAfterPairs || proj.beforeAfter || [])) {
+            if (embeddedBA.length < 3) {
+              embeddedBA.push({ before: ba.before || ba.beforeImage, after: ba.after || ba.afterImage });
+            }
+          }
+        }
+        userObj.portfolioPreviewImages = embeddedImages.slice(0, 10);
+        userObj.portfolioPreviewVideos = [];
+        userObj.portfolioPreviewBeforeAfter = embeddedBA;
+      }
       return userObj;
     });
 
@@ -1555,14 +1661,37 @@ export class UsersService {
       }
     }
 
-    // Pricing numbers: allow explicit unsetting when client sends null (e.g., "by agreement")
-    if (proData.basePrice === null) unsetData.basePrice = "";
-    else if (proData.basePrice !== undefined)
-      updateData.basePrice = proData.basePrice;
+    // Per-service pricing — when present, derive basePrice/maxPrice from it
+    if (proData.servicePricing !== undefined && proData.servicePricing.length > 0) {
+      // Replace entire servicePricing array — old entries are removed
+      updateData.servicePricing = proData.servicePricing;
 
-    if (proData.maxPrice === null) unsetData.maxPrice = "";
-    else if (proData.maxPrice !== undefined)
-      updateData.maxPrice = proData.maxPrice;
+      const activePrices = proData.servicePricing
+        .filter((sp: any) => sp.isActive && typeof sp.price === 'number' && sp.price > 0)
+        .map((sp: any) => sp.price);
+
+      if (activePrices.length > 0) {
+        const minPrice = Math.min(...activePrices);
+        const maxPrice = Math.max(...activePrices);
+        updateData.basePrice = minPrice;
+        updateData.maxPrice = maxPrice;
+        updateData.pricingModel = minPrice !== maxPrice ? 'range' : 'fixed';
+      } else {
+        updateData.basePrice = 0;
+        updateData.maxPrice = 0;
+        updateData.pricingModel = 'byAgreement';
+      }
+    } else {
+      // Legacy pricing: allow explicit unsetting when client sends null
+      if (proData.basePrice === null) unsetData.basePrice = "";
+      else if (proData.basePrice !== undefined)
+        updateData.basePrice = proData.basePrice;
+
+      if (proData.maxPrice === null) unsetData.maxPrice = "";
+      else if (proData.maxPrice !== undefined)
+        updateData.maxPrice = proData.maxPrice;
+    }
+
     if (proData.serviceAreas !== undefined)
       updateData.serviceAreas = proData.serviceAreas;
     if (proData.portfolioProjects !== undefined)

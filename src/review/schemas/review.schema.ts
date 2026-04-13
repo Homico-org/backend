@@ -16,6 +16,10 @@ export class Review extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Job' })
   jobId?: Types.ObjectId;
 
+  // Reference to Booking
+  @Prop({ type: Types.ObjectId, ref: 'Booking' })
+  bookingId?: Types.ObjectId;
+
   // For Homico reviews - the registered client
   @Prop({ type: Types.ObjectId, ref: 'User' })
   clientId?: Types.ObjectId;
@@ -78,4 +82,5 @@ ReviewSchema.index({ proId: 1, createdAt: -1 });
 ReviewSchema.index({ clientId: 1 });
 ReviewSchema.index({ projectId: 1 });
 ReviewSchema.index({ jobId: 1 });
+ReviewSchema.index({ bookingId: 1 });
 ReviewSchema.index({ rating: 1 });

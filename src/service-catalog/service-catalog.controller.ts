@@ -16,7 +16,7 @@ import {
   UpsertSubcategoryDto,
   UpsertVariantDto,
 } from './dto/update-catalog-category.dto';
-import { buildSeedData } from './seed-catalog';
+import { buildSeedData } from './seed-catalog-v2';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -36,6 +36,21 @@ export class ServiceCatalogController {
   @Get('version')
   getVersion() {
     return this.catalogService.getVersion();
+  }
+
+  @Get('by-subcategory/:subcategoryKey')
+  findBySubcategory(@Param('subcategoryKey') subcategoryKey: string) {
+    return this.catalogService.findBySubcategory(subcategoryKey);
+  }
+
+  @Get('as-categories')
+  findAllAsCategories() {
+    return this.catalogService.findAllAsCategories();
+  }
+
+  @Get('as-categories/flat')
+  findAllAsCategoriesFlat() {
+    return this.catalogService.findAllAsCategoriesFlat();
   }
 
   @Get(':categoryKey')
@@ -154,6 +169,13 @@ export class ServiceCatalogController {
   @Roles(UserRole.ADMIN)
   seed() {
     const categories = buildSeedData();
-    return this.catalogService.seed(categories);
+    return this.catalogService.seed(categories as unknown as Record<string, unknown>[]);
+  }
+
+  @Post('cleanup-user-services')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async cleanupUserServices() {
+    return this.catalogService.cleanupUserServices();
   }
 }

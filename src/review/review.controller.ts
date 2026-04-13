@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { CreateBookingReviewDto } from './dto/create-booking-review.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -31,6 +32,20 @@ export class ReviewController {
   ) {
     // Any user who posted a job can leave a review for the hired pro
     return this.reviewService.create(user.userId, createReviewDto);
+  }
+
+  @Post('booking/:bookingId')
+  @ApiOperation({ summary: 'Create a review from a completed booking' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiResponse({ status: 201, description: 'Review created from booking' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
+  createFromBooking(
+    @Param('bookingId') bookingId: string,
+    @CurrentUser() user: any,
+    @Body() dto: CreateBookingReviewDto,
+  ) {
+    return this.reviewService.createFromBooking(bookingId, user.userId, dto);
   }
 
   @Get('pro/:proId')

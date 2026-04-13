@@ -114,6 +114,10 @@ export class PortfolioItem extends Document {
   // Reference to the original job if done through Homico
   @Prop({ type: Types.ObjectId, ref: 'Job' })
   jobId: Types.ObjectId;
+
+  // Reference to the original booking if done through Homico
+  @Prop({ type: Types.ObjectId, ref: 'Booking' })
+  bookingId: Types.ObjectId;
 }
 
 export const PortfolioItemSchema = SchemaFactory.createForClass(PortfolioItem);
@@ -122,3 +126,4 @@ PortfolioItemSchema.index({ proId: 1 });
 PortfolioItemSchema.index({ tags: 1 });
 PortfolioItemSchema.index({ projectType: 1 });
 PortfolioItemSchema.index({ clientId: 1 });
+PortfolioItemSchema.index({ bookingId: 1 });

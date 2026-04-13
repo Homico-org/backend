@@ -166,6 +166,7 @@ export class User extends Document {
     variantKey?: string;
     price: number;
     isActive: boolean;
+    discountTiers?: { minQuantity: number; percent: number }[];
   }[];
 
   @Prop({ type: Number, default: 0 })
@@ -274,8 +275,15 @@ export class User extends Document {
   @Prop({ default: 0 })
   externalCompletedJobs: number;
 
+  @Prop({ type: Number, default: 0 })
+  avgResponseTime: number; // average response time in hours
+
   @Prop()
   responseTime: string;
+
+  // Push notification tokens (FCM)
+  @Prop({ type: [{ token: String, platform: String, updatedAt: Date }], default: [] })
+  pushTokens: { token: string; platform: string; updatedAt: Date }[];
 
   @Prop({ default: true })
   isAvailable: boolean;
@@ -580,3 +588,4 @@ UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });
 UserSchema.index({ verificationStatus: 1, role: 1 });
+UserSchema.index({ 'servicePricing.serviceKey': 1, 'servicePricing.price': 1 });

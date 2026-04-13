@@ -197,7 +197,7 @@ export class FeedService {
         videos: item.videos || [],
         beforeImage: item.beforeImage,
         afterImage: item.afterImage,
-        beforeAfterPairs: item.beforeAfterPairs || [],
+        beforeAfterPairs: item.beforeAfterPairs || item.beforeAfter?.map((p: { before: string; after: string }) => ({ beforeImage: p.before, afterImage: p.after })) || [],
         category: itemCategory,
         subcategories,
         pro: {
@@ -232,8 +232,9 @@ export class FeedService {
       for (let i = 0; i < (proUser.portfolioProjects || []).length; i++) {
         const project = proUser.portfolioProjects[i];
         // Check for before/after pairs
-        const hasBeforeAfter = project.beforeAfterPairs && project.beforeAfterPairs.length > 0;
-        const firstPair = hasBeforeAfter ? project.beforeAfterPairs[0] : null;
+        const baPairs = project.beforeAfterPairs || (project as { beforeAfter?: { before: string; after: string }[] }).beforeAfter?.map((p) => ({ beforeImage: p.before, afterImage: p.after })) || [];
+        const hasBeforeAfter = baPairs.length > 0;
+        const firstPair = hasBeforeAfter ? baPairs[0] : null;
 
         let type: FeedItem['type'] = 'portfolio';
         if (hasBeforeAfter) {
@@ -276,7 +277,7 @@ export class FeedService {
           videos: project.videos || [],
           beforeImage: firstPair?.beforeImage,
           afterImage: firstPair?.afterImage,
-          beforeAfterPairs: project.beforeAfterPairs || [],
+          beforeAfterPairs: baPairs,
           category: embeddedCategory,
           subcategories: embeddedSubcategories,
           pro: {

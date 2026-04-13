@@ -82,9 +82,26 @@ export class UsersController {
       isEmailVerified: userData.isEmailVerified,
       // Include verification status for pro users
       ...(userData.role === "pro"
-        ? { verificationStatus: userData.verificationStatus || "pending" }
+        ? {
+            verificationStatus: userData.verificationStatus || "pending",
+            bio: userData.bio || "",
+            description: userData.description || "",
+            serviceAreas: userData.serviceAreas || [],
+            portfolioProjects: userData.portfolioProjects || [],
+          }
         : {}),
     };
+  }
+
+  @Post("push-token")
+  @ApiOperation({ summary: "Register push notification token" })
+  @UseGuards(JwtAuthGuard)
+  async registerPushToken(
+    @CurrentUser() user: { userId: string },
+    @Body() body: { token: string; platform: string },
+  ) {
+    await this.usersService.savePushToken(user.userId, body.token, body.platform || "web");
+    return { success: true };
   }
 
   @Patch("me")
@@ -559,6 +576,21 @@ export class UsersController {
     required: false,
     description: "Filter pros available for this time slot",
   })
+  @ApiQuery({
+    name: "serviceKey",
+    required: false,
+    description: "Filter by specific service key in servicePricing",
+  })
+  @ApiQuery({
+    name: "serviceMinPrice",
+    required: false,
+    description: "Minimum service-level price filter",
+  })
+  @ApiQuery({
+    name: "serviceMaxPrice",
+    required: false,
+    description: "Maximum service-level price filter",
+  })
   @ApiResponse({ status: 200, description: "Paginated list of pro users" })
   @UseGuards(OptionalJwtAuthGuard)
   findAllPros(
@@ -576,6 +608,9 @@ export class UsersController {
     @Query("limit") limit?: string,
     @Query("scheduledDate") scheduledDate?: string,
     @Query("scheduledSlot") scheduledSlot?: string,
+    @Query("serviceKey") serviceKey?: string,
+    @Query("serviceMinPrice") serviceMinPrice?: string,
+    @Query("serviceMaxPrice") serviceMaxPrice?: string,
   ) {
     return this.usersService.findAllPros({
       category,
@@ -591,6 +626,9 @@ export class UsersController {
       limit: limit ? parseInt(limit) : undefined,
       scheduledDate,
       scheduledSlot,
+      serviceKey,
+      serviceMinPrice: serviceMinPrice ? parseFloat(serviceMinPrice) : undefined,
+      serviceMaxPrice: serviceMaxPrice ? parseFloat(serviceMaxPrice) : undefined,
     });
   }
 
