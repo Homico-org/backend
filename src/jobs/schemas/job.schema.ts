@@ -295,6 +295,15 @@ export class Job extends Document {
 
 export const JobSchema = SchemaFactory.createForClass(Job);
 
+JobSchema.index({ clientId: 1, status: 1, createdAt: -1 });
+JobSchema.index({ status: 1, createdAt: -1 });
+JobSchema.index({ category: 1, status: 1 });
+JobSchema.index({ subcategory: 1, status: 1 });
+JobSchema.index({ location: 1, status: 1 });
+JobSchema.index({ hiredProId: 1 });
+JobSchema.index({ jobType: 1, status: 1 });
+JobSchema.index({ expiresAt: 1 }, { sparse: true });
+
 // Schema for tracking unique job views
 @Schema({ timestamps: true })
 export class JobView extends Document {
