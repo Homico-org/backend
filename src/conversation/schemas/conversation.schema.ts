@@ -30,7 +30,7 @@ export class Conversation extends Document {
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 
-ConversationSchema.index({ clientId: 1 });
-ConversationSchema.index({ proId: 1 });
+ConversationSchema.index({ clientId: 1, lastMessageAt: -1 });
+ConversationSchema.index({ proId: 1, lastMessageAt: -1 });
+ConversationSchema.index({ clientId: 1, proId: 1 }, { unique: true });
 ConversationSchema.index({ projectRequestId: 1 });
-ConversationSchema.index({ lastMessageAt: -1 });

@@ -70,3 +70,7 @@ export class Proposal extends Document {
 }
 
 export const ProposalSchema = SchemaFactory.createForClass(Proposal);
+
+ProposalSchema.index({ jobId: 1, status: 1 });
+ProposalSchema.index({ proId: 1, status: 1, createdAt: -1 });
+ProposalSchema.index({ jobId: 1, proId: 1 }, { unique: true });

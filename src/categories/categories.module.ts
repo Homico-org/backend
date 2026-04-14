@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AiModule } from '../ai/ai.module';
+import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 import { Category, CategorySchema } from './schemas/category.schema';
@@ -9,6 +10,7 @@ import { Category, CategorySchema } from './schemas/category.schema';
   imports: [
     MongooseModule.forFeature([{ name: Category.name, schema: CategorySchema }]),
     AiModule,
+    forwardRef(() => ServiceCatalogModule),
   ],
   controllers: [CategoriesController],
   providers: [CategoriesService],

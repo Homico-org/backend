@@ -9,6 +9,7 @@ export enum NotificationType {
   JOB_COMPLETED = 'job_completed',
   JOB_CANCELLED = 'job_cancelled',
   JOB_INVITATION = 'job_invitation',
+  JOB_MATCH = 'job_match',
   DIRECT_REQUEST_TAKEN = 'direct_request_taken',
 
   // Message related
@@ -37,8 +38,12 @@ export enum NotificationType {
   // Booking related
   NEW_BOOKING = 'new_booking',
   BOOKING_CONFIRMED = 'booking_confirmed',
+  BOOKING_STARTED = 'booking_started',
   BOOKING_CANCELLED = 'booking_cancelled',
   BOOKING_COMPLETED = 'booking_completed',
+
+  // Review prompt
+  REVIEW_PROMPT = 'review_prompt',
 }
 
 @Schema({ timestamps: true })

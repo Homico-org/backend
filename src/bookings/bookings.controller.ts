@@ -14,6 +14,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
+import { StartWorkDto } from './dto/start-work.dto';
+import { CompleteWorkDto } from './dto/complete-work.dto';
 
 @ApiTags('Bookings')
 @Controller('bookings')
@@ -46,6 +48,14 @@ export class BookingsController {
     });
   }
 
+  @Get('my/pending-count')
+  @ApiOperation({ summary: 'Count pending/confirmed bookings for current user' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async getPendingCount(@CurrentUser() user: { userId: string }) {
+    return this.bookingsService.getPendingCount(user.userId);
+  }
+
   @Get('pro/:proId/availability')
   @ApiOperation({ summary: 'Get available slots for a pro on a date' })
   @ApiResponse({ status: 200, description: 'Array of time slots' })
@@ -68,6 +78,30 @@ export class BookingsController {
     @Param('id') id: string,
   ) {
     return this.bookingsService.findById(id, user.userId);
+  }
+
+  @Patch(':id/start')
+  @ApiOperation({ summary: 'Start work on a confirmed booking (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async startWork(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: StartWorkDto,
+  ) {
+    return this.bookingsService.startWork(id, user.userId, dto);
+  }
+
+  @Patch(':id/complete')
+  @ApiOperation({ summary: 'Complete work on an in-progress booking (pro only)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async completeWork(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: CompleteWorkDto,
+  ) {
+    return this.bookingsService.completeWork(id, user.userId, dto);
   }
 
   @Patch(':id/status')

@@ -71,6 +71,31 @@ class ScheduleOverrideDto {
   endHour?: number;
 }
 
+class ServicePricingDto {
+  @IsString()
+  serviceKey: string;
+
+  @IsString()
+  categoryKey: string;
+
+  @IsString()
+  subcategoryKey: string;
+
+  @IsString()
+  @IsOptional()
+  variantKey?: string;
+
+  @IsNumber()
+  price: number;
+
+  @IsBoolean()
+  isActive: boolean;
+
+  @IsArray()
+  @IsOptional()
+  discountTiers?: { minQuantity: number; percent: number }[];
+}
+
 class PortfolioProjectDto {
   @IsString()
   @IsOptional()
@@ -168,6 +193,13 @@ export class UpdateProfileDto {
   @Type(() => SelectedServiceDto)
   @IsOptional()
   selectedServices?: SelectedServiceDto[];
+
+  @ApiPropertyOptional({ description: "Per-service pricing" })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ServicePricingDto)
+  @IsOptional()
+  servicePricing?: ServicePricingDto[];
 
   @ApiPropertyOptional({ description: "Years of experience" })
   @IsNumber()

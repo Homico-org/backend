@@ -6,7 +6,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { UsersService } from '../users/users.service';
 import { SmsService } from '../verification/services/sms.service';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { CreateBookingReviewDto } from './dto/create-booking-review.dto';
 import { ReviewRequest } from './schemas/review-request.schema';
 import { Review, ReviewSource } from './schemas/review.schema';
 
@@ -15,9 +18,11 @@ export class ReviewService {
   constructor(
     @InjectModel(Review.name) private reviewModel: Model<Review>,
     @InjectModel(ReviewRequest.name) private reviewRequestModel: Model<ReviewRequest>,
+    @InjectModel(Booking.name) private bookingModel: Model<Booking>,
     private usersService: UsersService,
     private smsService: SmsService,
     private notificationsService: NotificationsService,
+    private portfolioService: PortfolioService,
   ) {}
 
   async create(clientId: string, createReviewDto: CreateReviewDto): Promise<Review> {
@@ -54,6 +59,102 @@ export class ReviewService {
   async hasReviewForJob(clientId: string, jobId: string): Promise<boolean> {
     const review = await this.reviewModel.findOne({ clientId, jobId });
     return !!review;
+  }
+
+  async createFromBooking(
+    bookingId: string,
+    clientId: string,
+    dto: CreateBookingReviewDto,
+  ): Promise<Review> {
+    const booking = await this.bookingModel.findById(bookingId).lean();
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.status !== BookingStatus.COMPLETED) {
+      throw new BadRequestException('Booking must be completed before leaving a review');
+    }
+
+    if (booking.client.toString() !== clientId) {
+      throw new ForbiddenException('Only the client of this booking can leave a review');
+    }
+
+    const proId = booking.professional.toString();
+
+    // Check for duplicate review
+    const existing = await this.reviewModel.findOne({
+      bookingId: new Types.ObjectId(bookingId),
+      clientId: new Types.ObjectId(clientId),
+    });
+    if (existing) {
+      throw new ConflictException('Review already exists for this booking');
+    }
+
+    const review = new this.reviewModel({
+      proId: new Types.ObjectId(proId),
+      clientId: new Types.ObjectId(clientId),
+      bookingId: new Types.ObjectId(bookingId),
+      source: ReviewSource.HOMICO,
+      rating: dto.rating,
+      text: dto.text,
+      photos: dto.photos || [],
+    });
+
+    await review.save();
+
+    // Update pro's rating
+    await this.usersService.updateRating(proId, dto.rating);
+
+    // Notify the pro
+    const client = await this.usersService.findById(clientId);
+    await this.notificationsService.notify(
+      proId,
+      NotificationType.NEW_REVIEW,
+      'New review received!',
+      `${client?.name || 'A client'} left you a ${dto.rating}-star review`,
+      {
+        link: `/professionals/${proId}#reviews`,
+        referenceId: review._id.toString(),
+        referenceModel: 'Review',
+      },
+    );
+
+    // Auto-create portfolio from pro's work photos
+    const beforePhotos = booking.beforePhotos || [];
+    const afterPhotos = booking.afterPhotos || [];
+    const hasWorkPhotos = afterPhotos.length > 0;
+
+    if (hasWorkPhotos) {
+      const serviceName = booking.services?.[0]?.name || 'Booking';
+
+      // Build before/after pairs from matched photos
+      const beforeAfterPairs = beforePhotos
+        .map((before, i) => ({
+          before,
+          after: afterPhotos[i] || afterPhotos[0] || '',
+        }))
+        .filter((p) => p.before && p.after);
+
+      // Standalone after photos (not paired with before)
+      const standaloneAfterPhotos = afterPhotos.slice(beforePhotos.length);
+
+      await this.portfolioService.createFromBooking({
+        proId,
+        bookingId,
+        title: serviceName,
+        images: standaloneAfterPhotos,
+        beforeAfterPairs: beforeAfterPairs.length > 0 ? beforeAfterPairs : undefined,
+        category: booking.services?.[0]?.serviceKey,
+        location: booking.address,
+        clientId,
+        clientName: client?.name,
+        completedDate: booking.completedAt || new Date(),
+        rating: dto.rating,
+        review: dto.text,
+      });
+    }
+
+    return review;
   }
 
   async findByPro(proId: string, limit = 20, skip = 0): Promise<Review[]> {

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, Min, Max, Matches } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, Min, Max, Matches } from 'class-validator';
 
 export class CreateBookingDto {
   @IsString()
@@ -21,4 +21,24 @@ export class CreateBookingDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsOptional()
+  @IsArray()
+  services?: {
+    serviceKey: string;
+    name: string;
+    nameKa: string;
+    quantity: number;
+    unitPrice: number;
+    unit: string;
+    discount?: number;
+  }[];
+
+  @IsOptional()
+  @IsNumber()
+  totalAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
 }

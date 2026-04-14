@@ -27,12 +27,11 @@ export class InviteService {
     private jwtService: JwtService,
   ) {}
 
-  private signToken(user: any) {
-    return this.jwtService.sign({
-      sub: user._id,
-      email: user.email,
-      role: user.role,
-    });
+  private generateTokens(user: any) {
+    const payload = { sub: user._id, email: user.email, role: user.role };
+    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
+    return { access_token, refresh_token };
   }
 
   private buildUserResponse(user: any) {
@@ -129,7 +128,7 @@ export class InviteService {
         await invite.save();
 
         return {
-          access_token: this.signToken(existing),
+          ...this.generateTokens(existing),
           user: this.buildUserResponse(existing),
         };
       }
@@ -152,7 +151,7 @@ export class InviteService {
       await invite.save();
 
       return {
-        access_token: this.signToken(existing),
+        ...this.generateTokens(existing),
         user: this.buildUserResponse(existing),
       };
     }
@@ -175,8 +174,8 @@ export class InviteService {
       isPhoneVerified: true,
       phoneVerifiedAt: new Date(),
       registrationStep: 1,
-      avgRating: invite.rating || 0,
-      totalReviews: invite.reviewCount || 0,
+      avgRating: 0,
+      totalReviews: 0,
       ...(hashedPassword ? { password: hashedPassword } : {}),
     }).save();
 
@@ -186,7 +185,7 @@ export class InviteService {
     await invite.save();
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
   }

@@ -63,6 +63,14 @@ export class AuthController {
     });
   }
 
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiResponse({ status: 200, description: 'Tokens refreshed successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
+  async refresh(@Body('refresh_token') refreshToken: string) {
+    return this.authService.refreshToken(refreshToken);
+  }
+
   @Patch('pro-registration-step')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')

@@ -50,12 +50,11 @@ export class AuthService {
     };
   }
 
-  private signToken(user: any) {
-    return this.jwtService.sign({
-      sub: user._id,
-      email: user.email,
-      role: user.role,
-    });
+  private generateTokens(user: any) {
+    const payload = { sub: user._id, email: user.email, role: user.role };
+    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
+    return { access_token, refresh_token };
   }
 
   async register(
@@ -79,7 +78,7 @@ export class AuthService {
     });
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
   }
@@ -129,7 +128,7 @@ export class AuthService {
     });
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
   }
@@ -162,7 +161,7 @@ export class AuthService {
       });
 
       return {
-        access_token: this.signToken(existing),
+        ...this.generateTokens(existing),
         user: this.buildUserResponse(existing),
       };
     }
@@ -199,7 +198,7 @@ export class AuthService {
     });
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
   }
@@ -248,7 +247,7 @@ export class AuthService {
       });
 
       return {
-        access_token: this.signToken(existing),
+        ...this.generateTokens(existing),
         user: this.buildUserResponse(existing),
       };
     }
@@ -281,9 +280,21 @@ export class AuthService {
     });
 
     return {
-      access_token: this.signToken(user),
+      ...this.generateTokens(user),
       user: this.buildUserResponse(user),
     };
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify(refreshToken);
+      const user = await this.userModel.findById(payload.sub);
+      if (!user) throw new UnauthorizedException();
+      const tokens = this.generateTokens(user);
+      return { ...tokens, user: this.buildUserResponse(user) };
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   async updateProRegistrationStep(userId: string, dto: ProRegistrationStepDto) {

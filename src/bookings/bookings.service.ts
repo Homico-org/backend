@@ -4,6 +4,8 @@ import { Model, Types } from 'mongoose';
 import { Booking, BookingStatus } from './schemas/booking.schema';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
+import { StartWorkDto } from './dto/start-work.dto';
+import { CompleteWorkDto } from './dto/complete-work.dto';
 import { User } from '../users/schemas/user.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
@@ -17,7 +19,7 @@ export class BookingsService {
   ) {}
 
   async create(clientId: string, dto: CreateBookingDto): Promise<Booking> {
-    const { professionalId, date, startHour, endHour, note } = dto;
+    const { professionalId, date, startHour, endHour, note, services, address } = dto;
 
     if (clientId === professionalId) {
       throw new BadRequestException('Cannot book yourself');
@@ -38,6 +40,14 @@ export class BookingsService {
     // Check for conflicts with existing bookings
     await this.checkConflicts(professionalId, date, startHour, endHour);
 
+    // Calculate service subtotals and total amount
+    const computedServices = (services || []).map((s) => {
+      const discount = s.discount || 0;
+      const subtotal = s.unitPrice * s.quantity * (1 - discount / 100);
+      return { ...s, discount, subtotal };
+    });
+    const totalAmount = computedServices.reduce((sum, s) => sum + s.subtotal, 0);
+
     const booking = new this.bookingModel({
       professional: new Types.ObjectId(professionalId),
       client: new Types.ObjectId(clientId),
@@ -45,6 +55,9 @@ export class BookingsService {
       startHour,
       endHour,
       note,
+      services: computedServices,
+      totalAmount,
+      address,
       status: BookingStatus.PENDING,
     });
 
@@ -66,6 +79,18 @@ export class BookingsService {
     return saved;
   }
 
+  async getPendingCount(userId: string): Promise<{ count: number }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const count = await this.bookingModel.countDocuments({
+      $or: [
+        { professional: userObjectId },
+        { client: userObjectId },
+      ],
+      status: { $in: ['pending', 'confirmed'] },
+    });
+    return { count };
+  }
+
   async findUserBookings(
     userId: string,
     options: { status?: string; upcoming?: boolean } = {},
@@ -84,7 +109,7 @@ export class BookingsService {
     if (options.upcoming) {
       const today = new Date().toISOString().split('T')[0];
       query.date = { $gte: today };
-      query.status = { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] };
+      query.status = { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] };
     }
 
     return this.bookingModel
@@ -144,6 +169,10 @@ export class BookingsService {
       throw new ForbiddenException('Only the professional can mark bookings as completed');
     }
 
+    if (status === BookingStatus.IN_PROGRESS && userId !== proId) {
+      throw new ForbiddenException('Only the professional can start work on bookings');
+    }
+
     if (status === BookingStatus.CANCELLED) {
       booking.cancelledBy = new Types.ObjectId(userId);
       booking.cancelReason = cancelReason;
@@ -159,6 +188,10 @@ export class BookingsService {
         title: 'Booking Confirmed',
         message: `Your booking for ${booking.date} at ${booking.startHour}:00 has been confirmed`,
       },
+      [BookingStatus.IN_PROGRESS]: {
+        title: 'Work Started',
+        message: `Pro has started work on your booking for ${booking.date}`,
+      },
       [BookingStatus.CANCELLED]: {
         title: 'Booking Cancelled',
         message: `Booking for ${booking.date} at ${booking.startHour}:00 has been cancelled`,
@@ -171,13 +204,15 @@ export class BookingsService {
 
     const msg = statusMessages[status];
     if (msg) {
+      const notificationTypeMap: Record<string, NotificationType> = {
+        [BookingStatus.CONFIRMED]: NotificationType.BOOKING_CONFIRMED,
+        [BookingStatus.IN_PROGRESS]: NotificationType.BOOKING_STARTED,
+        [BookingStatus.CANCELLED]: NotificationType.BOOKING_CANCELLED,
+        [BookingStatus.COMPLETED]: NotificationType.BOOKING_COMPLETED,
+      };
       await this.notificationsService.notify(
         notifyUserId,
-        status === BookingStatus.CONFIRMED
-          ? NotificationType.BOOKING_CONFIRMED
-          : status === BookingStatus.CANCELLED
-            ? NotificationType.BOOKING_CANCELLED
-            : NotificationType.BOOKING_COMPLETED,
+        notificationTypeMap[status] || NotificationType.BOOKING_COMPLETED,
         msg.title,
         msg.message,
         {
@@ -187,6 +222,127 @@ export class BookingsService {
         },
       );
     }
+
+    // Send review prompt to client when booking is completed
+    if (status === BookingStatus.COMPLETED) {
+      await this.notificationsService.notify(
+        cliId,
+        NotificationType.REVIEW_PROMPT,
+        'How was your experience?',
+        'Leave a review for your booking',
+        {
+          referenceId: bookingId,
+          referenceModel: 'Booking',
+          link: `/review/booking/${bookingId}`,
+          metadata: {
+            proId: proId,
+            bookingId: bookingId,
+          },
+        },
+      );
+    }
+
+    return updated;
+  }
+
+  async startWork(
+    bookingId: string,
+    userId: string,
+    dto: StartWorkDto,
+  ): Promise<Booking> {
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    const proId = booking.professional.toString();
+    if (proId !== userId) {
+      throw new ForbiddenException('Only the professional can start work');
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Booking must be confirmed before starting work');
+    }
+
+    booking.status = BookingStatus.IN_PROGRESS;
+    booking.startedAt = new Date();
+    if (dto.beforePhotos && dto.beforePhotos.length > 0) {
+      booking.beforePhotos = dto.beforePhotos;
+    }
+
+    const updated = await booking.save();
+
+    const cliId = booking.client.toString();
+    await this.notificationsService.notify(
+      cliId,
+      NotificationType.BOOKING_STARTED,
+      'Work Started',
+      `Pro has started work on your booking for ${booking.date}`,
+      {
+        link: `/bookings`,
+        referenceId: bookingId,
+        referenceModel: 'Booking',
+      },
+    );
+
+    return updated;
+  }
+
+  async completeWork(
+    bookingId: string,
+    userId: string,
+    dto: CompleteWorkDto,
+  ): Promise<Booking> {
+    const booking = await this.bookingModel.findById(bookingId);
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    const proId = booking.professional.toString();
+    if (proId !== userId) {
+      throw new ForbiddenException('Only the professional can complete work');
+    }
+
+    if (booking.status !== BookingStatus.IN_PROGRESS) {
+      throw new BadRequestException('Booking must be in progress before completing');
+    }
+
+    booking.status = BookingStatus.COMPLETED;
+    booking.completedAt = new Date();
+    booking.afterPhotos = dto.afterPhotos;
+    if (dto.videos?.length) booking.videos = dto.videos;
+
+    const updated = await booking.save();
+
+    const cliId = booking.client.toString();
+
+    await this.notificationsService.notify(
+      cliId,
+      NotificationType.BOOKING_COMPLETED,
+      'Work Completed',
+      'Work completed, leave a review',
+      {
+        link: `/bookings`,
+        referenceId: bookingId,
+        referenceModel: 'Booking',
+      },
+    );
+
+    await this.notificationsService.notify(
+      cliId,
+      NotificationType.REVIEW_PROMPT,
+      'How was your experience?',
+      'Leave a review for your booking',
+      {
+        referenceId: bookingId,
+        referenceModel: 'Booking',
+        link: `/review/booking/${bookingId}`,
+        metadata: {
+          proId: proId,
+          bookingId: bookingId,
+        },
+      },
+    );
 
     return updated;
   }
@@ -227,7 +383,7 @@ export class BookingsService {
     const existingBookings = await this.bookingModel.find({
       professional: new Types.ObjectId(proId),
       date,
-      status: { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+      status: { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
     }).lean();
 
     return this.generateSlots(startHour, endHour, existingBookings);
@@ -275,7 +431,7 @@ export class BookingsService {
     const conflict = await this.bookingModel.findOne({
       professional: new Types.ObjectId(proId),
       date,
-      status: { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+      status: { $in: [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
       $or: [
         { startHour: { $lt: endHour }, endHour: { $gt: startHour } },
       ],
