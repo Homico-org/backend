@@ -1127,8 +1127,8 @@ export class UsersService {
     // Include _id as final sort key to ensure consistent pagination (prevents duplicates)
     let sortObj: any = {};
     switch (filters?.sort) {
-      case "rating":
-        sortObj = { isPremium: -1, avgRating: -1, _id: -1 };
+      case "rating": // pros with reviews first, then highest rating
+        sortObj = { isPremium: -1, totalReviews: -1, avgRating: -1, _id: -1 };
         break;
       case "reviews":
         sortObj = { isPremium: -1, totalReviews: -1, _id: -1 };
@@ -1142,8 +1142,8 @@ export class UsersService {
       case "newest":
         sortObj = { isPremium: -1, createdAt: -1, _id: -1 };
         break;
-      default: // 'recommended'
-        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1, _id: -1 };
+      default: // 'recommended' — pros with reviews first, then by rating
+        sortObj = { isPremium: -1, totalReviews: -1, avgRating: -1, _id: -1 };
     }
 
     // Build query - only role=pro
