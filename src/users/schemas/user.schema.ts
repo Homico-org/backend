@@ -164,6 +164,7 @@ export class User extends Document {
     categoryKey: string;
     subcategoryKey: string;
     variantKey?: string;
+    unitKey?: string; // which unit option (e.g. 'sqm', 'per_hour'); null = primary unit
     price: number;
     isActive: boolean;
     discountTiers?: { minQuantity: number; percent: number }[];

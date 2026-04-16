@@ -139,11 +139,24 @@ export class ServiceCatalogService {
             name: svc.label?.en || svc.key,
             nameKa: svc.label?.ka || svc.label?.en || svc.key,
             nameRu: svc.label?.ru || svc.label?.en || svc.key,
-            basePrice: svc.basePrice,
-            maxPrice: svc.maxPrice,
-            unit: svc.unit,
-            unitName: svc.unitLabel?.en || svc.unit,
-            unitNameKa: svc.unitLabel?.ka || svc.unitLabel?.en || svc.unit,
+            // Backward compat: primary unit from unitOptions[0] or legacy fields
+            basePrice: svc.unitOptions?.[0]?.defaultPrice ?? svc.basePrice,
+            maxPrice: svc.unitOptions?.[0]?.maxPrice ?? svc.maxPrice,
+            unit: svc.unitOptions?.[0]?.unit ?? svc.unit,
+            unitName: svc.unitOptions?.[0]?.label?.en ?? svc.unitLabel?.en ?? svc.unit,
+            unitNameKa: svc.unitOptions?.[0]?.label?.ka ?? svc.unitLabel?.ka ?? svc.unit,
+            // Multi-unit options
+            unitOptions: (svc.unitOptions || []).map((uo: Record<string, unknown>) => ({
+              key: (uo as { key: string }).key,
+              unit: (uo as { unit: string }).unit,
+              label: {
+                en: ((uo as { label?: { en?: string } }).label?.en) || '',
+                ka: ((uo as { label?: { ka?: string } }).label?.ka) || '',
+                ru: ((uo as { label?: { ru?: string } }).label?.ru) || '',
+              },
+              defaultPrice: (uo as { defaultPrice: number }).defaultPrice,
+              maxPrice: (uo as { maxPrice?: number }).maxPrice,
+            })),
           })),
         variants: (sub.variants || []).map((v) => ({
           key: v.key,
