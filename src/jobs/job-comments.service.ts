@@ -29,19 +29,8 @@ export class JobCommentsService {
       throw new NotFoundException('Job not found');
     }
 
-    // Determine if this is a client reply
+    // Determine if this is a client reply (job owner)
     const isClientReply = job.clientId.toString() === userId;
-
-    // Check verification for non-clients (professionals)
-    if (!isClientReply) {
-      const user = await this.userModel.findById(userId).select('verificationStatus').exec();
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-      if (user.verificationStatus !== 'verified') {
-        throw new ForbiddenException('კომენტარის დასატოვებლად საჭიროა პროფილის ვერიფიკაცია. გთხოვთ გაიაროთ ვერიფიკაცია პარამეტრებში.');
-      }
-    }
 
     // If it's a reply, verify parent exists and check depth
     let depth = 0;

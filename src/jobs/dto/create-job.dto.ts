@@ -80,6 +80,11 @@ class ServiceItemDto {
   @IsNotEmpty()
   key: string;
 
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  unitKey?: string;
+
   @ApiProperty()
   @IsNumber()
   quantity: number;

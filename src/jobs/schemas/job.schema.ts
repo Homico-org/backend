@@ -270,6 +270,7 @@ export class Job extends Document {
     type: [
       {
         key: { type: String, required: true },
+        unitKey: { type: String },
         quantity: { type: Number, required: true },
         unitPrice: { type: Number, required: true },
         unit: { type: String },
@@ -279,6 +280,7 @@ export class Job extends Document {
   })
   services: {
     key: string;
+    unitKey?: string;
     quantity: number;
     unitPrice: number;
     unit?: string;

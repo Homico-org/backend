@@ -7,14 +7,31 @@ export enum ServiceUnit {
   PIECE = 'piece',
   SQM = 'sqm',
   METER = 'meter',
+  LINEAR_METER = 'linear_meter',
   POINT = 'point',
   ROOM = 'room',
   SET = 'set',
   HOUR = 'hour',
+  DAY = 'day',
   FLOOR = 'floor',
   ITEM = 'item',
   DEVICE = 'device',
   WINDOW = 'window',
+  TREE = 'tree',
+  PROJECT = 'project',
+  MOVE = 'move',
+  LOAD = 'load',
+  STAIRCASE = 'staircase',
+  DOOR = 'door',
+  LOCK = 'lock',
+  CAMERA = 'camera',
+  SYSTEM = 'system',
+  KITCHEN = 'kitchen',
+  JOB = 'job',
+  UNIT = 'unit',
+  FRAME = 'frame',
+  PATCH = 'patch',
+  VISIT = 'visit',
 }
 
 // === Sub-schemas (embedded documents) ===
@@ -50,6 +67,24 @@ export class PriceRange {
 }
 
 @Schema({ _id: false })
+export class UnitOption {
+  @Prop({ required: true })
+  key: string; // e.g. 'sqm', 'linear_m', 'per_hour', 'per_job'
+
+  @Prop({ type: String, enum: Object.values(ServiceUnit), required: true })
+  unit: ServiceUnit;
+
+  @Prop({ type: LocalizedText, required: true })
+  label: LocalizedText; // e.g. { en: 'per m²', ka: 'მ²-ზე' }
+
+  @Prop({ required: true })
+  defaultPrice: number;
+
+  @Prop()
+  maxPrice?: number;
+}
+
+@Schema({ _id: false })
 export class CatalogService {
   @Prop({ required: true })
   key: string;
@@ -80,6 +115,10 @@ export class CatalogService {
 
   @Prop({ type: [Object], default: [] })
   discountTiers?: DiscountTier[];
+
+  // Multi-unit pricing options — services can be priced in multiple ways
+  @Prop({ type: [Object], default: [] })
+  unitOptions?: UnitOption[];
 }
 
 @Schema({ _id: false })

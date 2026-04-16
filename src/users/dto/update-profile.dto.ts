@@ -85,6 +85,10 @@ class ServicePricingDto {
   @IsOptional()
   variantKey?: string;
 
+  @IsString()
+  @IsOptional()
+  unitKey?: string;
+
   @IsNumber()
   price: number;
 
