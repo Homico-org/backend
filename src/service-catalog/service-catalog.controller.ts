@@ -16,7 +16,7 @@ import {
   UpsertSubcategoryDto,
   UpsertVariantDto,
 } from './dto/update-catalog-category.dto';
-import { buildSeedData } from './seed-catalog-v2';
+import { buildSeedData } from './seed-catalog-v3';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
