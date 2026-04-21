@@ -68,6 +68,9 @@ export class PriceRange {
 
 @Schema({ _id: false })
 export class UnitOption {
+  @Prop()
+  id?: string; // Stable permanent identifier — never changes once assigned. Save selections by id.
+
   @Prop({ required: true })
   key: string; // e.g. 'sqm', 'linear_m', 'per_hour', 'per_job'
 
@@ -86,6 +89,9 @@ export class UnitOption {
 
 @Schema({ _id: false })
 export class CatalogService {
+  @Prop()
+  id?: string; // Stable permanent identifier — never changes once assigned. Save selections by id.
+
   @Prop({ required: true })
   key: string;
 
@@ -168,6 +174,9 @@ export class CatalogVariant {
 
 @Schema({ _id: false })
 export class CatalogSubcategory {
+  @Prop()
+  id?: string; // Stable permanent identifier — never changes once assigned. Save selections by id.
+
   @Prop({ required: true })
   key: string;
 
@@ -212,6 +221,9 @@ export class CatalogSubcategory {
 
 @Schema({ timestamps: true })
 export class ServiceCatalogCategory extends Document {
+  @Prop()
+  id?: string; // Stable permanent identifier — never changes once assigned. Save selections by id.
+
   @Prop({ required: true, unique: true })
   key: string;
 

@@ -106,6 +106,7 @@ export class ServiceCatalogService {
     const catalogs = await this.findAll();
     return catalogs.map((cat) => ({
       _id: (cat as any)._id || cat.key,
+      id: (cat as any).id,
       key: cat.key,
       name: cat.label?.en || cat.key,
       nameKa: cat.label?.ka || cat.label?.en || cat.key,
@@ -117,6 +118,7 @@ export class ServiceCatalogService {
       isActive: cat.isActive ?? true,
       sortOrder: cat.sortOrder ?? 0,
       subcategories: (cat.subcategories || []).map((sub) => ({
+        id: (sub as any).id,
         key: sub.key,
         name: sub.label?.en || sub.key,
         nameKa: sub.label?.ka || sub.label?.en || sub.key,
@@ -135,6 +137,7 @@ export class ServiceCatalogService {
             (svc, i, arr) => arr.findIndex((s) => s.key === svc.key) === i,
           )
           .map((svc) => ({
+            id: (svc as any).id,
             key: svc.key,
             name: svc.label?.en || svc.key,
             nameKa: svc.label?.ka || svc.label?.en || svc.key,
@@ -147,6 +150,7 @@ export class ServiceCatalogService {
             unitNameKa: svc.unitOptions?.[0]?.label?.ka ?? svc.unitLabel?.ka ?? svc.unit,
             // Multi-unit options
             unitOptions: (svc.unitOptions || []).map((uo: Record<string, unknown>) => ({
+              id: (uo as { id?: string }).id,
               key: (uo as { key: string }).key,
               unit: (uo as { unit: string }).unit,
               label: {

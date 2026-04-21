@@ -141,16 +141,21 @@ export class User extends Document {
   @Prop({
     type: [
       {
-        key: String, // Subcategory key
+        id: String,          // Stable catalog subcategory id (e.g. "S001") — source of truth
+        categoryId: String,  // Stable catalog category id (e.g. "C01")
+        key: String,         // Subcategory key (legacy / display lookup)
         categoryKey: String, // Parent category key
-        name: String, // English name
-        nameKa: String, // Georgian name
-        experience: String, // Experience level: '0-1', '1-3', '3-5', '5-10', '10+'
+        name: String,
+        nameKa: String,
+        experience: String,
       },
     ],
     default: [],
   })
   selectedServices: {
+    // Stable catalog ids — source of truth; survive key/label renames
+    id?: string;
+    categoryId?: string;
     key: string;
     categoryKey: string;
     name: string;
@@ -160,11 +165,17 @@ export class User extends Document {
 
   @Prop({ type: [Object], default: [] })
   servicePricing: {
+    // Stable catalog ids — source of truth; survive key/label renames
+    serviceId?: string;
+    categoryId?: string;
+    subcategoryId?: string;
+    unitId?: string;
+    // Human-readable keys kept for backward compat / display lookup
     serviceKey: string;
     categoryKey: string;
     subcategoryKey: string;
     variantKey?: string;
-    unitKey?: string; // which unit option (e.g. 'sqm', 'per_hour'); null = primary unit
+    unitKey?: string;
     price: number;
     isActive: boolean;
     discountTiers?: { minQuantity: number; percent: number }[];

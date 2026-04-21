@@ -25,6 +25,15 @@ class BeforeAfterPairDto {
 }
 
 class SelectedServiceDto {
+  // Stable catalog ids — preferred when present; fall back to keys
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
   @IsString()
   key: string;
 
@@ -72,6 +81,23 @@ class ScheduleOverrideDto {
 }
 
 class ServicePricingDto {
+  // Stable catalog ids — preferred when present; fall back to keys
+  @IsString()
+  @IsOptional()
+  serviceId?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
+  @IsString()
+  @IsOptional()
+  subcategoryId?: string;
+
+  @IsString()
+  @IsOptional()
+  unitId?: string;
+
   @IsString()
   serviceKey: string;
 
