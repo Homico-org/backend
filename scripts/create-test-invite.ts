@@ -18,13 +18,14 @@ import { resolve } from "path";
 
 dotenv.config({ path: resolve(__dirname, "../.env") });
 
-const [, , rawPhone, name = "Test Pro", category = "plumber", subcategory = "pipes"] =
-  process.argv;
-
-if (!rawPhone) {
-  console.error("Usage: npx ts-node scripts/create-test-invite.ts <phone> [name]");
-  process.exit(1);
-}
+const [
+  ,
+  ,
+  rawPhone = "571072007",
+  name = "Test Pro",
+  category = "plumbing",
+  subcategory = "plumbing_install",
+] = process.argv;
 
 // Normalize phone — strip spaces, prefix +995 if 9-digit Georgian local number
 const cleaned = rawPhone.replace(/\s+/g, "");
@@ -69,9 +70,9 @@ const InviteToken = mongoose.model("InviteToken", inviteTokenSchema);
     city: "თბილისი",
     cityKey: "tbilisi",
     category,
-    categoryKa: "სანტექნიკოსი",
+    categoryKa: "სანტექნიკა",
     subcategory,
-    subcategoryKa: "მილები და გაჟონვა",
+    subcategoryKa: "ახალი მონტაჟი და დაყენება",
     type: "professional",
     rating: 4.8,
     reviewCount: 0,
