@@ -1554,6 +1554,22 @@ export class UsersService {
     const unsetData: Record<string, any> = {};
 
     // Pro profile fields
+    if (proData.firstName !== undefined)
+      updateData.firstName = proData.firstName;
+    if (proData.lastName !== undefined) updateData.lastName = proData.lastName;
+    // Recompose `name` when either first/last is provided (keeps legacy
+    // single-field display paths working without touching them).
+    if (
+      proData.firstName !== undefined ||
+      proData.lastName !== undefined
+    ) {
+      const first =
+        proData.firstName !== undefined ? proData.firstName : user.firstName;
+      const last =
+        proData.lastName !== undefined ? proData.lastName : user.lastName;
+      const composed = [first, last].filter(Boolean).join(" ").trim();
+      if (composed) updateData.name = composed;
+    }
     if (proData.title !== undefined) updateData.title = proData.title;
     if (proData.bio !== undefined) updateData.bio = proData.bio;
     if (proData.description !== undefined)

@@ -135,7 +135,10 @@ export class InviteService {
 
       // Upgrade client to pro
       existing.role = UserRole.PRO;
-      existing.name = invite.name;
+      // Don't copy invite.name — scraped invite rows store a service title
+      // (e.g. "იატაკის მოჭიმვა") rather than a person's name. The pro fills
+      // in firstName/lastName during profile-setup; keep whatever name the
+      // client already had as a placeholder until then.
       existing.city = invite.cityKey || existing.city;
       existing.selectedCategories = [invite.category];
       existing.selectedSubcategories = [invite.subcategory];
@@ -165,7 +168,10 @@ export class InviteService {
 
     const user = await new this.userModel({
       uid,
-      name: invite.name,
+      // `name` is required in the schema but scraped invite.name is a
+      // service title — use a neutral placeholder; profile-setup collects
+      // real first/last name and recomposes this field on save.
+      name: "",
       phone: invite.phone,
       role: UserRole.PRO,
       city: invite.cityKey,

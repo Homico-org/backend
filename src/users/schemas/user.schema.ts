@@ -84,8 +84,17 @@ export class User extends Document {
   @Prop({ unique: true, index: true })
   uid: number;
 
-  @Prop({ required: true })
+  // `name` is the composed display name (first + ' ' + last). No longer
+  // required — invite-activated pros start with empty name and fill
+  // firstName/lastName in profile-setup, which recomposes this field.
+  @Prop({ default: "" })
   name: string;
+
+  @Prop()
+  firstName: string;
+
+  @Prop()
+  lastName: string;
 
   @Prop({ unique: true, sparse: true, lowercase: true })
   email: string;
