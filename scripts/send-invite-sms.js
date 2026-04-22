@@ -84,8 +84,11 @@ const DB_NAME = process.env.MONGODB_DB || 'homi_prod';
   console.log(`✓ Invite token created: ${token}`);
 
   const inviteUrl = `https://homico.ge/i/${token}`;
+  // No name prefix — the `name` we have is often a scraped service title
+  // (e.g. "შუშის კარის რეგულირება"), not a person, so personalizing with
+  // it reads absurdly. Generic opener works for everyone.
   const message =
-    `${rawName}, Homico-ზე მარტივად იპოვით დამკვეთებს სერვისებზე. ` +
+    `გამარჯობა! Homico-ზე მარტივად იპოვით დამკვეთებს სერვისებზე. ` +
     `რეგისტრაცია უფასოა: ${inviteUrl}\n` +
     `დახმარება: info@homico.ge`;
 
@@ -124,7 +127,7 @@ const DB_NAME = process.env.MONGODB_DB || 'homi_prod';
     { _id: insertResult.insertedId },
     {
       $set: {
-        status: 'sent',
+        status: 'sms_sent',
         smsID,
         sentAt: new Date(),
         updatedAt: new Date(),

@@ -54,3 +54,4 @@ public/uploads/
 *.pid
 *.seed
 *.pid.lock
+/scripts/invite-cohort.json
