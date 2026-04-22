@@ -1,9 +1,10 @@
 /**
  * Send a Homico invite SMS to one phone number.
  *
- *   node scripts/send-invite-sms.js <phone> [name]
+ *   node scripts/send-invite-sms.js <phone> [name] [--force]
  *
  * Creates an InviteToken in MongoDB and sends the marketing SMS via UBill.
+ * Refuses to send if this phone already has a token (use --force to override).
  * Requires UBILL_API_KEY + UBILL_BRAND_ID + MONGODB_URI in backend/.env.
  */
 
@@ -12,10 +13,13 @@ const path = require('path');
 const { MongoClient } = require('mongodb');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const [, , rawPhone, rawName = 'პროფესიონალი'] = process.argv;
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const positional = args.filter((a) => !a.startsWith('--'));
+const [rawPhone, rawName = 'პროფესიონალი'] = positional;
 
 if (!rawPhone) {
-  console.error('Usage: node scripts/send-invite-sms.js <phone> [name]');
+  console.error('Usage: node scripts/send-invite-sms.js <phone> [name] [--force]');
   process.exit(1);
 }
 
@@ -43,9 +47,23 @@ const DB_NAME = process.env.MONGODB_DB || 'homi_prod';
   await client.connect();
   const col = client.db(DB_NAME).collection('invitetokens');
 
-  const token = `inv-${crypto.randomBytes(6).toString('hex')}`;
+  // Dedupe: refuse to re-send if this phone already has any invite token.
+  // Use --force to override (e.g. after manually deleting a stale row).
+  const existing = await col.findOne({ phone });
+  if (existing && !force) {
+    console.error(
+      `⚠ Phone ${phone} already has an invite (status: ${existing.status}, ` +
+      `token: ${existing.token}, sent: ${existing.createdAt?.toISOString?.() ?? 'n/a'}).`,
+    );
+    console.error('  Use --force to send anyway.');
+    await client.close();
+    process.exit(2);
+  }
 
-  await col.insertOne({
+  const token = `inv-${crypto.randomBytes(6).toString('hex')}`;
+  const now = new Date();
+
+  const insertResult = await col.insertOne({
     token,
     phone,
     name: rawName,
@@ -60,16 +78,16 @@ const DB_NAME = process.env.MONGODB_DB || 'homi_prod';
     rating: 0,
     reviewCount: 0,
     status: 'pending',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: now,
+    updatedAt: now,
   });
   console.log(`✓ Invite token created: ${token}`);
 
   const inviteUrl = `https://homico.ge/i/${token}`;
   const message =
-    `${rawName}, Homico-ზე პირველ 100 პროფესიონალში მოხვდით!\n` +
-    `რეგისტრაცია თქვენთვის უფასოა - ${inviteUrl}\n` +
-    `კითხვებისთვის მოგვწერეთ - info@homico.ge`;
+    `${rawName}, Homico-ზე მარტივად იპოვით დამკვეთებს სერვისებზე. ` +
+    `რეგისტრაცია უფასოა: ${inviteUrl}\n` +
+    `დახმარება: info@homico.ge`;
 
   console.log(`\n--- SMS to ${phone} (${message.length} chars) ---\n${message}\n---`);
 
@@ -86,9 +104,36 @@ const DB_NAME = process.env.MONGODB_DB || 'homi_prod';
 
   const body = await res.text();
   console.log(`UBill response: ${res.status} ${body}`);
-  if (!res.ok) process.exit(1);
+  if (!res.ok) {
+    // Mark the row as failed so we don't consider this phone "already sent".
+    await col.updateOne(
+      { _id: insertResult.insertedId },
+      { $set: { status: 'send_failed', ubillResponse: body, updatedAt: new Date() } },
+    );
+    process.exit(1);
+  }
+
+  // Record the UBill smsID so we can correlate with UBill's delivery dashboard.
+  let smsID = null;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && parsed.smsID) smsID = String(parsed.smsID);
+  } catch { /* non-JSON response, leave smsID null */ }
+
+  await col.updateOne(
+    { _id: insertResult.insertedId },
+    {
+      $set: {
+        status: 'sent',
+        smsID,
+        sentAt: new Date(),
+        updatedAt: new Date(),
+      },
+    },
+  );
 
   console.log('\n✓ SMS queued');
+  console.log(`  smsID: ${smsID ?? 'n/a'}`);
   console.log(`  Open in browser: ${inviteUrl}`);
 
   await client.close();
