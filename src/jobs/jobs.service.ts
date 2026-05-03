@@ -837,6 +837,7 @@ export class JobsService {
     id: string,
     clientId: string,
     updateData: Partial<CreateJobDto>,
+    callerRole?: string,
   ): Promise<Job> {
     const job = await this.jobModel.findById(id);
 
@@ -844,7 +845,8 @@ export class JobsService {
       throw new NotFoundException("სამუშაო ვერ მოიძებნა");
     }
 
-    if (job.clientId.toString() !== clientId) {
+    // Admins can update any job; everyone else must own it.
+    if (callerRole !== "admin" && job.clientId.toString() !== clientId) {
       throw new ForbiddenException(
         "თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების განახლება",
       );
@@ -883,14 +885,19 @@ export class JobsService {
       .exec();
   }
 
-  async deleteJob(id: string, clientId: string): Promise<void> {
+  async deleteJob(
+    id: string,
+    clientId: string,
+    callerRole?: string,
+  ): Promise<void> {
     const job = await this.jobModel.findById(id);
 
     if (!job) {
       throw new NotFoundException("სამუშაო ვერ მოიძებნა");
     }
 
-    if (job.clientId.toString() !== clientId) {
+    // Admins can delete any job; everyone else must own it.
+    if (callerRole !== "admin" && job.clientId.toString() !== clientId) {
       throw new ForbiddenException(
         "თქვენ შეგიძლიათ მხოლოდ თქვენი სამუშაოების წაშლა",
       );

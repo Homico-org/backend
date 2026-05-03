@@ -827,13 +827,13 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job updated successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   updateJob(
     @Param('id') id: string,
     @CurrentUser() user: any,
     @Body() updateJobDto: Partial<CreateJobDto>,
   ) {
-    return this.jobsService.updateJob(id, user.userId, updateJobDto);
+    return this.jobsService.updateJob(id, user.userId, updateJobDto, user.role);
   }
 
   @Delete(':id')
@@ -841,9 +841,9 @@ export class JobsController {
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job deleted successfully' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async deleteJob(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.jobsService.deleteJob(id, user.userId);
+    await this.jobsService.deleteJob(id, user.userId, user.role);
     return { message: 'Job deleted successfully' };
   }
 

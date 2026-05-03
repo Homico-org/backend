@@ -1543,7 +1543,10 @@ export class UsersService {
   async updateProProfile(userId: string, proData: any): Promise<User> {
     const user = await this.findById(userId);
 
-    if (user.role !== "pro") {
+    // Allow admins to set pro fields on any account (including their own).
+    // The admin update-by-id endpoint already routes through here; this
+    // additionally lets an admin run their own /pro/profile-setup flow.
+    if (user.role !== "pro" && user.role !== "admin") {
       throw new BadRequestException(
         "Only pro users can update their pro profile",
       );
@@ -1902,7 +1905,7 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
-    if (user.role !== "pro") {
+    if (user.role !== "pro" && user.role !== "admin") {
       throw new BadRequestException(
         "Only pro users can deactivate their profile",
       );
@@ -1953,7 +1956,7 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
-    if (user.role !== "pro") {
+    if (user.role !== "pro" && user.role !== "admin") {
       throw new BadRequestException(
         "Only pro users can reactivate their profile",
       );
