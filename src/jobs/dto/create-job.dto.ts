@@ -113,10 +113,10 @@ export class CreateJobDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @ApiProperty()
   @IsString()
