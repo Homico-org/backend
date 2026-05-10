@@ -1,9 +1,140 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { ServiceCatalogCategory } from './schemas/service-catalog.schema';
-import { UpdateCatalogCategoryDto } from './dto/update-catalog-category.dto';
+import { Model, Types } from 'mongoose';
+import {
+  CatalogSubcategory,
+  PricingModel,
+  ServiceCatalogCategory,
+  ServiceType,
+  ServiceUnit,
+} from './schemas/service-catalog.schema';
+import { CreateCatalogCategoryDto } from './dto/create-catalog-category.dto';
+import {
+  UpdateCatalogCategoryDto,
+  UpsertSubcategoryDto,
+} from './dto/update-catalog-category.dto';
 import { User } from '../users/schemas/user.schema';
+import type { SeedCategory } from './seed/types';
+
+// === Read-shape contracts ===
+//
+// These mirror the lean Mongoose document shape we hand to API consumers.
+// They are kept here (not re-exported from the schema) so changes to the
+// internal schema don't accidentally break the legacy `as-categories`
+// response wire format.
+
+export interface LeanLocalizedText {
+  en: string;
+  ka: string;
+  ru: string;
+}
+
+export interface LeanUnitOption {
+  id?: string;
+  key: string;
+  unit: ServiceUnit;
+  label: LeanLocalizedText;
+  defaultPrice: number;
+  maxPrice?: number;
+}
+
+export interface LeanService {
+  id?: string;
+  key: string;
+  label: LeanLocalizedText;
+  description?: LeanLocalizedText;
+  basePrice: number;
+  maxPrice?: number;
+  unit: ServiceUnit;
+  unitLabel: LeanLocalizedText;
+  unitOptions?: LeanUnitOption[];
+  priceRange?: { min: number; typical?: number; max: number };
+  pricingModel?: PricingModel;
+  serviceType?: ServiceType;
+  estimatedDurationMin?: number;
+  estimatedDurationMax?: number;
+  tags?: string[];
+  keywords?: LeanLocalizedText[];
+  imageUrl?: string;
+}
+
+export interface LeanSubcategory {
+  id?: string;
+  key: string;
+  label: LeanLocalizedText;
+  description?: LeanLocalizedText;
+  iconName: string;
+  imageUrl?: string;
+  priceRange?: { min: number; max?: number };
+  sortOrder?: number;
+  isActive?: boolean;
+  services?: LeanService[];
+  additionalServices?: LeanService[];
+  tags?: string[];
+  keywords?: LeanLocalizedText[];
+}
+
+export interface LeanCategory {
+  _id?: Types.ObjectId | string;
+  id?: string;
+  key: string;
+  label: LeanLocalizedText;
+  description?: LeanLocalizedText;
+  iconName: string;
+  color: string;
+  minPrice: number;
+  sortOrder?: number;
+  isActive?: boolean;
+  subcategories?: LeanSubcategory[];
+  imageUrl?: string;
+  tags?: string[];
+  keywords?: LeanLocalizedText[];
+}
+
+// Public response row for `findBySubcategory` — flat shape used by ordering UI.
+export interface FindBySubcategoryRow {
+  serviceKey: string;
+  label: LeanLocalizedText;
+  basePrice: number;
+  maxPrice?: number;
+  unit: ServiceUnit;
+  unitLabel: LeanLocalizedText;
+  categoryKey: string;
+  subcategoryKey: string;
+}
+
+// Flat aggregator row (category OR subcategory) for dropdowns.
+export interface FlatCatalogRow {
+  key: string;
+  name: string;
+  nameKa: string;
+  type: 'category' | 'subcategory';
+  parentKey?: string;
+  icon?: string;
+}
+
+// Mongoose `$set` accepts dot-notation paths to nested array fields. The keys
+// can't be statically derived (they're built from DTO entries at runtime), but
+// the values are constrained to the source DTO's value union.
+type MongoDotPathSet<TSrc> = {
+  [path: string]: TSrc[keyof TSrc];
+};
+
+// Subset of User fields the catalog cleanup pass may rewrite. Typing this
+// explicitly avoids `Record<string, unknown>` and keeps the writes type-safe.
+type UserCleanupUpdate = Partial<
+  Pick<
+    User,
+    | 'servicePricing'
+    | 'selectedServices'
+    | 'selectedCategories'
+    | 'selectedSubcategories'
+  >
+>;
 
 @Injectable()
 export class ServiceCatalogService {
@@ -16,11 +147,11 @@ export class ServiceCatalogService {
 
   // === Public reads ===
 
-  async findAll() {
+  async findAll(): Promise<LeanCategory[]> {
     const categories = await this.catalogModel
       .find({ isActive: true })
       .sort({ sortOrder: 1 })
-      .lean()
+      .lean<LeanCategory[]>()
       .exec();
     return categories.map((cat) => ({
       ...cat,
@@ -30,8 +161,12 @@ export class ServiceCatalogService {
     }));
   }
 
-  async findAllAdmin() {
-    return this.catalogModel.find().sort({ sortOrder: 1 }).lean().exec();
+  async findAllAdmin(): Promise<LeanCategory[]> {
+    return this.catalogModel
+      .find()
+      .sort({ sortOrder: 1 })
+      .lean<LeanCategory[]>()
+      .exec();
   }
 
   async findByKey(key: string) {
@@ -42,19 +177,19 @@ export class ServiceCatalogService {
     return category;
   }
 
-  async findBySubcategory(subcategoryKey: string) {
+  async findBySubcategory(
+    subcategoryKey: string,
+  ): Promise<FindBySubcategoryRow[]> {
     const categories = await this.catalogModel
       .find({ isActive: true })
-      .lean()
+      .lean<LeanCategory[]>()
       .exec();
 
-    const results: any[] = [];
+    const results: FindBySubcategoryRow[] = [];
 
     for (const cat of categories) {
       for (const sub of cat.subcategories ?? []) {
         if (sub.key !== subcategoryKey) continue;
-
-        // Collect services directly on the subcategory
         for (const svc of sub.services ?? []) {
           results.push({
             serviceKey: svc.key,
@@ -66,23 +201,6 @@ export class ServiceCatalogService {
             categoryKey: cat.key,
             subcategoryKey: sub.key,
           });
-        }
-
-        // Collect services from variants
-        for (const variant of sub.variants ?? []) {
-          for (const svc of variant.services ?? []) {
-            results.push({
-              serviceKey: svc.key,
-              label: svc.label,
-              basePrice: svc.basePrice,
-              maxPrice: svc.maxPrice,
-              unit: svc.unit,
-              unitLabel: svc.unitLabel,
-              categoryKey: cat.key,
-              subcategoryKey: sub.key,
-              variantKey: variant.key,
-            });
-          }
         }
       }
     }
@@ -105,99 +223,107 @@ export class ServiceCatalogService {
   async findAllAsCategories() {
     const catalogs = await this.findAll();
     return catalogs.map((cat) => ({
-      _id: (cat as any)._id || cat.key,
-      id: (cat as any).id,
+      _id: cat._id?.toString() ?? cat.key,
+      id: cat.id,
       key: cat.key,
-      name: cat.label?.en || cat.key,
-      nameKa: cat.label?.ka || cat.label?.en || cat.key,
-      nameRu: cat.label?.ru || cat.label?.en || cat.key,
+      name: cat.label?.en ?? cat.key,
+      nameKa: cat.label?.ka ?? cat.label?.en ?? cat.key,
+      nameRu: cat.label?.ru ?? cat.label?.en ?? cat.key,
       description: cat.description?.en,
       descriptionKa: cat.description?.ka,
       icon: cat.key, // Use key for CategoryIcon mapping, not iconName
-      keywords: [],
+      // Brand color per category — drives icon backplates and accent strips
+      // throughout the UI. Defined in the seed (e.g. "#3B82F6" for plumbing).
+      color: cat.color,
+      minPrice: cat.minPrice,
+      keywords: cat.keywords ?? [],
       isActive: cat.isActive ?? true,
       sortOrder: cat.sortOrder ?? 0,
-      subcategories: (cat.subcategories || []).map((sub) => ({
-        id: (sub as any).id,
+      // Optional flexibility fields (added 2026-05)
+      imageUrl: cat.imageUrl,
+      tags: cat.tags,
+      subcategories: (cat.subcategories ?? []).map((sub) => ({
+        id: sub.id,
         key: sub.key,
-        name: sub.label?.en || sub.key,
-        nameKa: sub.label?.ka || sub.label?.en || sub.key,
-        nameRu: sub.label?.ru || sub.label?.en || sub.key,
+        name: sub.label?.en ?? sub.key,
+        nameKa: sub.label?.ka ?? sub.label?.en ?? sub.key,
+        nameRu: sub.label?.ru ?? sub.label?.en ?? sub.key,
         icon: sub.iconName,
-        keywords: [],
+        keywords: sub.keywords ?? [],
         sortOrder: sub.sortOrder ?? 0,
         isActive: sub.isActive ?? true,
         children: [],
+        // Optional flexibility fields
+        imageUrl: sub.imageUrl,
+        tags: sub.tags,
+        description: sub.description,
         services: [
-          ...(sub.services || []),
-          ...(sub.variants || []).flatMap((v) => v.services || []),
-          ...(sub.additionalServices || []),
+          ...(sub.services ?? []),
+          ...(sub.additionalServices ?? []),
         ]
           .filter(
             (svc, i, arr) => arr.findIndex((s) => s.key === svc.key) === i,
           )
-          .map((svc) => ({
-            id: (svc as any).id,
-            key: svc.key,
-            name: svc.label?.en || svc.key,
-            nameKa: svc.label?.ka || svc.label?.en || svc.key,
-            nameRu: svc.label?.ru || svc.label?.en || svc.key,
-            // Backward compat: primary unit from unitOptions[0] or legacy fields
-            basePrice: svc.unitOptions?.[0]?.defaultPrice ?? svc.basePrice,
-            maxPrice: svc.unitOptions?.[0]?.maxPrice ?? svc.maxPrice,
-            unit: svc.unitOptions?.[0]?.unit ?? svc.unit,
-            unitName: svc.unitOptions?.[0]?.label?.en ?? svc.unitLabel?.en ?? svc.unit,
-            unitNameKa: svc.unitOptions?.[0]?.label?.ka ?? svc.unitLabel?.ka ?? svc.unit,
-            // Multi-unit options
-            unitOptions: (svc.unitOptions || []).map((uo: Record<string, unknown>) => ({
-              id: (uo as { id?: string }).id,
-              key: (uo as { key: string }).key,
-              unit: (uo as { unit: string }).unit,
-              label: {
-                en: ((uo as { label?: { en?: string } }).label?.en) || '',
-                ka: ((uo as { label?: { ka?: string } }).label?.ka) || '',
-                ru: ((uo as { label?: { ru?: string } }).label?.ru) || '',
-              },
-              defaultPrice: (uo as { defaultPrice: number }).defaultPrice,
-              maxPrice: (uo as { maxPrice?: number }).maxPrice,
-            })),
-          })),
-        variants: (sub.variants || []).map((v) => ({
-          key: v.key,
-          name: v.label?.en || v.key,
-          nameKa: v.label?.ka || v.label?.en || v.key,
-          services: (v.services || []).map((svc) => ({
-            key: svc.key,
-            name: svc.label?.en || svc.key,
-            nameKa: svc.label?.ka || svc.label?.en || svc.key,
-            nameRu: svc.label?.ru || svc.label?.en || svc.key,
-            basePrice: svc.basePrice,
-            maxPrice: svc.maxPrice,
-            unit: svc.unit,
-            unitName: svc.unitLabel?.en || svc.unit,
-            unitNameKa: svc.unitLabel?.ka || svc.unitLabel?.en || svc.unit,
-          })),
-        })),
+          .map((svc) => {
+            const primary = svc.unitOptions?.[0];
+            return {
+              id: svc.id,
+              key: svc.key,
+              name: svc.label?.en ?? svc.key,
+              nameKa: svc.label?.ka ?? svc.label?.en ?? svc.key,
+              nameRu: svc.label?.ru ?? svc.label?.en ?? svc.key,
+              // Backward compat: primary unit from unitOptions[0] or legacy fields
+              basePrice: primary?.defaultPrice ?? svc.basePrice,
+              maxPrice: primary?.maxPrice ?? svc.maxPrice,
+              unit: primary?.unit ?? svc.unit,
+              unitName: primary?.label?.en ?? svc.unitLabel?.en ?? svc.unit,
+              unitNameKa: primary?.label?.ka ?? svc.unitLabel?.ka ?? svc.unit,
+              // Multi-unit options
+              unitOptions: (svc.unitOptions ?? []).map((uo) => ({
+                id: uo.id,
+                key: uo.key,
+                unit: uo.unit,
+                label: {
+                  en: uo.label?.en ?? '',
+                  ka: uo.label?.ka ?? '',
+                  ru: uo.label?.ru ?? '',
+                },
+                defaultPrice: uo.defaultPrice,
+                maxPrice: uo.maxPrice,
+              })),
+              // Optional flexibility fields — passed through verbatim. UI
+              // consumers can ignore them; old documents have them as undefined.
+              description: svc.description,
+              priceRange: svc.priceRange,
+              pricingModel: svc.pricingModel,
+              serviceType: svc.serviceType,
+              estimatedDurationMin: svc.estimatedDurationMin,
+              estimatedDurationMax: svc.estimatedDurationMax,
+              tags: svc.tags,
+              keywords: svc.keywords,
+              imageUrl: svc.imageUrl,
+            };
+          }),
         priceRange: sub.priceRange,
       })),
     }));
   }
 
-  async findAllAsCategoriesFlat() {
+  async findAllAsCategoriesFlat(): Promise<FlatCatalogRow[]> {
     const catalogs = await this.findAll();
-    const flat: Array<Record<string, unknown>> = [];
+    const flat: FlatCatalogRow[] = [];
     for (const cat of catalogs) {
       flat.push({
         key: cat.key,
-        name: cat.label?.en || cat.key,
-        nameKa: cat.label?.ka || cat.label?.en || cat.key,
+        name: cat.label?.en ?? cat.key,
+        nameKa: cat.label?.ka ?? cat.label?.en ?? cat.key,
         type: 'category',
       });
-      for (const sub of cat.subcategories || []) {
+      for (const sub of cat.subcategories ?? []) {
         flat.push({
           key: sub.key,
-          name: sub.label?.en || sub.key,
-          nameKa: sub.label?.ka || sub.label?.en || sub.key,
+          name: sub.label?.en ?? sub.key,
+          nameKa: sub.label?.ka ?? sub.label?.en ?? sub.key,
           type: 'subcategory',
           parentKey: cat.key,
           icon: sub.iconName,
@@ -209,7 +335,9 @@ export class ServiceCatalogService {
 
   // === Admin writes ===
 
-  async create(dto: Record<string, unknown>) {
+  async create(
+    dto: CreateCatalogCategoryDto,
+  ): Promise<ServiceCatalogCategory> {
     const category = new this.catalogModel({
       ...dto,
       version: 1,
@@ -257,13 +385,15 @@ export class ServiceCatalogService {
   async upsertSubcategory(
     categoryKey: string,
     subKey: string,
-    subcategoryData: Record<string, unknown>,
+    subcategoryData: UpsertSubcategoryDto,
   ) {
-    // Try to update existing subcategory (merge fields instead of full replace)
-    const setFields: Record<string, unknown> = {};
-    for (const [field, value] of Object.entries(subcategoryData)) {
+    // Translate the DTO into Mongoose dot-notation positional updates so we
+    // can patch a single field on the matched subcategory without rewriting
+    // the whole array. Keys generate at runtime — typed via `MongoDotPathSet`.
+    const setFields: MongoDotPathSet<UpsertSubcategoryDto> = {};
+    for (const field of Object.keys(subcategoryData) as (keyof UpsertSubcategoryDto)[]) {
       if (field === 'key') continue;
-      setFields[`subcategories.$.${field}`] = value;
+      setFields[`subcategories.$.${String(field)}`] = subcategoryData[field];
     }
 
     const updated = Object.keys(setFields).length > 0
@@ -316,75 +446,6 @@ export class ServiceCatalogService {
     return category;
   }
 
-  // === Variant operations ===
-
-  async upsertVariant(
-    categoryKey: string,
-    subKey: string,
-    variantKey: string,
-    variantData: Record<string, unknown>,
-  ) {
-    const category = await this.catalogModel
-      .findOne({ key: categoryKey })
-      .exec();
-    if (!category) {
-      throw new NotFoundException(`Category "${categoryKey}" not found`);
-    }
-
-    const subIndex = category.subcategories.findIndex(
-      (s) => s.key === subKey,
-    );
-    if (subIndex === -1) {
-      throw new NotFoundException(`Subcategory "${subKey}" not found`);
-    }
-
-    const variantIndex = category.subcategories[
-      subIndex
-    ].variants.findIndex((v) => v.key === variantKey);
-
-    if (variantIndex >= 0) {
-      const existing = category.subcategories[subIndex].variants[variantIndex];
-      for (const [field, value] of Object.entries(variantData)) {
-        if (field === 'key') continue;
-        (existing as any)[field] = value;
-      }
-    } else {
-      (category.subcategories[subIndex].variants as any).push({
-        ...variantData,
-        key: variantKey,
-      });
-    }
-
-    category.version += 1;
-    return category.save();
-  }
-
-  async removeVariant(
-    categoryKey: string,
-    subKey: string,
-    variantKey: string,
-  ) {
-    const category = await this.catalogModel
-      .findOne({ key: categoryKey })
-      .exec();
-    if (!category) {
-      throw new NotFoundException(`Category "${categoryKey}" not found`);
-    }
-
-    const subIndex = category.subcategories.findIndex(
-      (s) => s.key === subKey,
-    );
-    if (subIndex === -1) {
-      throw new NotFoundException(`Subcategory "${subKey}" not found`);
-    }
-
-    category.subcategories[subIndex].variants = category.subcategories[
-      subIndex
-    ].variants.filter((v) => v.key !== variantKey) as any;
-    category.version += 1;
-    return category.save();
-  }
-
   // === Reorder ===
 
   async reorderCategories(orderedKeys: string[]) {
@@ -413,7 +474,7 @@ export class ServiceCatalogService {
     const subMap = new Map(
       category.subcategories.map((s) => [s.key, s]),
     );
-    const reordered: any[] = [];
+    const reordered: CatalogSubcategory[] = [];
 
     orderedKeys.forEach((key, index) => {
       const sub = subMap.get(key);
@@ -438,12 +499,37 @@ export class ServiceCatalogService {
   // === Seed ===
 
   async seed(
-    categories: Record<string, unknown>[],
+    categories: SeedCategory[],
   ): Promise<{ inserted: number; updated: number; removed: number }> {
     let inserted = 0;
     let updated = 0;
 
-    const seedKeys = new Set(categories.map((c) => c.key as string));
+    // Walk the tree and ensure every stable id (category, subcategory, service)
+    // is unique across the whole catalog. Pros and jobs persist selections by
+    // id — duplicates would silently corrupt user data. Unit option ids
+    // (U01..U17) are intentionally shared across services.
+    const seenIds = new Map<string, string>();
+    const claim = (id: string | undefined, where: string): void => {
+      if (!id) return;
+      const prior = seenIds.get(id);
+      if (prior) {
+        throw new BadRequestException(
+          `Duplicate catalog id "${id}": already used at ${prior}, again at ${where}`,
+        );
+      }
+      seenIds.set(id, where);
+    };
+    for (const cat of categories) {
+      claim(cat.id, `category ${cat.key}`);
+      for (const sub of cat.subcategories ?? []) {
+        claim(sub.id, `subcategory ${cat.key}/${sub.key}`);
+        for (const svc of sub.services ?? []) {
+          claim(svc.id, `service ${cat.key}/${sub.key}/${svc.key}`);
+        }
+      }
+    }
+
+    const seedKeys = new Set(categories.map((c) => c.key));
 
     for (let i = 0; i < categories.length; i++) {
       const dto = categories[i];
@@ -480,16 +566,19 @@ export class ServiceCatalogService {
   }
 
   async cleanupUserServices(): Promise<{ checked: number; updated: number }> {
-    // Build valid keys from current catalog
+    // Build the set of valid keys from the current catalog (categories,
+    // subcategories, and services). Pros referencing anything outside this
+    // set get those entries pruned.
     const validKeys = new Set<string>();
-    const categories = await this.catalogModel.find({ isActive: true }).lean().exec();
+    const categories = await this.catalogModel
+      .find({ isActive: true })
+      .lean<LeanCategory[]>()
+      .exec();
     for (const cat of categories) {
-      const c = cat as unknown as Record<string, unknown>;
-      validKeys.add(c.key as string);
-      for (const sub of ((c.subcategories as unknown[]) || [])) {
-        const s = sub as Record<string, unknown>;
-        validKeys.add(s.key as string);
-        for (const svc of ((s.services as Record<string, string>[]) || [])) {
+      validKeys.add(cat.key);
+      for (const sub of cat.subcategories ?? []) {
+        validKeys.add(sub.key);
+        for (const svc of sub.services ?? []) {
           validKeys.add(svc.key);
         }
       }
@@ -505,9 +594,9 @@ export class ServiceCatalogService {
 
     let updated = 0;
     for (const pro of pros) {
-      const updates: Record<string, unknown> = {};
+      const updates: UserCleanupUpdate = {};
 
-      if (pro.servicePricing?.length > 0) {
+      if (pro.servicePricing && pro.servicePricing.length > 0) {
         const filtered = pro.servicePricing.filter(
           (sp) => validKeys.has(sp.serviceKey) || validKeys.has(sp.subcategoryKey),
         );
@@ -516,7 +605,7 @@ export class ServiceCatalogService {
         }
       }
 
-      if (pro.selectedServices?.length > 0) {
+      if (pro.selectedServices && pro.selectedServices.length > 0) {
         const filtered = pro.selectedServices.filter(
           (ss) => validKeys.has(ss.key) || validKeys.has(ss.categoryKey),
         );
@@ -525,15 +614,15 @@ export class ServiceCatalogService {
         }
       }
 
-      if (pro.selectedCategories?.length > 0) {
-        const filtered = pro.selectedCategories.filter((key: string) => validKeys.has(key));
+      if (pro.selectedCategories && pro.selectedCategories.length > 0) {
+        const filtered = pro.selectedCategories.filter((key) => validKeys.has(key));
         if (filtered.length !== pro.selectedCategories.length) {
           updates.selectedCategories = filtered;
         }
       }
 
-      if (pro.selectedSubcategories?.length > 0) {
-        const filtered = pro.selectedSubcategories.filter((key: string) => validKeys.has(key));
+      if (pro.selectedSubcategories && pro.selectedSubcategories.length > 0) {
+        const filtered = pro.selectedSubcategories.filter((key) => validKeys.has(key));
         if (filtered.length !== pro.selectedSubcategories.length) {
           updates.selectedSubcategories = filtered;
         }

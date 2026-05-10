@@ -66,6 +66,40 @@ export class PriceRange {
   max?: number;
 }
 
+// Pricing model — controls how a service's price is presented to customers and pros.
+//   FIXED  — single price, no negotiation                       (basePrice)
+//   RANGE  — explicit min/max range                             (priceRange.min / max)
+//   FROM   — "starting from $X", upper bound flexible           (basePrice as floor)
+//   QUOTE  — no upfront price; customer requests a quote        (price hidden in UI)
+export enum PricingModel {
+  FIXED = 'fixed',
+  RANGE = 'range',
+  FROM = 'from',
+  QUOTE = 'quote',
+}
+
+// Service type — drives UI affordances (book-now vs request-quote, urgency badges, etc.)
+export enum ServiceType {
+  INSTALLATION = 'installation',
+  REPAIR = 'repair',
+  MAINTENANCE = 'maintenance',
+  CONSULTATION = 'consultation',
+  EMERGENCY = 'emergency',
+  RECURRING = 'recurring',
+}
+
+@Schema({ _id: false })
+export class ServicePriceRange {
+  @Prop({ required: true })
+  min: number;
+
+  @Prop()
+  typical?: number;
+
+  @Prop({ required: true })
+  max: number;
+}
+
 @Schema({ _id: false })
 export class UnitOption {
   @Prop()
@@ -125,6 +159,38 @@ export class CatalogService {
   // Multi-unit pricing options — services can be priced in multiple ways
   @Prop({ type: [Object], default: [] })
   unitOptions?: UnitOption[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+  // All optional and backward-compatible — old documents without these
+  // fields fall through to single-price/fixed-mode behavior.
+
+  @Prop({ type: ServicePriceRange })
+  priceRange?: ServicePriceRange;
+
+  @Prop({
+    type: String,
+    enum: Object.values(PricingModel),
+    default: PricingModel.FIXED,
+  })
+  pricingModel?: PricingModel;
+
+  @Prop({ type: String, enum: Object.values(ServiceType) })
+  serviceType?: ServiceType;
+
+  @Prop()
+  estimatedDurationMin?: number; // minutes
+
+  @Prop()
+  estimatedDurationMax?: number; // minutes
+
+  @Prop({ type: [String], default: [] })
+  tags?: string[]; // free-form, e.g. ['urgent', 'eco', 'licensed', 'weekend']
+
+  @Prop({ type: [LocalizedText], default: [] })
+  keywords?: LocalizedText[]; // search synonyms per locale
+
+  @Prop()
+  imageUrl?: string;
 }
 
 @Schema({ _id: false })
@@ -154,23 +220,9 @@ export class CatalogAddon {
   iconName?: string;
 }
 
-@Schema({ _id: false })
-export class CatalogVariant {
-  @Prop({ required: true })
-  key: string;
-
-  @Prop({ type: LocalizedText, required: true })
-  label: LocalizedText;
-
-  @Prop({ type: [Object], default: [] })
-  services: CatalogService[];
-
-  @Prop({ type: [Object], default: [] })
-  addons: CatalogAddon[];
-
-  @Prop({ type: [Object], default: [] })
-  additionalServices: CatalogService[];
-}
+// CatalogVariant was removed in the 2026-05 stabilization pass. The seed
+// data never used it (every subcategory had `variants: []`). If a real
+// product need surfaces, restore from git and update consumers.
 
 @Schema({ _id: false })
 export class CatalogSubcategory {
@@ -202,9 +254,6 @@ export class CatalogSubcategory {
   isActive: boolean;
 
   @Prop({ type: [Object], default: [] })
-  variants: CatalogVariant[];
-
-  @Prop({ type: [Object], default: [] })
   services: CatalogService[];
 
   @Prop({ type: [Object], default: [] })
@@ -215,6 +264,13 @@ export class CatalogSubcategory {
 
   @Prop({ type: [Object], default: [] })
   orderDiscountTiers?: DiscountTier[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+  @Prop({ type: [String], default: [] })
+  tags?: string[];
+
+  @Prop({ type: [LocalizedText], default: [] })
+  keywords?: LocalizedText[];
 }
 
 // === Top-level document ===
@@ -253,6 +309,16 @@ export class ServiceCatalogCategory extends Document {
 
   @Prop({ type: [Object], default: [] })
   subcategories: CatalogSubcategory[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+  @Prop()
+  imageUrl?: string;
+
+  @Prop({ type: [String], default: [] })
+  tags?: string[];
+
+  @Prop({ type: [LocalizedText], default: [] })
+  keywords?: LocalizedText[];
 }
 
 export const ServiceCatalogCategorySchema =

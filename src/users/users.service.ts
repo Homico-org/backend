@@ -1682,6 +1682,23 @@ export class UsersService {
 
     // Per-service pricing — when present, derive basePrice/maxPrice from it
     if (proData.servicePricing !== undefined && proData.servicePricing.length > 0) {
+      // Server-side defense: class-validator can't easily enforce
+      // `priceMin <= priceMax` across two sibling fields, so do it here.
+      // Frontend already gates this with the inverted-range Save button
+      // block, but any non-browser client (curl, mobile SDK, future API
+      // consumer) could otherwise persist a `priceMin: 500, priceMax: 200`
+      // entry that breaks every downstream price filter and display.
+      const inverted = (proData.servicePricing as any[]).find((sp) => {
+        const lo = typeof sp.priceMin === 'number' ? sp.priceMin : null;
+        const hi = typeof sp.priceMax === 'number' ? sp.priceMax : null;
+        return lo !== null && hi !== null && lo > 0 && hi > 0 && lo > hi;
+      });
+      if (inverted) {
+        throw new BadRequestException(
+          `Invalid price range on service "${inverted.serviceKey || 'unknown'}": priceMin (${inverted.priceMin}) cannot exceed priceMax (${inverted.priceMax}).`,
+        );
+      }
+
       // Replace entire servicePricing array — old entries are removed
       updateData.servicePricing = proData.servicePricing;
 

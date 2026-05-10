@@ -14,9 +14,8 @@ import { CreateCatalogCategoryDto } from './dto/create-catalog-category.dto';
 import {
   UpdateCatalogCategoryDto,
   UpsertSubcategoryDto,
-  UpsertVariantDto,
 } from './dto/update-catalog-category.dto';
-import { buildSeedData } from './seed-catalog-v3';
+import { buildSeedData } from './seed';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -71,7 +70,7 @@ export class ServiceCatalogController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   create(@Body() dto: CreateCatalogCategoryDto) {
-    return this.catalogService.create(dto as any);
+    return this.catalogService.create(dto);
   }
 
   @Patch('reorder-categories')
@@ -113,7 +112,7 @@ export class ServiceCatalogController {
     @Param('subKey') subKey: string,
     @Body() body: UpsertSubcategoryDto,
   ) {
-    return this.catalogService.upsertSubcategory(categoryKey, subKey, body as any);
+    return this.catalogService.upsertSubcategory(categoryKey, subKey, body);
   }
 
   @Delete(':categoryKey/subcategories/:subKey')
@@ -124,34 +123,6 @@ export class ServiceCatalogController {
     @Param('subKey') subKey: string,
   ) {
     return this.catalogService.removeSubcategory(categoryKey, subKey);
-  }
-
-  @Put(':categoryKey/subcategories/:subKey/variants/:variantKey')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  upsertVariant(
-    @Param('categoryKey') categoryKey: string,
-    @Param('subKey') subKey: string,
-    @Param('variantKey') variantKey: string,
-    @Body() body: UpsertVariantDto,
-  ) {
-    return this.catalogService.upsertVariant(
-      categoryKey,
-      subKey,
-      variantKey,
-      body as any,
-    );
-  }
-
-  @Delete(':categoryKey/subcategories/:subKey/variants/:variantKey')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  removeVariant(
-    @Param('categoryKey') categoryKey: string,
-    @Param('subKey') subKey: string,
-    @Param('variantKey') variantKey: string,
-  ) {
-    return this.catalogService.removeVariant(categoryKey, subKey, variantKey);
   }
 
   @Patch(':categoryKey/reorder')
@@ -168,8 +139,7 @@ export class ServiceCatalogController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   seed() {
-    const categories = buildSeedData();
-    return this.catalogService.seed(categories as unknown as Record<string, unknown>[]);
+    return this.catalogService.seed(buildSeedData());
   }
 
   @Post('cleanup-user-services')

@@ -2,7 +2,6 @@ import { PartialType } from '@nestjs/mapped-types';
 import {
   CreateCatalogCategoryDto,
   CatalogSubcategoryDto,
-  CatalogVariantDto,
 } from './create-catalog-category.dto';
 
 export class UpdateCatalogCategoryDto extends PartialType(
@@ -10,5 +9,3 @@ export class UpdateCatalogCategoryDto extends PartialType(
 ) {}
 
 export class UpsertSubcategoryDto extends PartialType(CatalogSubcategoryDto) {}
-
-export class UpsertVariantDto extends PartialType(CatalogVariantDto) {}

@@ -274,6 +274,10 @@ export class Job extends Document {
         quantity: { type: Number, required: true },
         unitPrice: { type: Number, required: true },
         unit: { type: String },
+        // Optional flexibility fields (added 2026-05)
+        budgetMin: { type: Number },
+        budgetMax: { type: Number },
+        notes: { type: String },
       },
     ],
     default: [],
@@ -284,6 +288,9 @@ export class Job extends Document {
     quantity: number;
     unitPrice: number;
     unit?: string;
+    budgetMin?: number;
+    budgetMax?: number;
+    notes?: string;
   }[];
 
   // Professionals who have been invited to this job

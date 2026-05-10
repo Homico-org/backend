@@ -97,6 +97,24 @@ class ServiceItemDto {
   @IsString()
   @IsOptional()
   unit?: string;
+
+  // Optional flexibility fields (added 2026-05). When `budgetMin`/`budgetMax`
+  // are present, treat `unitPrice` as the typical/midpoint and the range as
+  // the customer's stated tolerance. `notes` is per-service free text.
+  @ApiPropertyOptional()
+  @IsNumber()
+  @IsOptional()
+  budgetMin?: number;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @IsOptional()
+  budgetMax?: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
 
 export class CreateJobDto {

@@ -124,12 +124,68 @@ class ServicePricingDto {
   @IsArray()
   @IsOptional()
   discountTiers?: { minQuantity: number; percent: number }[];
+
+  // Range-mode pricing (added 2026-05). When both are set and differ, the UI
+  // displays "priceMin – priceMax₾"; `price` carries the midpoint for legacy
+  // single-price consumers (totals, sorting). Without these fields declared
+  // here, class-validator's whitelist stripped them and the range was lost
+  // on round-trip — single price would show on reload.
+  @IsNumber()
+  @IsOptional()
+  priceMin?: number;
+
+  @IsNumber()
+  @IsOptional()
+  priceMax?: number;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}
+
+class PortfolioProjectServiceDto {
+  @IsString()
+  serviceKey: string;
+
+  @IsString()
+  @IsOptional()
+  subcategoryKey?: string;
+
+  @IsString()
+  label: string;
+
+  @IsString()
+  @IsOptional()
+  unitLabel?: string;
+
+  @IsNumber()
+  price: number;
+
+  @IsNumber()
+  @IsOptional()
+  priceMin?: number;
+
+  @IsNumber()
+  @IsOptional()
+  priceMax?: number;
 }
 
 class PortfolioProjectDto {
   @IsString()
   @IsOptional()
   id?: string;
+
+  // Source of the portfolio entry. "homico" entries were auto-imported from
+  // completed Homico jobs and carry a `jobId` linking back to that job. They
+  // must round-trip through profile-setup edits so we don't accidentally
+  // convert verified jobs into plain external entries.
+  @IsEnum(["external", "homico"])
+  @IsOptional()
+  source?: "external" | "homico";
+
+  @IsString()
+  @IsOptional()
+  jobId?: string;
 
   @IsString()
   title: string;
@@ -155,6 +211,26 @@ class PortfolioProjectDto {
   @Type(() => BeforeAfterPairDto)
   @IsOptional()
   beforeAfterPairs?: BeforeAfterPairDto[];
+
+  @IsBoolean()
+  @IsOptional()
+  isVisible?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  displayOrder?: number;
+
+  @IsString()
+  @IsOptional()
+  completedDate?: string;
+
+  // Services performed on this project (with prices from the pro's catalog).
+  // Round-trips so customers see them on the project card.
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PortfolioProjectServiceDto)
+  @IsOptional()
+  services?: PortfolioProjectServiceDto[];
 }
 
 export class UpdateProfileDto {
