@@ -67,6 +67,16 @@ export class PaymentMethod {
 }
 
 // Portfolio project subdocument
+export class PortfolioProjectService {
+  serviceKey: string;
+  subcategoryKey?: string;
+  label: string;
+  unitLabel?: string;
+  price: number;
+  priceMin?: number;
+  priceMax?: number;
+}
+
 export class PortfolioProject {
   id?: string;
   title: string;
@@ -77,6 +87,13 @@ export class PortfolioProject {
   beforeAfterPairs?: { id?: string; beforeImage: string; afterImage: string }[];
   source?: "external" | "homico"; // 'external' = work done outside Homico, 'homico' = completed via platform
   jobId?: string; // Reference to original job if done through Homico
+  // Optional flexibility fields (added 2026-05)
+  isVisible?: boolean;
+  displayOrder?: number;
+  completedDate?: string;
+  // Services performed on this project, snapshotted from the pro's pricing
+  // catalog at the time of saving. Surfaced as pills on the project card.
+  services?: PortfolioProjectService[];
 }
 
 @Schema({ timestamps: true })
@@ -188,6 +205,12 @@ export class User extends Document {
     price: number;
     isActive: boolean;
     discountTiers?: { minQuantity: number; percent: number }[];
+    // Optional flexibility fields (added 2026-05). All backward-compatible —
+    // existing entries with `price` only keep working; UI falls through to
+    // single-price display when min/max are absent.
+    priceMin?: number;
+    priceMax?: number;
+    notes?: string;
   }[];
 
   @Prop({ type: Number, default: 0 })
@@ -358,6 +381,20 @@ export class User extends Document {
           default: "external",
         },
         jobId: String,
+        isVisible: { type: Boolean, default: true },
+        displayOrder: Number,
+        completedDate: String,
+        services: [
+          {
+            serviceKey: String,
+            subcategoryKey: String,
+            label: String,
+            unitLabel: String,
+            price: Number,
+            priceMin: Number,
+            priceMax: Number,
+          },
+        ],
       },
     ],
     default: [],

@@ -11,7 +11,11 @@ import {
   Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ServiceUnit } from '../schemas/service-catalog.schema';
+import {
+  PricingModel,
+  ServiceType,
+  ServiceUnit,
+} from '../schemas/service-catalog.schema';
 
 export class DiscountTierDto {
   @IsNumber()
@@ -46,6 +50,20 @@ export class PriceRangeDto {
   @IsNumber()
   @IsOptional()
   max?: number;
+}
+
+export class ServicePriceRangeDto {
+  @IsNumber()
+  @Min(0)
+  min: number;
+
+  @IsNumber()
+  @IsOptional()
+  typical?: number;
+
+  @IsNumber()
+  @Min(0)
+  max: number;
 }
 
 export class CatalogServiceDto {
@@ -90,6 +108,44 @@ export class CatalogServiceDto {
   @Type(() => DiscountTierDto)
   @IsOptional()
   discountTiers?: DiscountTierDto[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+
+  @ValidateNested()
+  @Type(() => ServicePriceRangeDto)
+  @IsOptional()
+  priceRange?: ServicePriceRangeDto;
+
+  @IsEnum(PricingModel)
+  @IsOptional()
+  pricingModel?: PricingModel;
+
+  @IsEnum(ServiceType)
+  @IsOptional()
+  serviceType?: ServiceType;
+
+  @IsNumber()
+  @IsOptional()
+  estimatedDurationMin?: number;
+
+  @IsNumber()
+  @IsOptional()
+  estimatedDurationMax?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LocalizedTextDto)
+  @IsOptional()
+  keywords?: LocalizedTextDto[];
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
 }
 
 export class CatalogAddonDto {
@@ -125,32 +181,7 @@ export class CatalogAddonDto {
   iconName?: string;
 }
 
-export class CatalogVariantDto {
-  @IsString()
-  @IsNotEmpty()
-  key: string;
-
-  @ValidateNested()
-  @Type(() => LocalizedTextDto)
-  label: LocalizedTextDto;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CatalogServiceDto)
-  services: CatalogServiceDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CatalogAddonDto)
-  @IsOptional()
-  addons?: CatalogAddonDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CatalogServiceDto)
-  @IsOptional()
-  additionalServices?: CatalogServiceDto[];
-}
+// CatalogVariantDto was removed in the 2026-05 stabilization pass.
 
 export class CatalogSubcategoryDto {
   @IsString()
@@ -188,12 +219,6 @@ export class CatalogSubcategoryDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CatalogVariantDto)
-  @IsOptional()
-  variants?: CatalogVariantDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
   @Type(() => CatalogServiceDto)
   @IsOptional()
   services?: CatalogServiceDto[];
@@ -215,6 +240,19 @@ export class CatalogSubcategoryDto {
   @Type(() => DiscountTierDto)
   @IsOptional()
   orderDiscountTiers?: DiscountTierDto[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LocalizedTextDto)
+  @IsOptional()
+  keywords?: LocalizedTextDto[];
 }
 
 export class CreateCatalogCategoryDto {
@@ -255,4 +293,21 @@ export class CreateCatalogCategoryDto {
   @ValidateNested({ each: true })
   @Type(() => CatalogSubcategoryDto)
   subcategories: CatalogSubcategoryDto[];
+
+  // === Optional flexibility fields (added 2026-05) ===
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LocalizedTextDto)
+  @IsOptional()
+  keywords?: LocalizedTextDto[];
 }
