@@ -21,6 +21,16 @@ export const plumbingCategory = cat(
       svc("V071", "plumb_shower_svc", [U.unit(100, 400)]),
       svc("V072", "plumb_dishwasher_svc", [U.unit(50, 150)]),
       svc("V073", "plumb_washer_svc", [U.unit(50, 150)]),
+      // Built-in fixtures (added 2026-05). Two-stage install workflow:
+      // rough-in valve in the wall (stage I) + finish trim assembly (stage II).
+      // Per-fixture pricing is bundled here as one combined service since most
+      // pros bill the full job - estimates show 200-450 ₾ total per fixture
+      // depending on type. Cistern install is the parallel for toilets.
+      svc("V217", "plumb_builtin_basin_svc", [U.unit(200, 450)]),
+      svc("V218", "plumb_builtin_shower_svc", [U.unit(250, 500)]),
+      svc("V219", "plumb_builtin_hygiene_svc", [U.unit(200, 400)]),
+      svc("V220", "plumb_builtin_bath_svc", [U.unit(220, 450)]),
+      svc("V221", "plumb_builtin_toilet_svc", [U.unit(200, 380)]),
     ], 0),
     sub("S022", "plumbing_repair", "Wrench", [
       svc("V074", "plumb_leak_svc", [U.job(30, 120)]),
@@ -33,6 +43,10 @@ export const plumbingCategory = cat(
       svc("V079", "drainage_install_svc", [U.meter(10, 40)]),
       svc("V080", "drainage_sewage_svc", [U.job(100, 500)]),
       svc("V081", "drainage_outdoor_svc", [U.meter(15, 50)]),
+      // Shower trap install (added 2026-05). Two depth/length variants in
+      // real estimates (small 126 ₾, long 154 ₾) - exposed here as one
+      // service with a range covering both.
+      svc("V222", "plumb_shower_drain_svc", [U.unit(100, 160)]),
     ], 2),
     sub("S024", "boiler", "Flame", [
       svc("V082", "boiler_gas_svc", [U.unit(100, 400)]),

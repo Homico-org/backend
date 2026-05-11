@@ -19,6 +19,10 @@ export const paintersCategory = cat(
       svc("V108", "paint_ceiling_svc", [U.sqm(6, 18), U.room(50, 200)]),
       svc("V109", "paint_wallpaper_svc", [U.sqm(5, 20), U.room(70, 300)]),
       svc("V110", "paint_trim_svc", [U.meter(4, 12), U.unit(30, 120)]),
+      // Limewash (ლაიმვოში) - premium painting method that appears across both
+      // Tbilisi estimates (PDF sections 15.2, 17.2, 19.3, 21.2). Different
+      // technique from standard interior paint - pros bill it separately.
+      svc("V215", "paint_limewash_svc", [U.sqm(16, 30)]),
     ], 0),
     sub("S032", "exterior_paint", "PaintRoller", [
       svc("V111", "paint_exterior_svc", [U.sqm(8, 25)]),
@@ -30,6 +34,11 @@ export const paintersCategory = cat(
       svc("V115", "plaster_drywall_svc", [U.sqm(12, 35)]),
       svc("V116", "plaster_ceiling_svc", [U.sqm(10, 30)]),
       svc("V117", "plaster_decorative_svc", [U.sqm(20, 60)]),
+      // Q3 prep — sanding → priming → 2x base putty → fiberglass mesh →
+      // 2x final putty → final sanding. Industry-standard premium prep in
+      // Georgia (Q1/Q2/Q3 grading from German DIN spec). Real estimates bill
+      // this as ~50-85 ₾/sqm bundled (PDF sec 14 sums to ~68 ₾/sqm).
+      svc("V216", "paint_q3_prep_svc", [U.sqm(50, 85)]),
     ], 2),
   ],
 );

@@ -303,4 +303,26 @@ export const translations: Record<string, SeedLocalizedText> = {
   V204: { en: "Walkways & garden paths", ka: "ბილიკები და ბაღის გზები", ru: "Дорожки и садовые тропинки" },
   V205: { en: "Patio & terrace", ka: "ტერასა და ეზოს მოპირკეთება", ru: "Мощение террасы и двора" },
   V206: { en: "Paving stones", ka: "ფილების და ქვაფენილის დაგება", ru: "Укладка брусчатки и плитки" },
+
+  // ── Tier 1 catalog expansion (2026-05): premium-renovation services sourced
+  // from real Tbilisi estimator line items (see `estimates/`). Pricing ranges
+  // benchmarked against PERIMETER GROUP and one independent estimator.
+  // Waterproofing lives under tiler subcat (S037) because the tile pro owns
+  // wet-area work end-to-end (membrane through grouting) as one trade.
+  V207: { en: "Bathroom waterproofing", ka: "ჰიდროიზოლაცია", ru: "Гидроизоляция санузла" },
+  V208: { en: "Shower zone slope & envelope", ka: "საშხაპის ზონის დახრება", ru: "Уклон в душевой" },
+  V209: { en: "45° tile corner cut", ka: "ფილის კუთხის ჩათლა (45°)", ru: "Запил плитки 45°" },
+  V210: { en: "Epoxy grouting", ka: "ეპოქსიდური ფუგა", ru: "Эпоксидная затирка" },
+  V211: { en: "Floor screed", ka: "იატაკის მოჭიმვა", ru: "Стяжка пола" },
+  V212: { en: "Self-leveling floor", ka: "თვითსწორებადი იატაკი", ru: "Самовыравнивающийся пол" },
+  V213: { en: "Drywall ceiling", ka: "თაბაშირ-მუყაოს ჭერი", ru: "Гипсокартонный потолок" },
+  V214: { en: "Ceiling cove / cornice", ka: "ჭერის საფარდე", ru: "Карниз потолка" },
+  V215: { en: "Limewash painting", ka: "შეღებვა ლაიმვოშით", ru: "Известковая покраска (лаймвош)" },
+  V216: { en: "Q3 finish prep", ka: "Q3 საფინიშო მომზადება", ru: "Подготовка под Q3" },
+  V217: { en: "Built-in basin faucet", ka: "ჩასაშენებელი ხელსაბანის შემრევი", ru: "Встроенный смеситель для раковины" },
+  V218: { en: "Built-in shower faucet", ka: "ჩასაშენებელი საშხაპის შემრევი", ru: "Встроенный смеситель для душа" },
+  V219: { en: "Built-in hygiene faucet", ka: "ჩასაშენებელი ჰიგიენური შემრევი", ru: "Встроенный гигиенический смеситель" },
+  V220: { en: "Built-in bath faucet", ka: "ჩასაშენებელი აბაზანის შემრევი", ru: "Встроенный смеситель для ванны" },
+  V221: { en: "Built-in toilet (cistern install)", ka: "ჩასაშენებელი უნიტაზის ინსტალაცია", ru: "Установка инсталляции унитаза" },
+  V222: { en: "Shower drain (trap)", ka: "საშხაპის ტრაპის მონტაჟი", ru: "Установка душевого трапа" },
 };
