@@ -325,4 +325,26 @@ export const translations: Record<string, SeedLocalizedText> = {
   V220: { en: "Built-in bath faucet", ka: "ჩასაშენებელი აბაზანის შემრევი", ru: "Встроенный смеситель для ванны" },
   V221: { en: "Built-in toilet (cistern install)", ka: "ჩასაშენებელი უნიტაზის ინსტალაცია", ru: "Установка инсталляции унитаза" },
   V222: { en: "Shower drain (trap)", ka: "საშხაპის ტრაპის მონტაჟი", ru: "Установка душевого трапа" },
+
+  // ── Tier 2-5 catalog expansion (2026-05): completeness pass covering trim,
+  // tile detail, flooring transitions, boiler accessories, towel warmer,
+  // hidden doors, premium lighting, plus a new `logistics` subcategory under
+  // C09 contractors for materials transport / debris removal / hauling.
+  V223: { en: "Hidden / recessed plinth", ka: "ფარული პლინტუსი", ru: "Скрытый плинтус" },
+  V224: { en: "Silicone joint sealing", ka: "სილიკონის ნაკერი", ru: "Силиконовый шов" },
+  V225: { en: "Floor threshold profile", ka: "გადასასვლელი პროფილი", ru: "Порожек / переходный профиль" },
+  V226: { en: "Floor underlayment", ka: "იატაკის ქვეშაგები", ru: "Подложка под пол" },
+  V227: { en: "Boiler collector system", ka: "ქვაბის კოლექტორი", ru: "Коллектор котла" },
+  V228: { en: "Towel warmer install", ka: "საშრობის მონტაჟი", ru: "Установка полотенцесушителя" },
+  V229: { en: "Hidden door install", ka: "ფარული კარის მონტაჟი", ru: "Установка скрытой двери" },
+  V230: { en: "Track lighting", ka: "რელსური სანათი", ru: "Установка трекового освещения" },
+  V231: { en: "Directional spot light", ka: "მიმართული სანათი", ru: "Поворотный точечный светильник" },
+
+  // Logistics subcategory (S056, new) - materials transport, debris removal,
+  // hauling. Real estimates bill these per-trip at 30-400 ₾ depending on
+  // distance and load.
+  S056: { en: "Logistics & hauling", ka: "ლოგისტიკა და გადაზიდვა", ru: "Логистика и разгрузка" },
+  V232: { en: "Materials delivery", ka: "მასალის ტრანსპორტირება", ru: "Доставка материалов" },
+  V233: { en: "Debris removal", ka: "ნაგვის გატანა", ru: "Вывоз мусора" },
+  V234: { en: "Material unloading & hauling", ka: "მასალის გადმოტვირთვა და აზიდვა", ru: "Разгрузка и подъём материалов" },
 };

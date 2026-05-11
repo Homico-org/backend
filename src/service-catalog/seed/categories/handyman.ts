@@ -41,6 +41,10 @@ export const handymanCategory = cat(
       svc("V033", "trim_baseboard_svc", [U.meter(5, 15)]),
       svc("V034", "trim_molding_svc", [U.meter(8, 25)]),
       svc("V035", "trim_paneling_svc", [U.sqm(15, 50)]),
+      // Hidden / recessed plinth (added 2026-05). Premium baseboard install
+      // with a routed groove in the wall and concealed profile - two-stage
+      // job (PDF section 13 rough-in + section 22.4 finish paint+mount).
+      svc("V223", "trim_recessed_plinth_svc", [U.meter(28, 50)]),
     ], 4),
   ],
 );

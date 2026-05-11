@@ -20,6 +20,10 @@ export const hvacCategory = cat(
       svc("V120", "heat_underfloor_svc", [U.sqm(20, 60)]),
       svc("V121", "heat_repair_svc", [U.job(40, 200), U.hour(30, 80)]),
       svc("V122", "heat_thermostat_svc", [U.unit(40, 150)]),
+      // Towel warmer / drying radiator (added 2026-05). Separate fixture from
+      // standard radiators - typically wall-mounted in bathrooms, plumbed
+      // into the heating circuit. PDF 7.6 bills at 98 ₾.
+      svc("V228", "heat_towel_warmer_svc", [U.unit(70, 130)]),
     ], 0),
     sub("S035", "ac_ventilation", "Wind", [
       svc("V123", "ac_install_svc", [U.unit(80, 300)]),
