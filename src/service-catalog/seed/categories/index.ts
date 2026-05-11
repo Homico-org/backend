@@ -17,6 +17,7 @@ import { poolspaCategory } from './pool-spa';
 import { roofingCategory } from './roofing';
 import { windowsdoorsCategory } from './windows-doors';
 import { concretemasonryCategory } from './concrete-masonry';
+import { designersCategory } from './designers';
 
 export const allCategories = [
   cleaningCategory,
@@ -33,4 +34,5 @@ export const allCategories = [
   roofingCategory,
   windowsdoorsCategory,
   concretemasonryCategory,
+  designersCategory,
 ];
