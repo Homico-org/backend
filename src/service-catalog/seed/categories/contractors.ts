@@ -18,6 +18,11 @@ export const contractorsCategory = cat(
       svc("V128", "gc_full_svc", [U.sqm(100, 500), U.project(5000, 80000)]),
       svc("V129", "gc_kitchen_svc", [U.project(2000, 15000), U.sqm(150, 600)]),
       svc("V130", "gc_bathroom_svc", [U.project(1500, 10000), U.sqm(200, 800)]),
+      // Drywall ceiling / cove (added 2026-05). Separate from `plaster_drywall_svc`
+      // (which covers wall surfaces) because ceiling work uses a different
+      // hanging system and the cove is per linear meter, not per sqm.
+      svc("V213", "gc_drywall_ceiling_svc", [U.sqm(28, 40)]),
+      svc("V214", "gc_drywall_cove_svc", [U.meter(30, 50)]),
     ], 0),
     sub("S037", "tiler", "Grid3x3", [
       svc("V131", "tile_floor_svc", [U.sqm(10, 35)]),
@@ -25,6 +30,13 @@ export const contractorsCategory = cat(
       svc("V133", "tile_mosaic_svc", [U.sqm(25, 80)]),
       svc("V134", "tile_remove_svc", [U.sqm(5, 15)]),
       svc("V135", "tile_grout_svc", [U.sqm(5, 18)]),
+      // Wet-area + premium tile details (added 2026-05). Tiler owns the
+      // membrane through to the final grout - waterproofing is part of the
+      // same mobilization on every bathroom job.
+      svc("V207", "tile_waterproof_svc", [U.sqm(16, 40)]),
+      svc("V208", "tile_shower_envelope_svc", [U.unit(250, 400)]),
+      svc("V209", "tile_45deg_corner_svc", [U.meter(80, 110)]),
+      svc("V210", "tile_epoxy_grout_svc", [U.meter(25, 50)]),
     ], 1),
     sub("S038", "flooring", "Footprints", [
       svc("V136", "floor_parquet_svc", [U.sqm(12, 40)]),
@@ -32,6 +44,12 @@ export const contractorsCategory = cat(
       svc("V138", "floor_vinyl_svc", [U.sqm(8, 25)]),
       svc("V139", "floor_repair_svc", [U.sqm(6, 20)]),
       svc("V140", "floor_sand_svc", [U.sqm(8, 25)]),
+      // Substrate prep (added 2026-05). Either floor screed (cement-sand,
+      // 7-10cm) or self-leveling compound is a mandatory pre-step before
+      // laminate / parquet / vinyl on most premium jobs - currently the
+      // catalog had nowhere for pros to express this work.
+      svc("V211", "floor_screed_svc", [U.sqm(20, 45)]),
+      svc("V212", "floor_selfleveling_svc", [U.sqm(20, 40)]),
     ], 2),
     sub("S039", "built_in", "Archive", [
       svc("V141", "builtin_wardrobe_svc", [U.unit(300, 2000)]),
