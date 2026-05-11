@@ -53,6 +53,10 @@ export const plumbingCategory = cat(
       svc("V083", "boiler_electric_svc", [U.unit(80, 300)]),
       svc("V084", "boiler_repair_svc", [U.job(40, 200)]),
       svc("V085", "boiler_service_svc", [U.unit(40, 150)]),
+      // Distribution collector / manifold (added 2026-05). Separate work from
+      // the boiler itself - PDF 7.2 bills 280 ₾ as its own line. Common on
+      // multi-radiator systems where each zone needs its own valve.
+      svc("V227", "boiler_collector_svc", [U.unit(200, 350)]),
     ], 3),
     sub("S025", "gas", "Flame", [
       svc("V086", "gas_line_svc", [U.meter(15, 50), U.job(100, 500)]),

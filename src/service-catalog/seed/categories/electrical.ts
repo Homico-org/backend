@@ -26,6 +26,12 @@ export const electricalCategory = cat(
       svc("V095", "light_led_svc", [U.meter(10, 30)]),
       svc("V096", "light_outdoor_svc", [U.unit(30, 120)]),
       svc("V097", "light_fan_svc", [U.unit(50, 180)]),
+      // Premium lighting (added 2026-05). Track lighting is the recessed rail
+      // system from PDF 9.3 - different install effort from a regular spot.
+      // Directional spots are gimbal-mounted (PDF 24.3) so they upcharge over
+      // generic point lights.
+      svc("V230", "light_track_svc", [U.meter(60, 120)]),
+      svc("V231", "light_directional_svc", [U.unit(15, 30)]),
     ], 1),
     sub("S028", "electrical_panel", "Plug", [
       svc("V098", "panel_install_svc", [U.unit(100, 400)]),

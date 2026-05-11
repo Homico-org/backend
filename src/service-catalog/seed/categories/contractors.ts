@@ -23,6 +23,11 @@ export const contractorsCategory = cat(
       // hanging system and the cove is per linear meter, not per sqm.
       svc("V213", "gc_drywall_ceiling_svc", [U.sqm(28, 40)]),
       svc("V214", "gc_drywall_cove_svc", [U.meter(30, 50)]),
+      // Hidden / concealed door install (added 2026-05). Premium product -
+      // frame integrated into the wall plane, requires drywall reinforcement
+      // around the opening. XLSX bills 1475 ₾ material + 200 ₾ labor;
+      // labor-only range here.
+      svc("V229", "gc_hidden_door_install_svc", [U.unit(300, 500)]),
     ], 0),
     sub("S037", "tiler", "Grid3x3", [
       svc("V131", "tile_floor_svc", [U.sqm(10, 35)]),
@@ -37,6 +42,9 @@ export const contractorsCategory = cat(
       svc("V208", "tile_shower_envelope_svc", [U.unit(250, 400)]),
       svc("V209", "tile_45deg_corner_svc", [U.meter(80, 110)]),
       svc("V210", "tile_epoxy_grout_svc", [U.meter(25, 50)]),
+      // Silicone joint sealing - last finish step where tiles meet (interior
+      // corners, fixture penetrations). PDF 12.4 bills 9.8 ₾/m.
+      svc("V224", "tile_silicone_joint_svc", [U.meter(8, 15)]),
     ], 1),
     sub("S038", "flooring", "Footprints", [
       svc("V136", "floor_parquet_svc", [U.sqm(12, 40)]),
@@ -50,6 +58,11 @@ export const contractorsCategory = cat(
       // catalog had nowhere for pros to express this work.
       svc("V211", "floor_screed_svc", [U.sqm(20, 45)]),
       svc("V212", "floor_selfleveling_svc", [U.sqm(20, 40)]),
+      // Transitions and underlayment - threshold profiles where flooring
+      // meets vitrage/tile/other rooms (XLSX 6 = 38 ₾/unit), underlayment
+      // film/DVD between subfloor and laminate (XLSX 4/5 = 4-8 ₾/sqm).
+      svc("V225", "floor_threshold_svc", [U.unit(25, 50)]),
+      svc("V226", "floor_underlayment_svc", [U.sqm(4, 10)]),
     ], 2),
     sub("S039", "built_in", "Archive", [
       svc("V141", "builtin_wardrobe_svc", [U.unit(300, 2000)]),
@@ -68,5 +81,14 @@ export const contractorsCategory = cat(
       svc("V150", "demo_full_svc", [U.sqm(15, 50)]),
       svc("V151", "demo_debris_svc", [U.load(50, 200)]),
     ], 5),
+    // New subcategory (2026-05). Real estimates explicitly bill materials
+    // delivery, debris removal, and unloading per trip - work that today
+    // gets buried inside other line items. Surfacing it lets pros bid more
+    // accurately and customers see the true cost breakdown.
+    sub("S056", "logistics", "Truck", [
+      svc("V232", "logistics_materials_svc", [U.load(30, 180)]),
+      svc("V233", "logistics_debris_svc", [U.load(70, 200)]),
+      svc("V234", "logistics_haul_svc", [U.load(150, 400)]),
+    ], 6),
   ],
 );
