@@ -42,6 +42,7 @@ export const translations: Record<string, SeedLocalizedText> = {
   C12: { en: "Roofing", ka: "სახურავი", ru: "Кровля" },
   C13: { en: "Windows & doors", ka: "ფანჯრები და კარები", ru: "Окна и двери" },
   C14: { en: "Concrete & masonry", ka: "ბეტონი და ქვა", ru: "Бетон и кладка" },
+  C15: { en: "Designers", ka: "დიზაინერები", ru: "Дизайнеры" },
   S001: { en: "Regular home cleaning", ka: "სახლის დალაგება", ru: "Регулярная уборка" },
   S002: { en: "Deep cleaning", ka: "გენერალური დალაგება", ru: "Генеральная уборка" },
   S003: { en: "Post-renovation cleaning", ka: "რემონტის შემდეგ დალაგება", ru: "Уборка после ремонта" },
@@ -347,4 +348,33 @@ export const translations: Record<string, SeedLocalizedText> = {
   V232: { en: "Materials delivery", ka: "მასალის ტრანსპორტირება", ru: "Доставка материалов" },
   V233: { en: "Debris removal", ka: "ნაგვის გატანა", ru: "Вывоз мусора" },
   V234: { en: "Material unloading & hauling", ka: "მასალის გადმოტვირთვა და აზიდვა", ru: "Разгрузка и подъём материалов" },
+
+  // ── C15 designers (2026-05): the design profession was previously orphaned -
+  // `update-profile.dto.ts` had Pinterest links + designStyles fields aimed at
+  // interior designers, but the catalog had no category for them to live in.
+  // They were being squeezed into architects (wrong - architects do structural,
+  // designers do finishes/style) or contractors (also wrong). New top-level
+  // category, 5 subcats, 16 services, all priced from Tbilisi market norms.
+  S057: { en: "Interior design", ka: "ინტერიერის დიზაინი", ru: "Дизайн интерьера" },
+  S058: { en: "Commercial design", ka: "კომერციული დიზაინი", ru: "Коммерческий дизайн" },
+  S059: { en: "3D visualization", ka: "3D ვიზუალიზაცია", ru: "3D-визуализация" },
+  S060: { en: "Design consultation", ka: "დიზაინ-კონსულტაცია", ru: "Дизайн-консультация" },
+  S061: { en: "Staging & styling", ka: "სტილიზაცია", ru: "Стайлинг" },
+
+  V235: { en: "Full apartment design", ka: "ბინის ინტერიერის დიზაინი", ru: "Дизайн квартиры" },
+  V236: { en: "Single room design", ka: "ერთი ოთახის დიზაინი", ru: "Дизайн одной комнаты" },
+  V237: { en: "Kitchen design", ka: "სამზარეულოს დიზაინი", ru: "Дизайн кухни" },
+  V238: { en: "Bathroom design", ka: "სააბაზანოს დიზაინი", ru: "Дизайн санузла" },
+  V239: { en: "Office design", ka: "ოფისის დიზაინი", ru: "Дизайн офиса" },
+  V240: { en: "Retail / showroom design", ka: "მაღაზიის დიზაინი", ru: "Дизайн магазина" },
+  V241: { en: "Restaurant / hospitality design", ka: "რესტორნისა და სასტუმროს დიზაინი", ru: "Дизайн ресторана и отеля" },
+  V242: { en: "3D visualization / render", ka: "3D რენდერი", ru: "3D-визуализация" },
+  V243: { en: "3D walkthrough / animation", ka: "3D ვიდეო", ru: "3D-видео обход" },
+  V244: { en: "Floor plans", ka: "გეგმარება", ru: "Планировка" },
+  V245: { en: "Color consultation", ka: "ფერების კონსულტაცია", ru: "Подбор цветов" },
+  V246: { en: "Material & finish selection", ka: "მასალების შერჩევა", ru: "Подбор материалов" },
+  V247: { en: "Design consultation", ka: "დიზაინ-კონსულტაცია", ru: "Консультация дизайнера" },
+  V248: { en: "Designer supervision visit", ka: "ავტორის ზედამხედველობა", ru: "Авторский надзор" },
+  V249: { en: "Home staging", ka: "სახლის სტილიზაცია", ru: "Хоум-стейджинг" },
+  V250: { en: "Furniture & decor selection", ka: "ავეჯისა და დეკორის შერჩევა", ru: "Подбор мебели и декора" },
 };
