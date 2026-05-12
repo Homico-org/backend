@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import * as bcrypt from "bcrypt";
-import { Model } from "mongoose";
+import { Model, PipelineStage } from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityType, LoggerService } from "../common/logger";
 import { Conversation } from "../conversation/schemas/conversation.schema";
@@ -1123,27 +1123,50 @@ export class UsersService {
     const limit = filters?.limit || 6;
     const skip = (page - 1) * limit;
 
-    // Build sort object - always sort premium first
-    // Include _id as final sort key to ensure consistent pagination (prevents duplicates)
+    // Build sort object - always sort premium first.
+    //
+    // The default "recommended" sort uses a derived `profileScore` (computed
+    // in the aggregation below) so that visually-complete profiles (with
+    // portfolio photos, real bios, priced services) rank above bare ones.
+    // The previous default put any pro with `totalReviews > 0` first, but
+    // most pros currently have zero reviews so the listing showed empty
+    // cards on top - exactly the issue users were complaining about.
+    //
+    // Other sorts (rating, newest, price-low/high) still respect the user's
+    // explicit choice; profileScore appears only as a soft tiebreaker so
+    // identical-rating / identical-price pros are deterministically ordered
+    // with the fuller profile on top.
+    //
+    // Include _id as final sort key to ensure consistent pagination across
+    // pages (prevents duplicate items appearing in two pages).
     let sortObj: any = {};
     switch (filters?.sort) {
-      case "rating": // pros with reviews first, then highest rating
-        sortObj = { isPremium: -1, totalReviews: -1, avgRating: -1, _id: -1 };
+      case "rating":
+        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isPremium: -1, totalReviews: -1, _id: -1 };
+        sortObj = { isPremium: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isPremium: -1, basePrice: 1, _id: -1 };
+        sortObj = { isPremium: -1, basePrice: 1, profileScore: -1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isPremium: -1, basePrice: -1, _id: -1 };
+        sortObj = { isPremium: -1, basePrice: -1, profileScore: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isPremium: -1, createdAt: -1, _id: -1 };
+        sortObj = { isPremium: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
-      default: // 'recommended' — pros with reviews first, then by rating
-        sortObj = { isPremium: -1, totalReviews: -1, avgRating: -1, _id: -1 };
+      default:
+        // "recommended" - profileScore first so fullest profiles top the
+        // listing. Reviews and rating still tie-break within the same score
+        // band so high-rated complete pros beat equally-complete unrated ones.
+        sortObj = {
+          isPremium: -1,
+          profileScore: -1,
+          totalReviews: -1,
+          avgRating: -1,
+          _id: -1,
+        };
     }
 
     // Build query - only role=pro
@@ -1299,13 +1322,157 @@ export class UsersService {
     const fetchLimit = hasScheduleFilter ? limit * 5 : limit;
     const fetchSkip = hasScheduleFilter ? 0 : skip;
 
+    // Profile-completeness score. Computed at query time so it always
+    // reflects the latest user doc - no migration, no sync job, no stale
+    // cache. Each signal contributes a fixed weight; total caps at ~110
+    // for a fully-loaded profile. Weights were chosen by visual impact on
+    // the listing card: a portfolio of photos changes a card the most,
+    // an avatar is the next-biggest visual upgrade, then bio/services.
+    //
+    //   embedded portfolio present      30 pts
+    //   bonus per portfolio entry      +5 pts (capped +20)
+    //   linked /portfolios entries     +5 pts per item (capped +20)
+    //   avatar set                      15 pts
+    //   priced services                 15 pts
+    //   bio >= 50 chars                 10 pts
+    //   has any reviews                 10 pts
+    //   tagline set                      5 pts
+    //   has categories                   5 pts
+    //   --------------------------------
+    //   max                            130 pts
+    //
+    // Type note: Mongo aggregation expressions are deeply-nested union types
+    // that class-validator / Mongoose don't fully model. `Record<string,
+    // unknown>` is the strictest practical type without spelling out every
+    // operator overload.
+    const profileScoreExpr: Record<string, unknown> = {
+      $add: [
+        // 30 if portfolio array non-empty
+        {
+          $cond: [
+            { $gt: [{ $size: { $ifNull: ["$portfolioProjects", []] } }, 0] },
+            30,
+            0,
+          ],
+        },
+        // bonus for breadth: 5 per embedded project, cap 20
+        {
+          $min: [
+            { $multiply: [{ $size: { $ifNull: ["$portfolioProjects", []] } }, 5] },
+            20,
+          ],
+        },
+        // bonus for linked /portfolios entries: 5 per item, cap 20.
+        // `linkedPortfolioCount` is added by the $lookup above, so it's
+        // always present (defaulting to 0) when this $addFields stage runs.
+        {
+          $min: [
+            { $multiply: [{ $ifNull: ["$linkedPortfolioCount", 0] }, 5] },
+            20,
+          ],
+        },
+        // 15 for a real avatar (not empty string)
+        {
+          $cond: [
+            {
+              $and: [
+                { $ifNull: ["$avatar", false] },
+                { $ne: ["$avatar", ""] },
+              ],
+            },
+            15,
+            0,
+          ],
+        },
+        // 15 for priced services (servicePricing array populated)
+        {
+          $cond: [
+            { $gt: [{ $size: { $ifNull: ["$servicePricing", []] } }, 0] },
+            15,
+            0,
+          ],
+        },
+        // 10 for a substantive bio
+        {
+          $cond: [
+            { $gte: [{ $strLenCP: { $ifNull: ["$bio", ""] } }, 50] },
+            10,
+            0,
+          ],
+        },
+        // 10 for any reviews
+        {
+          $cond: [{ $gt: [{ $ifNull: ["$totalReviews", 0] }, 0] }, 10, 0],
+        },
+        // 5 for a tagline
+        {
+          $cond: [
+            {
+              $and: [
+                { $ifNull: ["$tagline", false] },
+                { $ne: ["$tagline", ""] },
+              ],
+            },
+            5,
+            0,
+          ],
+        },
+        // 5 for at least one category set
+        {
+          $cond: [
+            { $gt: [{ $size: { $ifNull: ["$categories", []] } }, 0] },
+            5,
+            0,
+          ],
+        },
+      ],
+    };
+
+    // Aggregation result shape: a lean `User` plus the derived score and
+    // the linked-portfolio count used to compute it. We type it as
+    // `User & { profileScore: number }` so downstream consumers get proper
+    // field completion. The pipeline gets typed as `PipelineStage[]` so a
+    // typo in any operator name fails the build.
+    type ProWithScore = User & { profileScore: number };
+
+    // We $lookup the separate `portfolioitems` collection (Homico-completed
+    // jobs auto-imported by the booking flow) and include its count in the
+    // score - pros whose visible cards show "filled" photos pulled from that
+    // collection deserve the same score boost as pros with embedded
+    // `portfolioProjects`. Otherwise the visible-vs-empty distinction we're
+    // trying to surface would miss anyone whose portfolio lives only in the
+    // separate collection.
+    const pipeline: PipelineStage[] = [
+      { $match: query },
+      {
+        $lookup: {
+          from: "portfolioitems",
+          let: { proId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$proId", "$$proId"] } } },
+            { $count: "n" },
+          ],
+          as: "linkedPortfolio",
+        },
+      },
+      {
+        $addFields: {
+          linkedPortfolioCount: {
+            $ifNull: [{ $arrayElemAt: ["$linkedPortfolio.n", 0] }, 0],
+          },
+        },
+      },
+      { $addFields: { profileScore: profileScoreExpr } },
+      // Drop the temporary lookup array - keeps the response payload tight.
+      { $project: { linkedPortfolio: 0, password: 0 } },
+      { $sort: sortObj },
+      { $skip: fetchSkip },
+      { $limit: fetchLimit },
+    ];
+
     let total = await this.userModel.countDocuments(query).exec();
     let users = await this.userModel
-      .find(query)
-      .select("-password")
-      .sort(sortObj)
-      .skip(fetchSkip)
-      .limit(fetchLimit)
+      .aggregate<ProWithScore>(pipeline)
       .exec();
 
     // Post-query filter by schedule availability
