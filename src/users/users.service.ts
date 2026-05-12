@@ -1565,9 +1565,18 @@ export class UsersService {
       previewMap.set(entry._id.toString(), { images, videos, beforeAfterPairs });
     });
 
-    // Add portfolioItemCount and preview media to each user
+    // Add portfolioItemCount and preview media to each user.
+    //
+    // We switched from `.find()` to `.aggregate()` upstream, which returns
+    // plain JS objects rather than Mongoose Documents - so `user.toObject()`
+    // (a Document-only method) doesn't exist on aggregation results. Use a
+    // shallow spread instead; the downstream code already treats `userObj`
+    // dynamically (it mutates dynamic preview fields on it), matching the
+    // pre-existing `as any` shape.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = users.map((user) => {
-      const userObj = user.toObject() as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const userObj = { ...user } as any;
       const portfolioItemCount =
         portfolioCountMap.get(user._id.toString()) || 0;
       const embeddedCount = userObj.portfolioProjects?.length || 0;
