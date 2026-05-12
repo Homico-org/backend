@@ -89,6 +89,28 @@ export class SupportService {
       .exec();
   }
 
+  /**
+   * How many of a user's tickets have unread admin replies. Used by the
+   * frontend header / profile dropdown to surface a "support replied" badge,
+   * so users notice answers without having to open the help page first.
+   */
+  async getUserUnreadSummary(
+    userId: string,
+  ): Promise<{ count: number; ticketIds: string[] }> {
+    const tickets = await this.ticketModel
+      .find({
+        userId: new Types.ObjectId(userId),
+        hasUnreadAdminMessages: true,
+      })
+      .select('_id')
+      .lean()
+      .exec();
+    return {
+      count: tickets.length,
+      ticketIds: tickets.map((t) => t._id.toString()),
+    };
+  }
+
   async getTicketById(ticketId: string, userId?: string, isAdmin = false): Promise<SupportTicket> {
     const ticket = await this.ticketModel
       .findById(ticketId)
