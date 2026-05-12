@@ -43,6 +43,16 @@ export class SupportController {
     return this.supportService.getUserTickets(user.userId);
   }
 
+  // Lightweight unread summary - the frontend header polls this every 60s
+  // to surface a badge when support replies arrive between page loads.
+  // Returns { count, ticketIds } so the UI can also deep-link to the first
+  // unread thread if needed.
+  @Get('tickets/my/unread')
+  @UseGuards(JwtAuthGuard)
+  getMyUnreadSummary(@CurrentUser() user: any) {
+    return this.supportService.getUserUnreadSummary(user.userId);
+  }
+
   @Get('tickets/:id')
   @UseGuards(JwtAuthGuard)
   getTicket(
