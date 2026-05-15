@@ -16,6 +16,7 @@ import { PortfolioItem, PortfolioItemSchema } from '../portfolio/schemas/portfol
 import { ProjectRequest, ProjectRequestSchema } from '../project-request/schemas/project-request.schema';
 import { Offer, OfferSchema } from '../offer/schemas/offer.schema';
 import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-ticket.schema';
+import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
 
 @Module({
   imports: [
@@ -35,6 +36,13 @@ import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-t
       { name: SupportTicket.name, schema: SupportTicketSchema },
     ]),
     forwardRef(() => AuthModule),
+    // ServiceCatalogService is used in findAllPros() to expand the search
+    // query against service/subcategory labels in all three locales, so a
+    // search for "ავეჯი" matches pros offering furniture services even
+    // when the pro's own name doesn't contain that word. ServiceCatalogModule
+    // exports the service. The catalog module only depends on the User
+    // *schema*, not on UsersModule, so no circular import.
+    ServiceCatalogModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

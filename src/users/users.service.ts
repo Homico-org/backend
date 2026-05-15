@@ -9,6 +9,7 @@ import * as bcrypt from "bcrypt";
 import { Model, PipelineStage } from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityType, LoggerService } from "../common/logger";
+import { ServiceCatalogService } from "../service-catalog/service-catalog.service";
 import { Conversation } from "../conversation/schemas/conversation.schema";
 import { Job } from "../jobs/schemas/job.schema";
 import { Proposal } from "../jobs/schemas/proposal.schema";
@@ -46,7 +47,94 @@ export class UsersService {
     @InjectModel(SupportTicket.name)
     private supportTicketModel: Model<SupportTicket>,
     private readonly logger: LoggerService,
+    // Used by findAllPros to expand the user's search term against the
+    // service-catalog labels in all three locales, so "ავეჯი" matches pros
+    // offering furniture services even when their own name doesn't.
+    private readonly serviceCatalogService: ServiceCatalogService,
   ) {}
+
+  // Cached flat index of catalog rows used by `findCatalogKeyMatches`.
+  // Refreshed every 5 minutes - catalog edits are rare (admin-only) and
+  // 5 min staleness is acceptable for the search expansion. Keeping the
+  // catalog hot in memory avoids one Mongo round-trip per search request.
+  private catalogSearchIndex: Array<{
+    key: string;
+    en: string;
+    ka: string;
+    ru: string;
+  }> | null = null;
+  private catalogSearchIndexBuiltAt = 0;
+  private static readonly CATALOG_SEARCH_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Build (or reuse) a flat list of every searchable catalog key (categories,
+   * subcategories, and services) with their en/ka/ru labels. Cached for
+   * `CATALOG_SEARCH_TTL_MS` so repeated searches don't re-query Mongo.
+   */
+  private async getCatalogSearchIndex(): Promise<
+    Array<{ key: string; en: string; ka: string; ru: string }>
+  > {
+    const now = Date.now();
+    if (
+      this.catalogSearchIndex &&
+      now - this.catalogSearchIndexBuiltAt < UsersService.CATALOG_SEARCH_TTL_MS
+    ) {
+      return this.catalogSearchIndex;
+    }
+    const catalogs = await this.serviceCatalogService.findAllAsCategories();
+    const out: Array<{ key: string; en: string; ka: string; ru: string }> = [];
+    for (const cat of catalogs) {
+      out.push({
+        key: cat.key,
+        en: (cat.name ?? "").toLowerCase(),
+        ka: (cat.nameKa ?? "").toLowerCase(),
+        ru: (cat.nameRu ?? "").toLowerCase(),
+      });
+      for (const sub of cat.subcategories ?? []) {
+        out.push({
+          key: sub.key,
+          en: (sub.name ?? "").toLowerCase(),
+          ka: (sub.nameKa ?? "").toLowerCase(),
+          ru: (sub.nameRu ?? "").toLowerCase(),
+        });
+        for (const svc of sub.services ?? []) {
+          out.push({
+            key: svc.key,
+            en: (svc.name ?? "").toLowerCase(),
+            ka: (svc.nameKa ?? "").toLowerCase(),
+            ru: (svc.nameRu ?? "").toLowerCase(),
+          });
+        }
+      }
+    }
+    this.catalogSearchIndex = out;
+    this.catalogSearchIndexBuiltAt = now;
+    return out;
+  }
+
+  /**
+   * Return the set of catalog keys (category/subcategory/service) whose
+   * label in any locale contains the search term. Empty set when nothing
+   * matches.
+   */
+  private async findCatalogKeyMatches(
+    searchTerm: string,
+  ): Promise<Set<string>> {
+    const term = searchTerm.trim().toLowerCase();
+    if (term.length < 2) return new Set();
+    const index = await this.getCatalogSearchIndex();
+    const matched = new Set<string>();
+    for (const row of index) {
+      if (
+        row.en.includes(term) ||
+        row.ka.includes(term) ||
+        row.ru.includes(term)
+      ) {
+        matched.add(row.key);
+      }
+    }
+    return matched;
+  }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     // Only check email uniqueness if email is provided
@@ -1305,15 +1393,44 @@ export class UsersService {
           query.uid = uidNumber;
         }
       } else {
-        const searchRegex = new RegExp(searchTerm, "i");
-        query.$or = [
+        // The regex matches the user's own free-text profile fields. That
+        // catches "Giorgi" → pros named Giorgi, but completely misses
+        // "ავეჯი" → pros offering furniture services (because the word
+        // never appears on the user document; it lives only on the catalog
+        // labels we render from `servicePricing.serviceKey` etc.).
+        //
+        // We expand the match by walking the cached catalog and collecting
+        // every service / subcategory / category key whose label in any
+        // locale contains the search term, then asking Mongo to also match
+        // pros whose servicePricing / selectedServices / subcategories
+        // arrays reference any of those keys. Result: search by name AND
+        // by services in one query, no extra round-trip, no LLM call.
+        const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const searchRegex = new RegExp(escaped, "i");
+        const orClauses: Array<Record<string, unknown>> = [
           { name: searchRegex },
           { title: searchRegex },
           { tagline: searchRegex },
           { description: searchRegex },
+          { bio: searchRegex },
           { categories: searchRegex },
           { subcategories: searchRegex },
         ];
+        const matchedKeys = await this.findCatalogKeyMatches(searchTerm);
+        if (matchedKeys.size > 0) {
+          const keysArr = Array.from(matchedKeys);
+          orClauses.push(
+            { categories: { $in: keysArr } },
+            { selectedCategories: { $in: keysArr } },
+            { subcategories: { $in: keysArr } },
+            { selectedSubcategories: { $in: keysArr } },
+            { "selectedServices.key": { $in: keysArr } },
+            { "servicePricing.serviceKey": { $in: keysArr } },
+            { "servicePricing.subcategoryKey": { $in: keysArr } },
+            { "servicePricing.categoryKey": { $in: keysArr } },
+          );
+        }
+        query.$or = orClauses;
       }
     }
 
