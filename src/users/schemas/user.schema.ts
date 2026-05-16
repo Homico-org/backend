@@ -438,6 +438,9 @@ export class User extends Document {
   linkedinUrl: string;
 
   @Prop()
+  tiktokUrl: string;
+
+  @Prop()
   websiteUrl: string;
 
   // ID Verification documents

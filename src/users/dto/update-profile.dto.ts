@@ -496,6 +496,11 @@ export class UpdateProfileDto {
   @IsOptional()
   linkedinUrl?: string;
 
+  @ApiPropertyOptional({ description: "TikTok profile URL" })
+  @IsString()
+  @IsOptional()
+  tiktokUrl?: string;
+
   @ApiPropertyOptional({ description: "Personal/business website URL" })
   @IsString()
   @IsOptional()

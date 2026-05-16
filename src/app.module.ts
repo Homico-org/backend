@@ -30,6 +30,7 @@ import { AiModule } from './ai/ai.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { PublicModule } from './public/public.module';
 import { ServiceRequestsModule } from './service-requests/service-requests.module';
+import { CatalogSuggestionsModule } from './catalog-suggestions/catalog-suggestions.module';
 import { BusinessModule } from './business/business.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
@@ -124,6 +125,7 @@ import { APP_GUARD } from '@nestjs/core';
     BookingsModule,
     InviteModule,
     ServiceRequestsModule,
+    CatalogSuggestionsModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default
