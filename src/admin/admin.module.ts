@@ -9,6 +9,7 @@ import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-t
 import { Notification, NotificationSchema } from '../notifications/schemas/notification.schema';
 import { InviteToken, InviteTokenSchema } from '../invite/schemas/invite-token.schema';
 import { VerificationModule } from '../verification/verification.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { VerificationModule } from '../verification/verification.module';
       { name: InviteToken.name, schema: InviteTokenSchema },
     ]),
     VerificationModule,
+    UsersModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

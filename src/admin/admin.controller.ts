@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -6,6 +6,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { ActivityType, LoggerService } from '../common/logger';
 import { UserRole } from '../users/schemas/user.schema';
 import { AdminService } from './admin.service';
+import { AdminCreateUserDto } from './dto/admin-create-user.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -19,6 +20,38 @@ export class AdminController {
   ) {}
 
   // ============== PAGINATED LIST ENDPOINTS ==============
+
+  @Post('users')
+  @ApiOperation({ summary: 'Create a new user (any role, including admin)' })
+  @ApiResponse({ status: 201, description: 'Created user' })
+  async createUser(@Body() dto: AdminCreateUserDto, @Req() req: { user: { sub: string } }) {
+    const created = await this.adminService.createUser(dto);
+    await this.loggerService.logActivity({
+      type: ActivityType.ADMIN_USER_CREATE,
+      userId: req.user.sub,
+      targetId: String(created._id),
+      targetType: 'user',
+      details: {
+        role: dto.role,
+        email: created.email,
+        phone: created.phone,
+      },
+    });
+    return {
+      id: String(created._id),
+      uid: created.uid,
+      role: created.role,
+      email: created.email,
+      phone: created.phone,
+      name: created.name,
+    };
+  }
+
+  @Get('available-roles')
+  @ApiOperation({ summary: 'List role values selectable in the admin create-user UI' })
+  getAvailableRoles() {
+    return { roles: this.adminService.getAvailableRoles() };
+  }
 
   @Get('users')
   @ApiOperation({ summary: 'Get all users with pagination and filters' })

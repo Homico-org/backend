@@ -1,13 +1,16 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { FilterQuery, Model } from "mongoose";
 import { Job } from "../jobs/schemas/job.schema";
 import { Proposal } from "../jobs/schemas/proposal.schema";
 import { Notification } from "../notifications/schemas/notification.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
-import { User } from "../users/schemas/user.schema";
+import { User, UserRole } from "../users/schemas/user.schema";
+import { UsersService } from "../users/users.service";
+import { CreateUserDto } from "../users/dto/create-user.dto";
 import { InviteToken } from "../invite/schemas/invite-token.schema";
 import { SmsService } from "../verification/services/sms.service";
+import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
 
 interface PaginationOptions {
   page: number;
@@ -40,6 +43,8 @@ interface InviteListOptions extends PaginationOptions {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(Job.name) private jobModel: Model<Job>,
@@ -50,7 +55,73 @@ export class AdminService {
     @InjectModel(InviteToken.name)
     private inviteTokenModel: Model<InviteToken>,
     private readonly smsService: SmsService,
+    private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * Admin-initiated user creation. Delegates the heavy lifting (uniqueness
+   * checks, password hashing, UID generation, portfolio side effects) to
+   * UsersService.create() so we stay consistent with self-registration.
+   *
+   * After creation, marks email + phone verified and the profile completed,
+   * because an admin creating an account vouches for it - we don't want the
+   * user stuck behind OTP on first login. These flags live on the User
+   * schema but aren't accepted by CreateUserDto, so we set them in a
+   * follow-up updateOne rather than smuggling them through as casts.
+   */
+  async createUser(dto: AdminCreateUserDto): Promise<User> {
+    if (!dto.email && !dto.phone) {
+      throw new BadRequestException(
+        "Either email or phone is required to create a user",
+      );
+    }
+
+    // Normalize phone by stripping spaces/dashes the admin may have pasted.
+    const phone = dto.phone?.replace(/[\s-]/g, "");
+
+    const payload: CreateUserDto = {
+      name: dto.name.trim(),
+      email: dto.email?.toLowerCase().trim(),
+      phone,
+      password: dto.password,
+      role: dto.role,
+      city: dto.city?.trim(),
+      isPhoneVerified: Boolean(phone),
+    };
+
+    const created = await this.usersService.create(payload);
+
+    // Flip the verification / profile-complete flags the DTO doesn't expose.
+    // For admin-created accounts these are appropriate defaults: the admin
+    // vouched for the identity at create time.
+    await this.userModel
+      .updateOne(
+        { _id: created._id },
+        {
+          $set: {
+            isEmailVerified: Boolean(dto.email),
+            isProfileCompleted: true,
+            ...(dto.role === UserRole.PRO
+              ? { verificationStatus: "verified" }
+              : {}),
+          },
+        },
+      )
+      .exec();
+
+    this.logger.log(
+      `Admin created user uid=${created.uid} role=${dto.role} email=${dto.email ?? "-"} phone=${phone ?? "-"}`,
+    );
+    return created;
+  }
+
+  /**
+   * Available role values for the admin UI's role selector. Exposed so the
+   * frontend doesn't have to duplicate the enum.
+   */
+  getAvailableRoles(): UserRole[] {
+    return [UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN];
+  }
 
   // ============== PAGINATED LIST METHODS ==============
 
