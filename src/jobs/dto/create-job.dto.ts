@@ -80,6 +80,16 @@ class ServiceItemDto {
   @IsNotEmpty()
   key: string;
 
+  // Parent-category key for this service. Optional and informational -
+  // multi-category post-job (2026-05) sends one of these per service so
+  // the backend can group/route by trade without re-walking the catalog
+  // tree. Storage is not required; included here so the validation pipe
+  // (forbidNonWhitelisted) accepts the field.
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  categoryKey?: string;
+
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
@@ -140,6 +150,17 @@ export class CreateJobDto {
   @IsString()
   @IsNotEmpty()
   category: string;
+
+  // Distinct parent-category keys across all selected services. Added
+  // 2026-05 when post-job became multi-category. The primary `category`
+  // above stays as the canonical one (used by indexes/legacy filters);
+  // this array carries the rest so we can surface a single job to pros
+  // from every represented trade in future filtering work without a
+  // historical-data migration.
+  @ApiPropertyOptional()
+  @IsArray()
+  @IsOptional()
+  categories?: string[];
 
   @ApiPropertyOptional()
   @IsString()
