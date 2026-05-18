@@ -1,5 +1,9 @@
 /**
- * Plumbers — category C05 (plumbing).
+ * Plumbing & Heating - category C05 (plumbing).
+ * Combined in 2026-05 because in the Georgian market the same trade
+ * handles water pipes, boilers, radiators and underfloor heating.
+ * Cooling/AC stays separate in C08.
+ *
  * Translations live in seed/translations.ts keyed by id.
  */
 
@@ -63,5 +67,16 @@ export const plumbingCategory = cat(
       svc("V087", "gas_stove_svc", [U.unit(40, 150)]),
       svc("V088", "gas_leak_svc", [U.job(40, 150)]),
     ], 4),
+    // Heating moved here from C08 in 2026-05. Boilers and water heaters
+    // (S024) above already sit under plumbing, so radiator + underfloor +
+    // system work belongs in the same trade.
+    sub("S034", "heating", "Flame", [
+      svc("V118", "heat_radiator_svc", [U.unit(40, 150)]),
+      svc("V119", "heat_system_svc", [U.sqm(15, 50)]),
+      svc("V120", "heat_underfloor_svc", [U.sqm(20, 60)]),
+      svc("V121", "heat_repair_svc", [U.job(40, 200), U.hour(30, 80)]),
+      svc("V122", "heat_thermostat_svc", [U.unit(40, 150)]),
+      svc("V228", "heat_towel_warmer_svc", [U.unit(70, 130)]),
+    ], 5),
   ],
 );
