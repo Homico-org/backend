@@ -51,6 +51,7 @@ export enum ActivityType {
   PORTFOLIO_DELETE = 'portfolio.delete',
 
   // Admin
+  ADMIN_USER_CREATE = 'admin.user_create',
   ADMIN_USER_UPDATE = 'admin.user_update',
   ADMIN_USER_DELETE = 'admin.user_delete',
   ADMIN_VERIFICATION_ACTION = 'admin.verification_action',
