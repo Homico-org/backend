@@ -59,6 +59,52 @@ export class NotificationsService {
     });
   }
 
+  // Exact unread counts folded into the activity-menu categories the header
+  // surfaces (tile badges + footer summary). Unlike the frontend's previous
+  // best-effort tally over the loaded bell feed, this counts ALL unread docs
+  // server-side via aggregation, so paginated feeds don't undercount.
+  async getUnreadCountsByCategory(userId: string): Promise<{
+    invitations: number;
+    newProposals: number;
+    proposalReplies: number;
+    bookings: number;
+    reviews: number;
+  }> {
+    const rows = await this.notificationModel.aggregate<{
+      _id: NotificationType;
+      count: number;
+    }>([
+      { $match: { userId: new Types.ObjectId(userId), isRead: false } },
+      { $group: { _id: '$type', count: { $sum: 1 } } },
+    ]);
+
+    const byType = new Map<string, number>(
+      rows.map((r) => [r._id, r.count]),
+    );
+    const sum = (...types: NotificationType[]) =>
+      types.reduce((acc, t) => acc + (byType.get(t) ?? 0), 0);
+
+    return {
+      invitations: sum(NotificationType.JOB_INVITATION),
+      newProposals: sum(NotificationType.NEW_PROPOSAL),
+      proposalReplies: sum(
+        NotificationType.PROPOSAL_ACCEPTED,
+        NotificationType.PROPOSAL_REJECTED,
+      ),
+      bookings: sum(
+        NotificationType.NEW_BOOKING,
+        NotificationType.BOOKING_CONFIRMED,
+        NotificationType.BOOKING_STARTED,
+        NotificationType.BOOKING_CANCELLED,
+        NotificationType.BOOKING_COMPLETED,
+      ),
+      reviews: sum(
+        NotificationType.NEW_REVIEW,
+        NotificationType.REVIEW_PROMPT,
+      ),
+    };
+  }
+
   async markAsRead(userId: string, notificationIds?: string[]): Promise<{ modifiedCount: number }> {
     const query: any = { userId: new Types.ObjectId(userId) };
 
@@ -93,20 +139,42 @@ export class NotificationsService {
     return { deletedCount: result.deletedCount };
   }
 
-  // Helper method to create notifications from other services
+  // Helper method to create notifications from other services.
+  //
+  // `title` / `message` are the English fallback copy stored on the
+  // document. When `i18n` is also provided, the bell-icon feed
+  // resolves the localized strings via `t(titleKey, params)` on the
+  // active UI locale, so the same notification renders differently
+  // for a Georgian vs. US user without storing 3 copies of each.
   async notify(
     userId: string,
     type: NotificationType,
     title: string,
     message: string,
-    options?: { link?: string; referenceId?: string; referenceModel?: string; metadata?: any },
+    options?: {
+      link?: string;
+      referenceId?: string;
+      referenceModel?: string;
+      metadata?: any;
+      i18n?: {
+        titleKey?: string;
+        messageKey?: string;
+        params?: Record<string, string | number>;
+      };
+    },
   ): Promise<Notification> {
     const notification = await this.create({
       userId,
       type,
       title,
       message,
-      ...options,
+      titleKey: options?.i18n?.titleKey,
+      messageKey: options?.i18n?.messageKey,
+      i18nParams: options?.i18n?.params,
+      link: options?.link,
+      referenceId: options?.referenceId,
+      referenceModel: options?.referenceModel,
+      metadata: options?.metadata,
     });
 
     // Push real-time notification via WebSocket
@@ -116,6 +184,9 @@ export class NotificationsService {
         type: notification.type,
         title: notification.title,
         message: notification.message,
+        titleKey: notification.titleKey,
+        messageKey: notification.messageKey,
+        i18nParams: notification.i18nParams,
         isRead: notification.isRead,
         link: notification.link,
         referenceId: notification.referenceId,
@@ -136,7 +207,17 @@ export class NotificationsService {
     type: NotificationType,
     title: string,
     message: string,
-    options?: { link?: string; referenceId?: string; referenceModel?: string; metadata?: any },
+    options?: {
+      link?: string;
+      referenceId?: string;
+      referenceModel?: string;
+      metadata?: any;
+      i18n?: {
+        titleKey?: string;
+        messageKey?: string;
+        params?: Record<string, string | number>;
+      };
+    },
   ): Promise<void> {
     await Promise.all(
       userIds.map(userId => this.notify(userId, type, title, message, options))

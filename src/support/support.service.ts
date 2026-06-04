@@ -188,7 +188,12 @@ export class SupportService {
     const now = new Date();
     const messageIdsToUpdate: string[] = [];
 
-    // Update message statuses to 'read' for messages from the other party
+    // Update message statuses to 'read' for messages from the other
+    // party. Mongoose tracks property changes on subdocument arrays
+    // unreliably when the array isn't redefined - the symptom was
+    // /support tickets re-rendering as unread on refresh because the
+    // status writes silently lost on `.save()`. Marking the array as
+    // modified guarantees the change is persisted.
     ticket.messages.forEach((msg: any) => {
       if (isAdmin && !msg.isAdmin && msg.status !== 'read') {
         msg.status = 'read';
@@ -200,6 +205,9 @@ export class SupportService {
         messageIdsToUpdate.push(msg._id.toString());
       }
     });
+    if (messageIdsToUpdate.length > 0) {
+      ticket.markModified('messages');
+    }
 
     if (isAdmin) {
       ticket.hasUnreadUserMessages = false;
@@ -229,7 +237,9 @@ export class SupportService {
     const now = new Date();
     const messageIdsToUpdate: string[] = [];
 
-    // Update message statuses to 'delivered' for messages from the other party
+    // Update message statuses to 'delivered' for messages from the
+    // other party. Same Mongoose subdoc-tracking gotcha as in
+    // markAsRead above - mark the array as modified after mutation.
     ticket.messages.forEach((msg: any) => {
       if (isAdmin && !msg.isAdmin && msg.status === 'sent') {
         msg.status = 'delivered';
@@ -241,6 +251,9 @@ export class SupportService {
         messageIdsToUpdate.push(msg._id.toString());
       }
     });
+    if (messageIdsToUpdate.length > 0) {
+      ticket.markModified('messages');
+    }
 
     await ticket.save();
 

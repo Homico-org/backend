@@ -10,6 +10,53 @@ import { v4 as uuidv4 } from 'uuid';
 import { UploadController } from './upload.controller';
 import { UploadService } from './upload.service';
 
+// We accept ALL file types (project deliverables include CAD, Pages,
+// archives, etc.) and only block files that are dangerous to store/serve:
+// native executables and active markup/script types that could enable
+// stored XSS or malware distribution. Everything else is allowed.
+const BLOCKED_MIMES = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'image/svg+xml', // can carry inline <script>
+  'application/x-msdownload',
+  'application/x-msdos-program',
+  'application/x-dosexec',
+  'application/vnd.microsoft.portable-executable',
+  'application/x-sh',
+  'application/x-csh',
+  'application/x-bat',
+  'application/x-executable',
+  'application/x-apple-diskimage',
+  'application/java-archive',
+  'application/x-httpd-php',
+]);
+const BLOCKED_EXT =
+  /\.(exe|msi|bat|cmd|com|scr|ps1|sh|csh|app|dmg|jar|php|phtml|svg|html?|xhtml|js|mjs|vbs|wsf)$/i;
+
+function isBlockedUpload(file: { mimetype: string; originalname: string }): boolean {
+  return (
+    BLOCKED_MIMES.has(file.mimetype) || BLOCKED_EXT.test(file.originalname || '')
+  );
+}
+
+// Shared filter for both the Cloudinary and local-disk storage branches.
+function uploadFileFilter(
+  _req: unknown,
+  file: { mimetype: string; originalname: string },
+  callback: (error: Error | null, acceptFile: boolean) => void,
+) {
+  if (isBlockedUpload(file)) {
+    callback(
+      new Error(
+        `This file type is not allowed for security reasons: ${file.mimetype || file.originalname}`,
+      ),
+      false,
+    );
+  } else {
+    callback(null, true);
+  }
+}
+
 @Module({
   imports: [
     MulterModule.registerAsync({
@@ -33,26 +80,20 @@ import { UploadService } from './upload.service';
             params: async (req, file) => {
               const isVideo = file.mimetype.startsWith('video/');
               const isImage = file.mimetype.startsWith('image/');
-              const isDocument = [
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'application/vnd.ms-excel',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'text/plain',
-              ].includes(file.mimetype);
 
-              // Determine resource type: video, raw (for documents), or image
-              let resourceType: 'video' | 'raw' | 'image' = 'image';
-              if (isVideo) resourceType = 'video';
-              if (isDocument) resourceType = 'raw';
+              // Images -> image, videos -> video, everything else (PDF,
+              // Office, iWork, CAD, archives, ...) -> raw so Cloudinary
+              // stores the file as-is. No `allowed_formats` cap, so any
+              // legitimate document/design format is accepted.
+              let resourceType: 'video' | 'raw' | 'image' = 'raw';
+              if (isImage) resourceType = 'image';
+              else if (isVideo) resourceType = 'video';
 
               // Base params
               const params: Record<string, unknown> = {
                 folder: 'homico',
                 resource_type: resourceType,
                 public_id: uuidv4(),
-                allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
               };
 
               // Add image optimization for images
@@ -81,31 +122,7 @@ import { UploadService } from './upload.service';
             limits: {
               fileSize: 50 * 1024 * 1024, // 50MB
             },
-            fileFilter: (req, file, callback) => {
-              const allowedMimes = [
-                // Images
-                'image/jpeg',
-                'image/png',
-                'image/gif',
-                'image/webp',
-                // Videos
-                'video/mp4',
-                'video/quicktime',
-                'video/webm',
-                // Documents
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'application/vnd.ms-excel',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'text/plain',
-              ];
-              if (allowedMimes.includes(file.mimetype)) {
-                callback(null, true);
-              } else {
-                callback(new Error(`Invalid file type: ${file.mimetype}. Allowed: images, videos, PDF, Word, Excel.`), false);
-              }
-            },
+            fileFilter: uploadFileFilter,
           };
         }
 
@@ -128,31 +145,7 @@ import { UploadService } from './upload.service';
           limits: {
             fileSize: 50 * 1024 * 1024, // 50MB
           },
-          fileFilter: (req, file, callback) => {
-            const allowedMimes = [
-              // Images
-              'image/jpeg',
-              'image/png',
-              'image/gif',
-              'image/webp',
-              // Videos
-              'video/mp4',
-              'video/quicktime',
-              'video/webm',
-              // Documents
-              'application/pdf',
-              'application/msword',
-              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              'application/vnd.ms-excel',
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-              'text/plain',
-            ];
-            if (allowedMimes.includes(file.mimetype)) {
-              callback(null, true);
-            } else {
-              callback(new Error(`Invalid file type: ${file.mimetype}. Allowed: images, videos, PDF, Word, Excel.`), false);
-            }
-          },
+          fileFilter: uploadFileFilter,
         };
       },
     }),

@@ -11,6 +11,34 @@ import { CreateUserDto } from "../users/dto/create-user.dto";
 import { InviteToken } from "../invite/schemas/invite-token.schema";
 import { SmsService } from "../verification/services/sms.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
+import { resolveUserLocale, type SupportedLocale } from "../common/countries";
+
+// Localized SMS bodies for admin-initiated transactions. Keys mirror
+// the message-type identifier we'd use if these moved to an i18n
+// catalog later. English serves as the fallback for unsupported
+// locales rather than blank text.
+const ADMIN_SMS_COPY: Record<string, Record<SupportedLocale, string>> = {
+  proApproved: {
+    en: "Congrats! Your Homico profile is approved. Clients can now find you. homico.co",
+    ka: "გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. ახლა კლიენტებს შეუძლიათ თქვენი ნახვა. homico.co",
+    ru: "Поздравляем! Ваш профиль Homico одобрен. Клиенты теперь могут вас найти. homico.co",
+  },
+  proRejected: {
+    en: "Your Homico profile needs updates. Please check the in-app notifications. homico.co",
+    ka: "თქვენი Homico პროფილი საჭიროებს განახლებას. გთხოვთ შეამოწმოთ შეტყობინებები აპლიკაციაში. homico.co",
+    ru: "Ваш профиль Homico требует обновления. Пожалуйста, проверьте уведомления в приложении. homico.co",
+  },
+  statusVerified: {
+    en: "Congrats! Your Homico profile is approved. homico.co",
+    ka: "გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. homico.co",
+    ru: "Поздравляем! Ваш профиль Homico одобрен. homico.co",
+  },
+  statusRejected: {
+    en: "Your Homico profile needs updates. Please check the notifications. homico.co",
+    ka: "თქვენი Homico პროფილი საჭიროებს განახლებას. შეამოწმეთ შეტყობინებები. homico.co",
+    ru: "Ваш профиль Homico требует обновления. Проверьте уведомления. homico.co",
+  },
+};
 
 interface PaginationOptions {
   page: number;
@@ -779,21 +807,29 @@ export class AdminService {
 
     await user.save();
 
-    // Create notification for the pro
+    // Create notification for the pro. Stores English fallback copy
+    // and i18n keys; the bell-icon feed resolves `t(titleKey, params)`
+    // at view time so the same notification reads as Georgian or
+    // Russian for users on those locales.
     await this.notificationModel.create({
       userId: proId,
       type: "profile_approved",
       title: "Profile Approved",
       message:
         "Your professional profile has been approved! You are now visible to clients.",
+      titleKey: "notifications.types.profile_approved.title",
+      messageKey: "notifications.types.profile_approved.message",
       isRead: false,
       createdAt: new Date(),
     });
 
     // Send SMS notification if user has a phone number
     if (user.phone) {
-      const smsMessage = `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. ახლა კლიენტებს შეუძლიათ თქვენი ნახვა. homico.ge`;
-      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+      const locale = resolveUserLocale(user);
+      await this.smsService.sendNotificationSms(
+        user.phone,
+        ADMIN_SMS_COPY.proApproved[locale],
+      );
     }
 
     return user;
@@ -817,20 +853,28 @@ export class AdminService {
 
     await user.save();
 
-    // Create notification for the pro
+    // Create notification for the pro. The reason is interpolated
+    // into both the EN fallback and the localized message via
+    // `{reason}` so admins can include any free-text rejection note.
     await this.notificationModel.create({
       userId: proId,
       type: "profile_rejected",
       title: "Profile Needs Updates",
       message: `Your profile was not approved. Reason: ${reason}`,
+      titleKey: "notifications.types.profile_rejected.title",
+      messageKey: "notifications.types.profile_rejected.message",
+      i18nParams: { reason },
       isRead: false,
       createdAt: new Date(),
     });
 
     // Send SMS notification if user has a phone number
     if (user.phone) {
-      const smsMessage = `თქვენი Homico პროფილი საჭიროებს განახლებას. გთხოვთ შეამოწმოთ შეტყობინებები აპლიკაციაში. homico.ge`;
-      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+      const locale = resolveUserLocale(user);
+      await this.smsService.sendNotificationSms(
+        user.phone,
+        ADMIN_SMS_COPY.proRejected[locale],
+      );
     }
 
     return user;
@@ -883,15 +927,22 @@ export class AdminService {
       let notificationType = 'verification_update';
       let title = 'Verification Status Updated';
       let message = notes || `Your verification status has been updated to: ${status}`;
+      let titleKey = 'notifications.types.verification_update.title';
+      let messageKey = 'notifications.types.verification_update.message';
+      const i18nParams: Record<string, string> = { status, notes: notes || '' };
 
       if (status === 'verified') {
         notificationType = 'profile_approved';
         title = 'Profile Approved';
         message = notes || 'Your professional profile has been approved! You are now visible to clients.';
+        titleKey = 'notifications.types.profile_approved.title';
+        messageKey = notes ? 'notifications.types.profile_approved.messageWithNote' : 'notifications.types.profile_approved.message';
       } else if (status === 'rejected') {
         notificationType = 'profile_rejected';
         title = 'Profile Needs Updates';
         message = notes || 'Your profile was not approved. Please check the admin notes.';
+        titleKey = 'notifications.types.profile_rejected.title';
+        messageKey = notes ? 'notifications.types.profile_rejected.messageWithNote' : 'notifications.types.profile_rejected.messageDefault';
       }
 
       await this.notificationModel.create({
@@ -899,15 +950,18 @@ export class AdminService {
         type: notificationType,
         title,
         message,
+        titleKey,
+        messageKey,
+        i18nParams,
         isRead: false,
         createdAt: new Date(),
       });
 
       // Send SMS notification for significant status changes
       if (user.phone && (status === 'verified' || status === 'rejected')) {
-        const smsMessage = status === 'verified'
-          ? `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. homico.ge`
-          : `თქვენი Homico პროფილი საჭიროებს განახლებას. შეამოწმეთ შეტყობინებები. homico.ge`;
+        const locale = resolveUserLocale(user);
+        const smsMessage =
+          ADMIN_SMS_COPY[status === 'verified' ? 'statusVerified' : 'statusRejected'][locale];
         await this.smsService.sendNotificationSms(user.phone, smsMessage);
       }
     }

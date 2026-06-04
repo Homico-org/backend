@@ -38,7 +38,7 @@ export class AdminCreateUserDto {
   @ValidateIf((o: AdminCreateUserDto) => Boolean(o.phone && o.phone.length > 0))
   @Matches(/^\+?\d{8,15}$/, {
     message:
-      "phone must be in E.164 format like +995599000099 (8-15 digits, optional +)",
+      "phone must be in E.164 format (8-15 digits, leading + and country code, e.g. +15551234567)",
   })
   @IsOptional()
   phone?: string;

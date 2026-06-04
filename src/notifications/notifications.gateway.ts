@@ -23,6 +23,10 @@ interface AuthenticatedSocket extends Socket {
       'https://www.homico.ge',
       'https://dev.homico.ge',
       'https://app.dev.homico.ge',
+      // homico.co domain added 2026-05 as an alternate brand TLD;
+      // WS reconnects from /us, /il, /fr etc. all originate here.
+      'https://homico.co',
+      'https://www.homico.co',
     ],
     credentials: true,
   },

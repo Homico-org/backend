@@ -7,7 +7,13 @@ import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: true is required so the BoG webhook handler can verify the
+  // RSA-SHA256 signature against the EXACT bytes BoG signed. Without it,
+  // Express parses and re-serializes JSON, which subtly mutates whitespace
+  // and breaks signature verification.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   // If running behind a proxy/load balancer (common in production), trust it so
   // request IPs (used by rate limiting) work correctly.

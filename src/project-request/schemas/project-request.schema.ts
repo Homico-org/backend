@@ -1,18 +1,630 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
+// Top-level project status. DRAFT/ACTIVE added in the 2026-05 "project
+// umbrella" evolution; NEW/IN_PROGRESS/COMPLETED/CANCELLED kept for
+// back-compat with any pre-existing ProjectRequest documents.
 export enum ProjectStatus {
+  DRAFT = 'draft',
   NEW = 'new',
+  ACTIVE = 'active',
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
 }
+
+// How a worker/role gets filled within a project.
+export enum EngagementMode {
+  INVITE = 'invite', // client invites a specific pro
+  OPEN = 'open', // client opens the role; pros apply/quote (scoped job)
+}
+
+export enum EngagementStatus {
+  DRAFT = 'draft',
+  INVITED = 'invited',
+  OPEN = 'open',
+  HIRED = 'hired',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
+export enum MilestoneStatus {
+  PENDING = 'pending',
+  ACTIVE = 'active',
+  DONE = 'done',
+  BLOCKED = 'blocked',
+}
+
+// Renovation phases - the project page is organized around these. Roles
+// (engagements) and milestones belong to a phase; phases run in this order.
+export enum ProjectPhase {
+  DESIGN = 'design',
+  PERMITS = 'permits',
+  CONSTRUCTION = 'construction',
+  FINISHING = 'finishing',
+}
+
+// Design-deliverable progression for architect/designer engagements
+// (mirrors the job schema's projectPhase values).
+export enum DesignPhase {
+  CONCEPT = 'concept',
+  SCHEMATIC = 'schematic',
+  DETAILED = 'detailed',
+  CONSTRUCTION_DOCS = 'construction',
+}
+
+export enum ApprovalStatus {
+  NONE = 'none',
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  CHANGES_REQUESTED = 'changes_requested',
+}
+
+// Project document / deliverable. Mirrors ProjectAttachment but adds a
+// category (so we can split drawings/permits/contracts/moodboard) and a
+// client approval state for design deliverables.
+export enum DocumentCategory {
+  DELIVERABLE = 'deliverable',
+  DRAWING = 'drawing',
+  PERMIT = 'permit',
+  CONTRACT = 'contract',
+  MOODBOARD = 'moodboard',
+  OTHER = 'other',
+}
+
+// A superseded prior version of a document. The live document's top-level
+// fields (url/fileType/version) always describe the CURRENT version; each
+// time a new version is uploaded the outgoing one is snapshotted here so
+// the full history (and prior files) stays accessible.
+@Schema({ _id: false })
+export class ProjectDocumentVersion {
+  @Prop({ required: true })
+  version: number;
+
+  @Prop({ required: true })
+  url: string;
+
+  @Prop()
+  fileType?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  uploadedBy?: Types.ObjectId;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectDocumentVersionSchema = SchemaFactory.createForClass(
+  ProjectDocumentVersion,
+);
+
+// A discussion comment on a document. `authorId` is set server-side from
+// the JWT (source of truth); `authorName` is a denormalized display label.
+@Schema({ _id: false })
+export class ProjectDocumentComment {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  text: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  authorId?: Types.ObjectId;
+
+  @Prop()
+  authorName?: string;
+
+  // Optional pin location for image markup, as fractions (0-1) of the
+  // image's width/height. When both are set the comment is a pinned
+  // annotation; otherwise it's a general comment on the document.
+  @Prop()
+  x?: number;
+
+  @Prop()
+  y?: number;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectDocumentCommentSchema = SchemaFactory.createForClass(
+  ProjectDocumentComment,
+);
+
+@Schema({ _id: false })
+export class ProjectDocument {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  url: string;
+
+  @Prop()
+  fileType?: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(DocumentCategory),
+    default: DocumentCategory.OTHER,
+  })
+  category: DocumentCategory;
+
+  @Prop({ type: String, enum: Object.values(ProjectPhase) })
+  phase?: ProjectPhase;
+
+  @Prop()
+  engagementId?: string;
+
+  @Prop()
+  stepId?: string; // links to ProjectStep.id; groups the document under a step
+
+  @Prop({ default: 1 })
+  version: number;
+
+  // Prior versions, oldest-first. Empty until the document is re-uploaded.
+  @Prop({ type: [ProjectDocumentVersionSchema], default: [] })
+  versions: ProjectDocumentVersion[];
+
+  // Discussion thread on the document, oldest-first.
+  @Prop({ type: [ProjectDocumentCommentSchema], default: [] })
+  comments: ProjectDocumentComment[];
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  uploadedBy?: Types.ObjectId;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ApprovalStatus),
+    default: ApprovalStatus.NONE,
+  })
+  approvalStatus: ApprovalStatus;
+
+  @Prop()
+  note?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectDocumentSchema =
+  SchemaFactory.createForClass(ProjectDocument);
+
+// Procurement status for a shopping-list item. Doubles as the stock view:
+// ORDERED + DELIVERED items are "in the pipeline", DELIVERED is on-site stock.
+export enum ProductStatus {
+  TO_BUY = 'to_buy',
+  ORDERED = 'ordered',
+  DELIVERED = 'delivered',
+}
+
+// A product to buy for the renovation (fixtures, tiles, appliances...).
+// The shopping list + stock view are both built from these.
+@Schema({ _id: false })
+export class ProjectProduct {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ default: 1, min: 0 })
+  qty: number;
+
+  @Prop({ default: 0, min: 0 })
+  unitPrice: number;
+
+  @Prop()
+  vendor?: string;
+
+  @Prop()
+  url?: string;
+
+  @Prop()
+  imageUrl?: string;
+
+  @Prop({ type: String, enum: Object.values(ProjectPhase) })
+  phase?: ProjectPhase;
+
+  @Prop()
+  engagementId?: string;
+
+  @Prop()
+  roomId?: string; // links to Room.id; absent = whole-object / general
+
+  @Prop({
+    type: String,
+    enum: Object.values(ProductStatus),
+    default: ProductStatus.TO_BUY,
+  })
+  status: ProductStatus;
+
+  @Prop()
+  note?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectProductSchema =
+  SchemaFactory.createForClass(ProjectProduct);
+
+// A logged decision. `decidedBy` is set server-side from the JWT (source
+// of truth); `decidedByName` is a denormalized display label.
+@Schema({ _id: false })
+export class ProjectDecision {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  text: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  decidedBy?: Types.ObjectId;
+
+  @Prop()
+  decidedByName?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ProjectDecisionSchema =
+  SchemaFactory.createForClass(ProjectDecision);
+
+// Palette & selections - designer/architect tooling. A Selection is one
+// decision point (e.g. "Living-room wall color"); the designer proposes one
+// or more options (a color swatch or a material) and the client picks one.
+export enum SelectionStatus {
+  PROPOSED = 'proposed',
+  APPROVED = 'approved',
+  CHANGES_REQUESTED = 'changes_requested',
+}
+
+export enum SelectionOptionType {
+  COLOR = 'color',
+  MATERIAL = 'material',
+}
+
+@Schema({ _id: false })
+export class SelectionOption {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(SelectionOptionType),
+    default: SelectionOptionType.MATERIAL,
+  })
+  type: SelectionOptionType;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop()
+  colorHex?: string;
+
+  @Prop()
+  imageUrl?: string;
+
+  @Prop()
+  brand?: string;
+
+  @Prop()
+  product?: string;
+
+  @Prop()
+  price?: number;
+
+  @Prop()
+  vendor?: string;
+
+  @Prop()
+  url?: string;
+
+  @Prop()
+  note?: string;
+}
+
+export const SelectionOptionSchema =
+  SchemaFactory.createForClass(SelectionOption);
+
+@Schema({ _id: false })
+export class Selection {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  title: string;
+
+  // Forward-compatible links (Rooms phase): which room / surface this is for.
+  @Prop()
+  roomId?: string;
+
+  @Prop()
+  surface?: string;
+
+  @Prop({ type: String, enum: Object.values(ProjectPhase) })
+  phase?: ProjectPhase;
+
+  @Prop({ type: [SelectionOptionSchema], default: [] })
+  options: SelectionOption[];
+
+  // The option the client picked.
+  @Prop()
+  chosenOptionId?: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(SelectionStatus),
+    default: SelectionStatus.PROPOSED,
+  })
+  status: SelectionStatus;
+
+  @Prop()
+  note?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const SelectionSchema = SchemaFactory.createForClass(Selection);
+
+// A room / space in the renovation. Selections (and later docs/photos) can
+// be organized per room; dimensions feed area and quantity estimates.
+@Schema({ _id: false })
+export class Room {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop()
+  length?: number;
+
+  @Prop()
+  width?: number;
+
+  @Prop()
+  height?: number;
+
+  @Prop()
+  area?: number;
+
+  @Prop()
+  budget?: number;
+
+  @Prop()
+  note?: string;
+
+  @Prop({ type: [String], default: [] })
+  photos: string[];
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const RoomSchema = SchemaFactory.createForClass(Room);
+
+// A line in the takeoff / bill of works: a catalog service with a quantity
+// and unit (m², point, piece...), optionally scoped to a room and assigned
+// to one of the project's engagements (the worker responsible for it).
+@Schema({ _id: false })
+export class ScopeItem {
+  @Prop({ required: true })
+  id: string; // client-generated, e.g. "SC1"
+
+  @Prop()
+  roomId?: string; // links to Room.id; absent = whole-apartment / general
+
+  @Prop()
+  stepId?: string; // links to ProjectStep.id; groups the service under a step
+
+  @Prop()
+  categoryKey?: string; // catalog category/role key (drives worker mapping)
+
+  @Prop()
+  serviceKey?: string; // catalog service key
+
+  @Prop({ required: true })
+  name: string; // denormalized service name for display
+
+  @Prop()
+  quantity?: number;
+
+  @Prop()
+  unit?: string; // 'm2' | 'point' | 'piece' | 'count' | ...
+
+  @Prop()
+  unitLabel?: string; // denormalized unit label for display
+
+  @Prop()
+  unitPrice?: number; // optional estimate, prefilled from the catalog
+
+  @Prop()
+  engagementId?: string; // assigned worker/role (ProjectEngagement.id)
+
+  @Prop()
+  note?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const ScopeItemSchema = SchemaFactory.createForClass(ScopeItem);
+
+// Per-engagement design-phase gate (architect/designer). Tracks which
+// design phase the pro is on and the client's sign-off on it.
+@Schema({ _id: false })
+export class DesignApproval {
+  @Prop({ type: String, enum: Object.values(DesignPhase) })
+  phase?: DesignPhase;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ApprovalStatus),
+    default: ApprovalStatus.NONE,
+  })
+  status: ApprovalStatus;
+
+  @Prop()
+  note?: string;
+}
+
+export const DesignApprovalSchema =
+  SchemaFactory.createForClass(DesignApproval);
+
+// One worker/role within a project. The reuse-link fields tie the
+// engagement to the existing job/proposal/booking/project-tracking
+// machinery so a hired worker gets the full single-pro workspace for
+// free (see project-tracking.service.createProjectTracking).
+@Schema({ _id: false })
+export class ProjectEngagement {
+  @Prop({ required: true })
+  id: string; // stable client-generated id (e.g. "E1")
+
+  @Prop({ required: true })
+  roleKey: string; // e.g. "plumber"
+
+  @Prop({ required: true })
+  roleLabel: string; // human label as picked in the team builder
+
+  @Prop()
+  scope?: string;
+
+  @Prop()
+  budget?: number;
+
+  @Prop({
+    type: String,
+    enum: Object.values(EngagementMode),
+    default: EngagementMode.OPEN,
+  })
+  mode: EngagementMode;
+
+  @Prop({
+    type: String,
+    enum: Object.values(EngagementStatus),
+    default: EngagementStatus.DRAFT,
+  })
+  status: EngagementStatus;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  assignedProId?: Types.ObjectId;
+
+  // Reuse links - populated as the engagement progresses.
+  @Prop({ type: Types.ObjectId, ref: 'Job' })
+  jobId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Proposal' })
+  proposalId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Booking' })
+  bookingId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'ProjectTracking' })
+  projectTrackingId?: Types.ObjectId;
+
+  // Which renovation phase this role belongs to. Auto-assigned from the
+  // role's catalog category on create; client can re-assign.
+  @Prop({
+    type: String,
+    enum: Object.values(ProjectPhase),
+    default: ProjectPhase.CONSTRUCTION,
+  })
+  phase: ProjectPhase;
+
+  // Optional pointer to a user-defined project step (`steps[].id`). When
+  // set, the UI groups the engagement under that step; when null, the UI
+  // falls back to the legacy `phase` enum so existing projects still render.
+  @Prop()
+  stepId?: string;
+
+  // Design-deliverable gate (only meaningful for architect/designer roles).
+  @Prop({ type: DesignApprovalSchema })
+  designApproval?: DesignApproval;
+}
+
+export const ProjectEngagementSchema =
+  SchemaFactory.createForClass(ProjectEngagement);
+
+// User-defined project step. Replaces the rigid 4-value ProjectPhase enum
+// on a per-project basis: each project authors its own ordered list of
+// steps (e.g. "Design", "Electricity", "Tiling"). Each engagement may
+// reference one step via `stepId`; engagements without a stepId fall back
+// to the legacy `phase` enum so old projects keep rendering.
+@Schema({ _id: false })
+export class ProjectStep {
+  @Prop({ required: true })
+  id: string; // stable client-generated id (e.g. "S1")
+
+  @Prop({ required: true })
+  name: string;
+
+  @Prop()
+  description?: string;
+
+  // Sort order within the project. Lower = earlier.
+  @Prop({ default: 0 })
+  order: number;
+
+  // Optional accent hex. Lets the UI render a per-step chip color.
+  @Prop()
+  color?: string;
+}
+
+export const ProjectStepSchema = SchemaFactory.createForClass(ProjectStep);
+
+// A project-level milestone. Ordered, optionally linked to engagements
+// whose completion drives the milestone. Start simple (ordered list);
+// dependency/critical-path scheduling is deferred.
+@Schema({ _id: false })
+export class Milestone {
+  @Prop({ required: true })
+  id: string;
+
+  @Prop({ required: true })
+  title: string;
+
+  @Prop()
+  description?: string;
+
+  @Prop({ type: Date })
+  dueDate?: Date;
+
+  @Prop({
+    type: String,
+    enum: Object.values(MilestoneStatus),
+    default: MilestoneStatus.PENDING,
+  })
+  status: MilestoneStatus;
+
+  @Prop({ default: 0 })
+  sortOrder: number;
+
+  @Prop({ type: [String], default: [] })
+  linkedEngagementIds: string[];
+
+  @Prop({ type: String, enum: Object.values(ProjectPhase) })
+  phase?: ProjectPhase;
+}
+
+export const MilestoneSchema = SchemaFactory.createForClass(Milestone);
 
 @Schema({ timestamps: true })
 export class ProjectRequest extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   clientId: Types.ObjectId;
 
+  // Legacy single-pro assignment (pre-umbrella). Multi-worker projects
+  // use `engagements` instead; kept for back-compat.
   @Prop({ type: Types.ObjectId, ref: 'User' })
   proId: Types.ObjectId;
 
@@ -49,12 +661,82 @@ export class ProjectRequest extends Document {
   @Prop({ type: [String], default: [] })
   photos: string[];
 
+  @Prop()
+  coverImage?: string;
+
+  // Rolled up from engagement progress (0-100).
+  @Prop({ type: Number, default: 0, min: 0, max: 100 })
+  progress: number;
+
   @Prop({
     type: String,
     enum: Object.values(ProjectStatus),
-    default: ProjectStatus.NEW
+    default: ProjectStatus.DRAFT,
   })
   status: ProjectStatus;
+
+  // Multi-worker roster.
+  @Prop({ type: [ProjectEngagementSchema], default: [] })
+  engagements: ProjectEngagement[];
+
+  // User-defined ordered steps for this project. Empty when the project
+  // still uses the legacy 4-phase model; populated once the client
+  // authors their own steps in the Team tab.
+  @Prop({ type: [ProjectStepSchema], default: [] })
+  steps: ProjectStep[];
+
+  // Project-level timeline.
+  @Prop({ type: [MilestoneSchema], default: [] })
+  milestones: Milestone[];
+
+  // Document / deliverable repository (drawings, permits, contracts,
+  // moodboard images). Design deliverables carry an approval state.
+  @Prop({ type: [ProjectDocumentSchema], default: [] })
+  documents: ProjectDocument[];
+
+  // Shopping list / procurement. Drives the Shopping tab and the stock view.
+  @Prop({ type: [ProjectProductSchema], default: [] })
+  products: ProjectProduct[];
+
+  // Decision log: a running record of decisions made on the project so
+  // choices ("client chose oak flooring") don't get lost in chat.
+  @Prop({ type: [ProjectDecisionSchema], default: [] })
+  decisions: ProjectDecision[];
+
+  // Palette & selections: designer proposes color/material options per
+  // decision; client picks one and approves.
+  @Prop({ type: [SelectionSchema], default: [] })
+  selections: Selection[];
+
+  // Rooms / spaces - organize selections, photos, dimensions, and budget.
+  @Prop({ type: [RoomSchema], default: [] })
+  rooms: Room[];
+
+  // Takeoff / bill of works: catalog services with quantities, organized
+  // by room and assigned to engagements. Drives the Scope tab + cost rollup.
+  @Prop({ type: [ScopeItemSchema], default: [] })
+  scopeItems: ScopeItem[];
+
+  // Which phase the renovation is currently in (drives the timeline UI).
+  @Prop({
+    type: String,
+    enum: Object.values(ProjectPhase),
+    default: ProjectPhase.DESIGN,
+  })
+  currentPhase: ProjectPhase;
+
+  // === Site info (architecture projects) - mirrors the job fields ===
+  @Prop()
+  cadastralId?: string;
+
+  @Prop()
+  landArea?: number;
+
+  @Prop()
+  floorCount?: number;
+
+  @Prop()
+  propertyType?: string;
 
   @Prop()
   acceptedOfferId: Types.ObjectId;
@@ -68,3 +750,4 @@ ProjectRequestSchema.index({ category: 1 });
 ProjectRequestSchema.index({ status: 1 });
 ProjectRequestSchema.index({ location: 1 });
 ProjectRequestSchema.index({ createdAt: -1 });
+ProjectRequestSchema.index({ 'engagements.jobId': 1 });

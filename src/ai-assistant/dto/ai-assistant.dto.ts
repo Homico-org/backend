@@ -33,6 +33,13 @@ export class SendMessageDto {
   @IsOptional()
   @IsString()
   currentPage?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives the city/currency tone of assistant answers.',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class ChatMessageResponseDto {

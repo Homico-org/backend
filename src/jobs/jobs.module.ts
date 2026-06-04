@@ -15,6 +15,10 @@ import { ProjectTracking, ProjectTrackingSchema } from './schemas/project-tracki
 import { ProjectWorkspace, ProjectWorkspaceSchema } from './schemas/workspace.schema';
 import { Poll, PollSchema } from './schemas/poll.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import {
+  ProjectRequest,
+  ProjectRequestSchema,
+} from '../project-request/schemas/project-request.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ChatModule } from '../chat/chat.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
@@ -32,6 +36,10 @@ import { VerificationModule } from '../verification/verification.module';
       { name: ProjectWorkspace.name, schema: ProjectWorkspaceSchema },
       { name: Poll.name, schema: PollSchema },
       { name: User.name, schema: UserSchema },
+      // Registered so acceptProposal can backfill a parent project
+      // engagement when a project-scoped job is hired. Model-only
+      // dependency (no ProjectRequestModule import) keeps the graph acyclic.
+      { name: ProjectRequest.name, schema: ProjectRequestSchema },
     ]),
     NotificationsModule,
     forwardRef(() => ChatModule),

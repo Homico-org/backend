@@ -268,6 +268,39 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Update a pro's bank account. Setting fresh details clears any prior
+   * verifiedAt - admin must re-verify after any change so we don't
+   * silently keep "verified" status on freshly-edited details.
+   */
+  async updateBankAccount(
+    userId: string,
+    dto: { bankCode: string; accountNumber: string; holderName: string },
+  ): Promise<User> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) throw new NotFoundException("User not found");
+    user.bankAccount = {
+      bankCode: dto.bankCode.trim(),
+      accountNumber: dto.accountNumber.trim().replace(/\s+/g, ""),
+      holderName: dto.holderName.trim(),
+      verifiedAt: undefined,
+    };
+    await user.save();
+    return user;
+  }
+
+  /**
+   * Increment dispute strikes on a pro. Currently called manually by admin
+   * dispute resolution (Phase 1). Phase 3: auto-strike after confirmed
+   * no-show resolutions, with a 3-strike suspension rule.
+   */
+  async incrementDisputeStrikes(userId: string): Promise<number> {
+    const result = await this.userModel
+      .findByIdAndUpdate(userId, { $inc: { disputeStrikes: 1 } }, { new: true })
+      .exec();
+    return result?.disputeStrikes ?? 0;
+  }
+
   async savePushToken(userId: string, token: string, platform: string): Promise<void> {
     // Remove existing token if present (prevent duplicates), then add
     await this.userModel.updateOne(
@@ -936,10 +969,17 @@ export class UsersService {
 
   // ============== PRO-RELATED METHODS ==============
 
-  // Location data with Georgian translations
+  // Location data with localized translations. Keyed by either country
+  // NAME ("Georgia") or ISO 3166-1 alpha-2 code ("GE"); `getLocations`
+  // normalises the lookup so callers can pass whichever they have.
+  //
+  // Per-country regions are curated lists of the highest-demand metros
+  // in each marketplace; the goal is to cover the cities where Homico
+  // currently has supply, not to be encyclopedic. Add more regions
+  // when supply grows in a market.
   private readonly LOCATIONS_DATA = {
     Georgia: {
-      nationwide: { en: "Countrywide", ka: "საქართველოს მასშტაბით" },
+      nationwide: { en: "Countrywide", ka: "მთელი ქვეყანა" },
       country: { en: "Georgia", ka: "საქართველო" },
       regions: {
         თბილისი: {
@@ -1018,10 +1058,187 @@ export class UsersService {
       },
       emoji: "🇬🇪",
     },
+    Israel: {
+      nationwide: { en: "Nationwide", ka: "მთელი ქვეყანა" },
+      country: { en: "Israel", ka: "ისრაელი" },
+      regions: {
+        "ცენტრალური / Tel Aviv": {
+          en: "Tel Aviv & Center",
+          cities: ["თელ-ავივი", "რამატ განი", "გივატაიმი", "ჰერცლია", "ბათ იამი"],
+          citiesEn: ["Tel Aviv", "Ramat Gan", "Givatayim", "Herzliya", "Bat Yam"],
+        },
+        იერუსალიმი: {
+          en: "Jerusalem",
+          cities: ["იერუსალიმი", "ბეთ შემეში"],
+          citiesEn: ["Jerusalem", "Beit Shemesh"],
+        },
+        ჩრდილოეთი: {
+          en: "Northern District",
+          cities: ["ჰაიფა", "ნაცარეთი", "ტიბერია", "აქრე"],
+          citiesEn: ["Haifa", "Nazareth", "Tiberias", "Acre"],
+        },
+        სამხრეთი: {
+          en: "Southern District",
+          cities: ["ბერშება", "აშდოდი", "ეილათი"],
+          citiesEn: ["Beersheba", "Ashdod", "Eilat"],
+        },
+      },
+      emoji: "🇮🇱",
+    },
+    France: {
+      nationwide: { en: "Nationwide", ka: "მთელი ქვეყანა" },
+      country: { en: "France", ka: "საფრანგეთი" },
+      regions: {
+        "ილ-დე-ფრანსი": {
+          en: "Île-de-France",
+          cities: ["პარიზი", "ვერსალი", "ბულონ-ბიანკური", "სენ-დენი"],
+          citiesEn: ["Paris", "Versailles", "Boulogne-Billancourt", "Saint-Denis"],
+        },
+        "ოვერნ-რონ-ალპები": {
+          en: "Auvergne-Rhône-Alpes",
+          cities: ["ლიონი", "გრენობლი", "სენტ-ეტიენი"],
+          citiesEn: ["Lyon", "Grenoble", "Saint-Etienne"],
+        },
+        "პროვანსი-ალპები-კოტ-დაზური": {
+          en: "Provence-Alpes-Côte d'Azur",
+          cities: ["მარსელი", "ნიცა", "ტულონი", "კანი"],
+          citiesEn: ["Marseille", "Nice", "Toulon", "Cannes"],
+        },
+        ოკიტანია: {
+          en: "Occitanie",
+          cities: ["ტულუზა", "მონპელიე", "ნიმი"],
+          citiesEn: ["Toulouse", "Montpellier", "Nimes"],
+        },
+        "ნოვა აქვიტანია": {
+          en: "Nouvelle-Aquitaine",
+          cities: ["ბორდო", "ლიმოჟი"],
+          citiesEn: ["Bordeaux", "Limoges"],
+        },
+      },
+      emoji: "🇫🇷",
+    },
+    "United States": {
+      nationwide: { en: "Nationwide", ka: "მთელი ქვეყანა" },
+      country: { en: "United States", ka: "ამერიკის შეერთებული შტატები" },
+      regions: {
+        "ნიუ-იორკი": {
+          en: "New York",
+          cities: ["ნიუ-იორკი", "ბრუკლინი", "კუინსი", "ბრონქსი", "სტატენ-აილენდი"],
+          citiesEn: ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island"],
+        },
+        კალიფორნია: {
+          en: "California",
+          cities: ["ლოს-ანჯელესი", "სან-დიეგო", "სან-ფრანცისკო", "სან-ხოსე"],
+          citiesEn: ["Los Angeles", "San Diego", "San Francisco", "San Jose"],
+        },
+        ტეხასი: {
+          en: "Texas",
+          cities: ["ჰიუსტონი", "ოსტინი", "დალასი", "სან-ანტონიო"],
+          citiesEn: ["Houston", "Austin", "Dallas", "San Antonio"],
+        },
+        ფლორიდა: {
+          en: "Florida",
+          cities: ["მაიამი", "ორლანდო", "ტამპა", "ჯეკსონვილი"],
+          citiesEn: ["Miami", "Orlando", "Tampa", "Jacksonville"],
+        },
+        ილინოისი: {
+          en: "Illinois",
+          cities: ["ჩიკაგო", "სპრინგფილდი"],
+          citiesEn: ["Chicago", "Springfield"],
+        },
+      },
+      emoji: "🇺🇸",
+    },
+    Germany: {
+      nationwide: { en: "Nationwide", ka: "მთელი ქვეყანა" },
+      country: { en: "Germany", ka: "გერმანია" },
+      regions: {
+        ბერლინი: {
+          en: "Berlin",
+          cities: ["ბერლინი"],
+          citiesEn: ["Berlin"],
+        },
+        ბავარია: {
+          en: "Bavaria",
+          cities: ["მიუნხენი", "ნიურნბერგი", "აუგსბურგი"],
+          citiesEn: ["Munich", "Nuremberg", "Augsburg"],
+        },
+        "ჩრდილოეთ რაინ-ვესტფალია": {
+          en: "North Rhine-Westphalia",
+          cities: ["კიოლნი", "დიუსელდორფი", "დორტმუნდი", "ესენი", "ბონი"],
+          citiesEn: ["Cologne", "Düsseldorf", "Dortmund", "Essen", "Bonn"],
+        },
+        "ჰამბურგი": {
+          en: "Hamburg",
+          cities: ["ჰამბურგი"],
+          citiesEn: ["Hamburg"],
+        },
+        "ბადენ-ვიურტემბერგი": {
+          en: "Baden-Württemberg",
+          cities: ["შტუტგარტი", "კარლსრუე", "მანჰაიმი"],
+          citiesEn: ["Stuttgart", "Karlsruhe", "Mannheim"],
+        },
+      },
+      emoji: "🇩🇪",
+    },
+    "United Kingdom": {
+      nationwide: { en: "Nationwide", ka: "მთელი ქვეყანა" },
+      country: { en: "United Kingdom", ka: "გაერთიანებული სამეფო" },
+      regions: {
+        ლონდონი: {
+          en: "Greater London",
+          cities: ["ლონდონი", "კროიდონი", "ვუდიჩი"],
+          citiesEn: ["London", "Croydon", "Woolwich"],
+        },
+        "ინგლისის ჩრდილო-დასავლეთი": {
+          en: "North West England",
+          cities: ["მანჩესტერი", "ლივერპული", "ბოლტონი"],
+          citiesEn: ["Manchester", "Liverpool", "Bolton"],
+        },
+        "ვესტ-მიდლენდსი": {
+          en: "West Midlands",
+          cities: ["ბირმინგემი", "კოვენტრი", "ვულვერჰემპტონი"],
+          citiesEn: ["Birmingham", "Coventry", "Wolverhampton"],
+        },
+        შოტლანდია: {
+          en: "Scotland",
+          cities: ["გლაზგო", "ედინბურგი", "აბერდინი"],
+          citiesEn: ["Glasgow", "Edinburgh", "Aberdeen"],
+        },
+        უელსი: {
+          en: "Wales",
+          cities: ["კარდიფი", "სუონსი", "ნიუპორტი"],
+          citiesEn: ["Cardiff", "Swansea", "Newport"],
+        },
+      },
+      emoji: "🇬🇧",
+    },
+  };
+
+  // ISO 3166-1 alpha-2 codes that the frontend sends (e.g. "GE", "IL")
+  // mapped to the LOCATIONS_DATA keys we use internally. Anything not
+  // in this table falls back to Georgia in `getLocations`.
+  private readonly COUNTRY_CODE_TO_NAME: Record<string, string> = {
+    GE: "Georgia",
+    IL: "Israel",
+    FR: "France",
+    US: "United States",
+    DE: "Germany",
+    UK: "United Kingdom",
+    GB: "United Kingdom",
   };
 
   getLocations(country?: string, locale?: string) {
-    const targetCountry = country || "Georgia";
+    // Resolve the lookup key. Frontends post-2026-05 send ISO codes
+    // ("GE", "IL", "FR"...); pre-migration callers and admin tools
+    // sometimes pass the country name directly. Either works.
+    const raw = (country || "GE").toString();
+    const upper = raw.toUpperCase();
+    const targetCountry =
+      this.COUNTRY_CODE_TO_NAME[upper] ||
+      (this.LOCATIONS_DATA[raw as keyof typeof this.LOCATIONS_DATA]
+        ? raw
+        : "Georgia");
     const isGeorgian = locale === "ka";
 
     type RegionData = { en: string; cities: string[]; citiesEn: string[] };
@@ -1197,6 +1414,20 @@ export class UsersService {
     serviceKey?: string;
     serviceMinPrice?: number;
     serviceMaxPrice?: number;
+    /**
+     * Filter to pros who speak ANY of the listed languages. ISO 639-1
+     * codes like "en", "ka", "ru". Matched against User.languages array
+     * via $in. Added 2026-05 for AI chat richer search.
+     */
+    languages?: string[];
+    /**
+     * ISO 3166-1 alpha-2 country code. When set, restricts results to
+     * pros in that marketplace. When omitted, returns pros across every
+     * country - controller defaults to "GE" for non-admin callers and
+     * leaves it undefined for admins so the cross-country admin view
+     * stays uncluttered.
+     */
+    country?: string;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1227,29 +1458,39 @@ export class UsersService {
     //
     // Include _id as final sort key to ensure consistent pagination across
     // pages (prevents duplicate items appearing in two pages).
+    // Sort orders. Every variant places `hasVisiblePortfolio` right
+    // after `isPremium` so that within each premium tier, pros whose
+    // cards show real project photos beat empty-card pros at the same
+    // tier - users were seeing portfolio-having pros buried below
+    // premium-but-no-photo pros because the only signal between tiers
+    // was `profileScore`, which mixes portfolio with avatar/bio/etc.
+    // and could be matched by a complete-but-no-portfolio profile.
+    // Adding the explicit portfolio flag makes "has photos" a hard
+    // ordering criterion rather than a few extra points.
     let sortObj: any = {};
     switch (filters?.sort) {
       case "rating":
-        sortObj = { isPremium: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isPremium: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isPremium: -1, basePrice: 1, profileScore: -1, _id: -1 };
+        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isPremium: -1, basePrice: -1, profileScore: -1, _id: -1 };
+        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isPremium: -1, createdAt: -1, profileScore: -1, _id: -1 };
+        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
       default:
-        // "recommended" - profileScore first so fullest profiles top the
-        // listing. Reviews and rating still tie-break within the same score
-        // band so high-rated complete pros beat equally-complete unrated ones.
+        // "recommended" - portfolio-having pros at the top of each
+        // premium tier, then profileScore, then reviews/rating as
+        // tiebreakers within identical-portfolio bands.
         sortObj = {
           isPremium: -1,
+          hasVisiblePortfolio: -1,
           profileScore: -1,
           totalReviews: -1,
           avgRating: -1,
@@ -1294,6 +1535,24 @@ export class UsersService {
         { verificationStatus: "verified" },
       ],
     };
+
+    // Country scoping (added 2026-05). The pro's `country` field is
+    // populated by the backfill migration on existing rows and at
+    // registration for new pros. We match by exact code AND by the
+    // legacy "missing country" case so a freshly migrated DB doesn't
+    // skip pros whose backfill hasn't run yet.
+    if (filters?.country) {
+      query.$and.push({
+        $or: [
+          { country: filters.country },
+          // Legacy rows from before the migration: treat them as GE
+          // since that's the historical default.
+          ...(filters.country === "GE"
+            ? [{ country: { $exists: false } }, { country: null }, { country: "" }]
+            : []),
+        ],
+      });
+    }
 
     // Exclude current user from results
     if (filters?.excludeUserId) {
@@ -1363,6 +1622,11 @@ export class UsersService {
 
     if (filters?.minRating) {
       query.avgRating = { $gte: filters.minRating };
+    }
+
+    if (filters?.languages && filters.languages.length > 0) {
+      // Match if the pro speaks ANY of the requested languages.
+      query.languages = { $in: filters.languages };
     }
 
     // Price filter should work for different pricing models:
@@ -1580,6 +1844,26 @@ export class UsersService {
         },
       },
       { $addFields: { profileScore: profileScoreExpr } },
+      // Boolean "this pro has at least one visible project card",
+      // derived from BOTH the embedded portfolioProjects array AND
+      // the linked portfolioitems collection (Homico-completed jobs).
+      // Sorted by `sortObj` ahead of profileScore so pros with real
+      // photos surface to the top of each premium tier.
+      {
+        $addFields: {
+          hasVisiblePortfolio: {
+            $gt: [
+              {
+                $add: [
+                  { $size: { $ifNull: ["$portfolioProjects", []] } },
+                  { $ifNull: ["$linkedPortfolioCount", 0] },
+                ],
+              },
+              0,
+            ],
+          },
+        },
+      },
       // Drop the temporary lookup array - keeps the response payload tight.
       { $project: { linkedPortfolio: 0, password: 0 } },
       { $sort: sortObj },
@@ -1973,7 +2257,7 @@ export class UsersService {
       }
     }
 
-    // Per-service pricing — when present, derive basePrice/maxPrice from it
+    // Per-service pricing - when present, derive basePrice/maxPrice from it
     if (proData.servicePricing !== undefined && proData.servicePricing.length > 0) {
       // Server-side defense: class-validator can't easily enforce
       // `priceMin <= priceMax` across two sibling fields, so do it here.
@@ -1992,7 +2276,7 @@ export class UsersService {
         );
       }
 
-      // Replace entire servicePricing array — old entries are removed
+      // Replace entire servicePricing array - old entries are removed
       updateData.servicePricing = proData.servicePricing;
 
       const activePrices = proData.servicePricing
@@ -2304,6 +2588,40 @@ export class UsersService {
     });
 
     return updatedUser;
+  }
+
+  /**
+   * Update a pro's availability status. Surfaces the existing
+   * `ProStatus` enum (active / busy / away) which has lived in the
+   * schema but had no API surface until the SLA accountability work
+   * landed. `away` is the SLA-exempt signal - the cron skips pros
+   * whose status === 'away' so they're not penalised for being
+   * deliberately offline (vacation, illness, busy day).
+   *
+   * Different from the existing `deactivateProProfile` flow: `away`
+   * keeps the pro visible in browse with an Away pill; deactivation
+   * hides them entirely.
+   */
+  async updateStatus(
+    userId: string,
+    status: "active" | "busy" | "away",
+  ): Promise<User> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    if (user.role !== "pro" && user.role !== "admin") {
+      throw new BadRequestException("Only pros can update availability status");
+    }
+    const updated = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $set: { status, statusUpdatedAt: new Date() } },
+        { new: true },
+      )
+      .select("-password")
+      .exec();
+    return updated;
   }
 
   async getDeactivationStatus(userId: string): Promise<{

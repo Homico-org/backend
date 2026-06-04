@@ -3,13 +3,17 @@ import {
   Post,
   Get,
   Body,
+  Headers,
   Param,
   Query,
+  Req,
+  Res,
   UseGuards,
   Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
 import { AiAssistantService } from './ai-assistant.service';
 import { CreateSessionDto, SendMessageDto } from './dto/ai-assistant.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -115,7 +119,14 @@ export class AiAssistantController {
   @Post('sessions/:sessionId/messages')
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 messages per minute
+  // Layered throttles: per-minute keeps conversational pace sane,
+  // burst stops mass-flooding in seconds, ai-cost caps the daily spend
+  // ceiling per IP. All three must pass.
+  @Throttle({
+    default: { limit: 20, ttl: 60000 },
+    burst: { limit: 5, ttl: 10000 },
+    'ai-cost': { limit: 200, ttl: 24 * 60 * 60_000 },
+  })
   @ApiOperation({ summary: 'Send a message and get AI response' })
   @ApiResponse({ status: 200, description: 'AI response' })
   @ApiResponse({ status: 404, description: 'Session not found' })
@@ -123,11 +134,13 @@ export class AiAssistantController {
     @Param('sessionId') sessionId: string,
     @Body() dto: SendMessageDto,
     @CurrentUser() user: any,
+    @Headers('x-amplitude-device-id') amplitudeDeviceId?: string,
   ) {
     const result = await this.aiAssistantService.sendMessage(
       sessionId,
       dto,
       user?.userId,
+      amplitudeDeviceId,
     );
 
     return {
@@ -135,6 +148,73 @@ export class AiAssistantController {
       suggestedActions: result.suggestedActions,
       richContent: result.richContent,
     };
+  }
+
+  /**
+   * Streaming variant of sendMessage. Returns text/event-stream so the
+   * client can render tokens + tool-status chips as they happen instead
+   * of waiting several seconds for the full response.
+   *
+   * Event types are documented on StreamEvent in ai-assistant.service.ts.
+   * Each event is JSON-encoded and emitted as `data: <json>\n\n`.
+   *
+   * Same throttle stack as the blocking endpoint - streaming doesn't
+   * reduce OpenAI cost, just shifts when bytes arrive.
+   */
+  @Post('sessions/:sessionId/messages/stream')
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Throttle({
+    default: { limit: 20, ttl: 60000 },
+    burst: { limit: 5, ttl: 10000 },
+    'ai-cost': { limit: 200, ttl: 24 * 60 * 60_000 },
+  })
+  @ApiOperation({ summary: 'Send a message and get AI response as SSE stream' })
+  async sendMessageStream(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: SendMessageDto,
+    @CurrentUser() user: any,
+    @Req() req: Request,
+    @Res() res: Response,
+    @Headers('x-amplitude-device-id') amplitudeDeviceId?: string,
+  ): Promise<void> {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/render buffering
+    res.flushHeaders?.();
+
+    // Client disconnect -> abort the generator so we stop spending tokens.
+    const abortController = new AbortController();
+    req.on('close', () => {
+      if (!res.writableEnded) abortController.abort();
+    });
+
+    try {
+      const stream = this.aiAssistantService.sendMessageStream(
+        sessionId,
+        dto,
+        user?.userId,
+        amplitudeDeviceId,
+        abortController.signal,
+      );
+      for await (const event of stream) {
+        if (res.writableEnded) break;
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    } catch (err) {
+      // Last-ditch error frame so the client doesn't hang on a half-closed
+      // stream. Most errors are caught inside the generator and emitted as
+      // type:'error' events; this only fires on truly unexpected failures.
+      if (!res.writableEnded) {
+        const message = err instanceof Error ? err.message : 'unknown';
+        res.write(
+          `data: ${JSON.stringify({ type: 'error', errorType: 'server_error', message })}\n\n`,
+        );
+      }
+    } finally {
+      res.end();
+    }
   }
 
   @Delete('sessions/:sessionId')

@@ -28,7 +28,14 @@ export const contractorsCategory = cat(
       // around the opening. XLSX bills 1475 ₾ material + 200 ₾ labor;
       // labor-only range here.
       svc("V229", "gc_hidden_door_install_svc", [U.unit(300, 500)]),
-    ], 0),
+    ], 0, {
+      keywords: [
+        { en: "renovation remodel construction general contractor", ka: "რემონტი მშენებლობა გენპოდრიადი", ru: "ремонт генподряд строительство" },
+        // Drywall ceilings/coves live in this subcategory too, so the
+        // same gipso lexicon is added here as on the painter side.
+        { en: "drywall ceiling gypsum gipso", ka: "გიფსოკარტონის ჭერი გიფსო", ru: "гипсокартонный потолок гипс" },
+      ],
+    }),
     sub("S037", "tiler", "Grid3x3", [
       svc("V131", "tile_floor_svc", [U.sqm(10, 35)]),
       svc("V132", "tile_wall_svc", [U.sqm(12, 40)]),
@@ -45,7 +52,12 @@ export const contractorsCategory = cat(
       // Silicone joint sealing - last finish step where tiles meet (interior
       // corners, fixture penetrations). PDF 12.4 bills 9.8 ₾/m.
       svc("V224", "tile_silicone_joint_svc", [U.meter(8, 15)]),
-    ], 1),
+    ], 1, {
+      keywords: [
+        { en: "tile tiling tiler plitka mosaic", ka: "ფილა ფილების დაგება", ru: "плитка плиточник кафель" },
+        { en: "waterproof shower membrane epoxy grout", ka: "ჰიდროიზოლაცია შხაპის ეპოქსიდი", ru: "гидроизоляция душ затирка" },
+      ],
+    }),
     sub("S038", "flooring", "Footprints", [
       svc("V136", "floor_parquet_svc", [U.sqm(12, 40)]),
       svc("V137", "floor_laminate_svc", [U.sqm(8, 25)]),
@@ -63,7 +75,12 @@ export const contractorsCategory = cat(
       // film/DVD between subfloor and laminate (XLSX 4/5 = 4-8 ₾/sqm).
       svc("V225", "floor_threshold_svc", [U.unit(25, 50)]),
       svc("V226", "floor_underlayment_svc", [U.sqm(4, 10)]),
-    ], 2),
+    ], 2, {
+      keywords: [
+        { en: "floor flooring parquet laminate vinyl wood", ka: "იატაკი პარკეტი ლამინატი ხე", ru: "пол паркет ламинат винил" },
+        { en: "screed self-leveling subfloor prep", ka: "მოსასწორებელი ფენა სტიაჟკა", ru: "стяжка наливной пол выравнивание" },
+      ],
+    }),
     sub("S039", "built_in", "Archive", [
       svc("V141", "builtin_wardrobe_svc", [U.unit(300, 2000)]),
       svc("V142", "builtin_kitchen_svc", [U.project(1000, 8000)]),
@@ -80,7 +97,12 @@ export const contractorsCategory = cat(
       svc("V149", "demo_partial_svc", [U.sqm(10, 30)]),
       svc("V150", "demo_full_svc", [U.sqm(15, 50)]),
       svc("V151", "demo_debris_svc", [U.load(50, 200)]),
-    ], 5),
+    ], 5, {
+      keywords: [
+        { en: "demolition demo demolish teardown", ka: "დემონტაჟი ნგრევა დაშლა", ru: "демонтаж снос разборка" },
+        { en: "debris removal haul-away", ka: "ნარჩენების გატანა", ru: "вывоз мусора" },
+      ],
+    }),
     // New subcategory (2026-05). Real estimates explicitly bill materials
     // delivery, debris removal, and unloading per trip - work that today
     // gets buried inside other line items. Surfacing it lets pros bid more

@@ -46,6 +46,17 @@ export class NotificationsController {
     return { unreadCount: count };
   }
 
+  @Get('unread-counts-by-category')
+  @ApiOperation({
+    summary:
+      'Exact unread counts grouped into the activity-menu categories (invitations, proposals, bookings, reviews)',
+  })
+  async getUnreadCountsByCategory(@Request() req) {
+    return this.notificationsService.getUnreadCountsByCategory(
+      req.user.userId,
+    );
+  }
+
   @Post('mark-read')
   @ApiOperation({ summary: 'Mark notifications as read' })
   async markAsRead(@Request() req, @Body() markReadDto: MarkReadDto) {

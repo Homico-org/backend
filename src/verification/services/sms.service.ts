@@ -37,12 +37,33 @@ export class SmsService {
   }
 
   /**
-   * Determines which provider to use based on phone number
-   * - Georgian numbers (+995) → UBill
-   * - All other numbers → Prelude
+   * Determines which provider to use based on phone number AND channel.
+   *
+   * Routing rules:
+   *   - Channel = 'whatsapp' → ALWAYS Prelude (UBill SMS-only - their
+   *     /v1/sms/send endpoint has no WhatsApp dispatch field, so the
+   *     previous "channel" arg was silently ignored and the user got
+   *     a regular SMS or, more often, nothing because the request was
+   *     identical to SMS but the user expected WhatsApp).
+   *   - Channel = 'sms' on Georgian (+995) → UBill
+   *   - Channel = 'sms' on other countries → Prelude
+   *   - Either provider missing → fall through to whichever IS configured
    */
-  private getProviderForNumber(phoneNumber: string): SmsProvider {
+  private getProviderForNumber(
+    phoneNumber: string,
+    channel: OtpChannelType = 'sms',
+  ): SmsProvider {
     const isGeorgianNumber = phoneNumber.startsWith('+995') || phoneNumber.startsWith('995');
+
+    // WhatsApp goes through Prelude regardless of country - UBill does
+    // not support WhatsApp on the integrated endpoint.
+    if (channel === 'whatsapp') {
+      if (this.preludeApiKey) return 'prelude';
+      // If only UBill is configured we fall through to SMS via UBill.
+      // The caller logs a warning so the channel-mismatch is visible.
+      if (this.ubillApiKey && this.ubillBrandId) return 'ubill';
+      return 'none';
+    }
 
     if (isGeorgianNumber && this.ubillApiKey && this.ubillBrandId) {
       return 'ubill';
@@ -86,14 +107,26 @@ export class SmsService {
   async sendOtp(phoneNumber: string, code: string, channel: OtpChannelType = 'sms'): Promise<SendOtpResult> {
     // Format the phone number (ensure it has + prefix)
     const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-    const provider = this.getProviderForNumber(formattedNumber);
+    const provider = this.getProviderForNumber(formattedNumber, channel);
 
     if (provider === 'none') {
       this.logger.log(`[DEV MODE] ${channel.toUpperCase()} OTP for ${formattedNumber}: ${code}`);
       return { success: true, provider: 'none' };
     }
 
-    this.logger.log(`Routing ${formattedNumber} to ${provider.toUpperCase()} provider`);
+    // Surface the channel/provider mismatch when WhatsApp was requested
+    // but only UBill is available - the user will receive an SMS not a
+    // WhatsApp message. Keep the call going so they at least get the
+    // code somewhere, but log it so we can spot the misconfiguration.
+    if (channel === 'whatsapp' && provider === 'ubill') {
+      this.logger.warn(
+        `WhatsApp requested for ${formattedNumber} but only UBill is configured - falling back to SMS`,
+      );
+    }
+
+    this.logger.log(
+      `Routing ${formattedNumber} via ${channel} to ${provider.toUpperCase()} provider`,
+    );
 
     if (provider === 'ubill') {
       const result = await this.sendOtpViaUbill(formattedNumber, code, channel);
@@ -213,10 +246,19 @@ export class SmsService {
    * Verify OTP - returns which provider was used
    * - UBill: Returns false (we verify locally with stored OTP)
    * - Prelude: Verifies via their API
+   *
+   * Channel must match what was used in `sendOtp` so we hit the same
+   * provider here. A WhatsApp OTP sent via Prelude needs to be checked
+   * against Prelude even on a Georgian number that would otherwise
+   * route SMS through UBill.
    */
-  async verifyOtp(phoneNumber: string, code: string): Promise<{ verified: boolean; provider: SmsProvider }> {
+  async verifyOtp(
+    phoneNumber: string,
+    code: string,
+    channel: OtpChannelType = 'sms',
+  ): Promise<{ verified: boolean; provider: SmsProvider }> {
     const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-    const provider = this.getProviderForNumber(formattedNumber);
+    const provider = this.getProviderForNumber(formattedNumber, channel);
 
     if (provider === 'none') {
       // In dev mode, let the verification service handle it with stored OTP

@@ -7,6 +7,17 @@ import { NotificationType } from '../notifications/schemas/notification.schema';
 import { UsersService } from '../users/users.service';
 import { SmsService } from '../verification/services/sms.service';
 import { PortfolioService } from '../portfolio/portfolio.service';
+import { resolveUserLocale, type SupportedLocale } from '../common/countries';
+
+// Localized SMS body for review invitations sent on behalf of a pro.
+// The pro is the speaker ("...gives you a review request"), but the
+// recipient is the *client*, so we resolve the locale from whoever
+// receives the SMS, not the pro.
+const REVIEW_INVITE_SMS: Record<SupportedLocale, (proName: string, link: string) => string> = {
+  en: (name, link) => `Homico: ${name} would appreciate your review. ${link}`,
+  ka: (name, link) => `Homico: ${name} გთხოვთ დატოვოთ შეფასება. ${link}`,
+  ru: (name, link) => `Homico: ${name} просит оставить отзыв. ${link}`,
+};
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { CreateBookingReviewDto } from './dto/create-booking-review.dto';
@@ -107,15 +118,21 @@ export class ReviewService {
 
     // Notify the pro
     const client = await this.usersService.findById(clientId);
+    const clientName = client?.name || 'A client';
     await this.notificationsService.notify(
       proId,
       NotificationType.NEW_REVIEW,
       'New review received!',
-      `${client?.name || 'A client'} left you a ${dto.rating}-star review`,
+      `${clientName} left you a ${dto.rating}-star review`,
       {
         link: `/professionals/${proId}#reviews`,
         referenceId: review._id.toString(),
         referenceModel: 'Review',
+        i18n: {
+          titleKey: 'notifications.types.new_review.title',
+          messageKey: 'notifications.types.new_review.message',
+          params: { clientName, rating: dto.rating },
+        },
       },
     );
 
@@ -373,6 +390,11 @@ export class ReviewService {
         link: `/professionals/${proId}#reviews`,
         referenceId: review._id.toString(),
         referenceModel: 'Review',
+        i18n: {
+          titleKey: 'notifications.types.new_review.title',
+          messageKey: 'notifications.types.new_review.message',
+          params: { clientName: reviewer.name, rating: data.rating },
+        },
       },
     );
 
@@ -454,15 +476,21 @@ export class ReviewService {
 
     // Notify the pro
     const pro = await this.usersService.findById(reviewRequest.proId.toString());
+    const reviewerName = data.isAnonymous ? 'Someone' : data.clientName;
     await this.notificationsService.notify(
       reviewRequest.proId.toString(),
       NotificationType.NEW_REVIEW,
       'New review received!',
-      `${data.isAnonymous ? 'Someone' : data.clientName} left you a ${data.rating}-star review`,
+      `${reviewerName} left you a ${data.rating}-star review`,
       {
         link: `/professionals/${reviewRequest.proId.toString()}#reviews`,
         referenceId: review._id.toString(),
         referenceModel: 'Review',
+        i18n: {
+          titleKey: 'notifications.types.new_review.title',
+          messageKey: 'notifications.types.new_review.message',
+          params: { clientName: reviewerName, rating: data.rating },
+        },
       },
     );
 
@@ -507,11 +535,18 @@ export class ReviewService {
     });
     await reviewRequest.save();
 
-    const reviewLink = `https://www.homico.ge/review/${token}`;
+    // /review/[token] is country-agnostic; the public reviewer doesn't
+    // need a marketplace prefix to leave a review. APP_URL points at
+    // the international root (homico.co) in production.
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://homico.co';
+    const reviewLink = `${appUrl}/review/${token}`;
 
-    // Send SMS if phone provided
+    // Send SMS if phone provided. The reviewer isn't (yet) a user in
+    // our system so we use the pro's locale as the best proxy - a US
+    // pro inviting their client is most likely inviting a US speaker.
     if (data.phone) {
-      const smsMessage = `Homico: ${pro.name} გთხოვთ დატოვოთ შეფასება. ${reviewLink}`;
+      const locale = resolveUserLocale(pro);
+      const smsMessage = REVIEW_INVITE_SMS[locale](pro.name, reviewLink);
       try {
         const result = await this.smsService.sendNotificationSms(data.phone, smsMessage);
         if (!result.success) {

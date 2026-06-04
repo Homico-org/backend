@@ -74,6 +74,12 @@ export class JobsController {
   @ApiQuery({ name: 'clientType', required: false, description: 'Filter by client type: individual or organization' })
   @ApiQuery({ name: 'deadline', required: false, description: 'Deadline filter: urgent (< 7 days), week, month, flexible' })
   @ApiQuery({ name: 'savedOnly', required: false, description: 'Filter to only show saved/favorite jobs (requires auth)' })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    description:
+      'ISO 3166-1 alpha-2 country code. Scopes the listing to jobs in that marketplace. Defaults to "GE" for non-admin callers.',
+  })
   @ApiResponse({ status: 200, description: 'List of jobs with pagination' })
   @UseGuards(OptionalJwtAuthGuard)
   findAllJobs(
@@ -97,6 +103,7 @@ export class JobsController {
     @Query('clientType') clientType?: string,
     @Query('deadline') deadline?: string,
     @Query('savedOnly') savedOnly?: string,
+    @Query('country') country?: string,
   ) {
     // Handle categories - can be array of params or comma-separated string
     let categoriesArray: string[] | undefined;
@@ -139,6 +146,13 @@ export class JobsController {
       deadline,
       savedOnly: savedOnly === 'true',
       userId: user?.userId,
+      // Same scoping rule as /users/pros: non-admin callers default to
+      // the GE marketplace; admins omit the filter for cross-country
+      // moderation views. Uppercased to match the stored ISO 3166-1
+      // form in case a caller sends "us" or "Us" from a URL segment.
+      country: country
+        ? country.toUpperCase()
+        : (user?.role === 'admin' ? undefined : 'GE'),
     });
   }
 
@@ -304,6 +318,15 @@ export class JobsController {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
 
+  @Post('proposals/:proposalId/reconcile-payment')
+  @ApiOperation({ summary: 'Reconcile a proposal-hire escrow payment after returning from the provider' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
+  reconcileProjectPayment(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.reconcileProjectPayment(proposalId, user.userId);
+  }
+
   @Post('proposals/:proposalId/reject')
   @ApiOperation({ summary: 'Reject a proposal' })
   @ApiBearerAuth('JWT-auth')
@@ -362,7 +385,13 @@ export class JobsController {
   @ApiOperation({ summary: 'Update project stage' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Stage updated successfully' })
-  @UseGuards(JwtAuthGuard)
+  // Defense in depth: the service already enforces "pro advances, client
+  // can only do COMPLETED→REVIEW", but adding the role guard rejects
+  // anonymous-token-but-other-role calls at the controller layer so
+  // they never reach the service. The full audit history (#15) flagged
+  // the same inconsistency on every project-tracking endpoint.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async updateProjectStage(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -375,7 +404,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Client confirms project completion and triggers payment' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Project confirmed and closed successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN)
   async confirmProjectCompletion(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -419,7 +449,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Add comment to project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Comment added successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async addProjectComment(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -431,7 +462,8 @@ export class JobsController {
   @Get('projects/:jobId/messages')
   @ApiOperation({ summary: 'Get project messages' })
   @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getProjectMessages(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -443,7 +475,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Send message in project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Message sent successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async sendProjectMessage(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -456,7 +489,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Mark project messages as read' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Messages marked as read' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async markMessagesAsRead(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -468,7 +502,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Mark polls as viewed' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Polls marked as viewed' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async markPollsAsViewed(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -480,7 +515,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Mark materials as viewed' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Materials marked as viewed' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async markMaterialsAsViewed(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -491,7 +527,8 @@ export class JobsController {
   @Get('projects/:jobId/unread-counts')
   @ApiOperation({ summary: 'Get unread counts for chat, polls, materials' })
   @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getUnreadCounts(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -503,7 +540,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Add attachment to project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Attachment added successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async addProjectAttachment(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -522,7 +560,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Delete attachment from project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Attachment deleted successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async deleteProjectAttachment(
     @Param('jobId') jobId: string,
     @Param('index') index: string,
@@ -535,7 +574,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Get project history/activity log' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Project history' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getProjectHistory(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,

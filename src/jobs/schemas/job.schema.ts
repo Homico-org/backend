@@ -55,7 +55,14 @@ export class Job extends Document {
   @Prop({ required: true, trim: true })
   title: string;
 
-  @Prop({ required: true })
+  // `description` was `required: true` historically, but Mongoose's
+  // String required-check rejects empty strings - so a post-job flow
+  // that submits with an empty description (the user typed a service
+  // selection but skipped the optional free-text box) 500'd at save
+  // time. The DTO has always marked this `@IsOptional()`; aligning
+  // the schema lets clients post jobs without a description, matching
+  // the existing UX of the multi-step post-job form.
+  @Prop({ type: String, default: '' })
   description: string;
 
   @Prop({ required: true })
@@ -91,6 +98,13 @@ export class Job extends Document {
     entrance?: string;
     notes?: string;
   };
+
+  // ISO 3166-1 alpha-2 country code where the work happens (added
+  // 2026-05). Required for new jobs; defaults to "GE" via migration
+  // for existing rows. Drives marketplace scoping at the list endpoint
+  // (`/jobs?country=GE` returns only Georgian jobs).
+  @Prop({ type: String, index: true })
+  country: string;
 
   @Prop({
     type: String,
@@ -300,6 +314,15 @@ export class Job extends Document {
   // Professionals who declined this direct request
   @Prop({ type: [{ type: Types.ObjectId, ref: "User" }], default: [] })
   declinedPros: Types.ObjectId[];
+
+  // === Project umbrella linkage (2026-05) ===
+  // When a job is created to fill a role inside a Project, these tie it
+  // back so acceptProposal can mark the parent engagement as hired.
+  @Prop({ type: Types.ObjectId, ref: "ProjectRequest", index: true })
+  projectId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  engagementId?: string;
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
@@ -312,6 +335,9 @@ JobSchema.index({ location: 1, status: 1 });
 JobSchema.index({ hiredProId: 1 });
 JobSchema.index({ jobType: 1, status: 1 });
 JobSchema.index({ expiresAt: 1 }, { sparse: true });
+// Compound index for the marketplace listing query
+// (`/jobs?country=XX&status=open`).
+JobSchema.index({ country: 1, status: 1, createdAt: -1 });
 
 // Schema for tracking unique job views
 @Schema({ timestamps: true })

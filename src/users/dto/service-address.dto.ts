@@ -11,7 +11,7 @@ export class AddServiceAddressDto {
   @IsOptional()
   customLabel?: string;
 
-  @ApiProperty({ example: '12 Rustaveli Ave, Tbilisi, Georgia' })
+  @ApiProperty({ example: '12 Rustaveli Ave, Tbilisi, Georgia (example - format varies per marketplace)' })
   @IsString()
   formattedAddress: string;
 

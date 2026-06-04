@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -88,6 +89,17 @@ export class UsersController {
             description: userData.description || "",
             serviceAreas: userData.serviceAreas || [],
             portfolioProjects: userData.portfolioProjects || [],
+            // Availability + SLA accountability state. Powers the
+            // Away toggle (settings) and the SLA status banner on
+            // /my-space. `slaMisses` deliberately omitted - keep the
+            // /me payload light; if a dashboard widget ever needs
+            // the full history we'll add a dedicated endpoint.
+            status: userData.status || "active",
+            slaPenaltyLevel: userData.slaPenaltyLevel || "none",
+            slaDemotedUntil: userData.slaDemotedUntil,
+            isProfileDeactivated: userData.isProfileDeactivated || false,
+            deactivatedUntil: userData.deactivatedUntil,
+            deactivationReason: userData.deactivationReason,
           }
         : {}),
     };
@@ -102,6 +114,37 @@ export class UsersController {
   ) {
     await this.usersService.savePushToken(user.userId, body.token, body.platform || "web");
     return { success: true };
+  }
+
+  /**
+   * Pro's payout bank account. Distinct from /users/payment-methods/bank
+   * which is for clients saving cards/banks to PAY WITH. This one is
+   * where Homico SENDS money to the pro after escrow releases.
+   */
+  @Get("me/payout-account")
+  @ApiOperation({ summary: "Get my payout bank account (pro only)" })
+  @ApiBearerAuth("JWT-auth")
+  @UseGuards(JwtAuthGuard)
+  async getMyPayoutAccount(@CurrentUser() user: { userId: string }) {
+    const me = await this.usersService.findById(user.userId);
+    return {
+      bankAccount: me.bankAccount ?? null,
+      name: me.name,
+    };
+  }
+
+  @Put("me/payout-account")
+  @ApiOperation({ summary: "Set my payout bank account (pro only)" })
+  @ApiBearerAuth("JWT-auth")
+  @UseGuards(JwtAuthGuard)
+  async setMyPayoutAccount(
+    @CurrentUser() user: { userId: string },
+    @Body() body: { bankCode: string; accountNumber: string; holderName: string },
+  ) {
+    const updated = await this.usersService.updateBankAccount(user.userId, body);
+    return {
+      bankAccount: updated.bankAccount,
+    };
   }
 
   @Patch("me")
@@ -591,6 +634,12 @@ export class UsersController {
     required: false,
     description: "Maximum service-level price filter",
   })
+  @ApiQuery({
+    name: "country",
+    required: false,
+    description:
+      "ISO 3166-1 alpha-2 country code. Scopes results to pros in that marketplace. Omit to see every country (admin-only behaviour).",
+  })
   @ApiResponse({ status: 200, description: "Paginated list of pro users" })
   @UseGuards(OptionalJwtAuthGuard)
   findAllPros(
@@ -611,7 +660,20 @@ export class UsersController {
     @Query("serviceKey") serviceKey?: string,
     @Query("serviceMinPrice") serviceMinPrice?: string,
     @Query("serviceMaxPrice") serviceMaxPrice?: string,
+    @Query("country") country?: string,
   ) {
+    // Country scoping: an unauthenticated or non-admin caller MUST be
+    // scoped to a country. We accept whatever they pass (validated by
+    // the listing query in users.service.ts against SUPPORTED_COUNTRIES)
+    // and default to "GE" if omitted - today the only live marketplace.
+    // Admins pass `country` explicitly when they want to scope, or omit
+    // for the cross-country admin view. Uppercased to match the stored
+    // ISO 3166-1 form in case a caller forwards a URL-segment lowercase.
+    const isAdmin = user?.role === "admin";
+    const effectiveCountry = country
+      ? country.toUpperCase()
+      : (isAdmin ? undefined : "GE");
+
     return this.usersService.findAllPros({
       category,
       subcategory,
@@ -629,6 +691,7 @@ export class UsersController {
       serviceKey,
       serviceMinPrice: serviceMinPrice ? parseFloat(serviceMinPrice) : undefined,
       serviceMaxPrice: serviceMaxPrice ? parseFloat(serviceMaxPrice) : undefined,
+      country: effectiveCountry,
     });
   }
 
@@ -657,6 +720,37 @@ export class UsersController {
   async deleteAccount(@CurrentUser() user: any) {
     await this.usersService.deleteAccount(user.userId);
     return { message: "Account deleted successfully" };
+  }
+
+  // ============== PRO STATUS (Active / Busy / Away) ==============
+
+  @Post("me/status")
+  @ApiOperation({
+    summary:
+      "Set pro availability status (active|busy|away). 'away' exempts the pro from SLA timers.",
+  })
+  @ApiBearerAuth("JWT-auth")
+  @ApiResponse({ status: 200, description: "Status updated" })
+  @ApiResponse({ status: 400, description: "Invalid status value" })
+  @UseGuards(JwtAuthGuard)
+  async updateStatus(
+    @CurrentUser() user: any,
+    @Body() body: { status: "active" | "busy" | "away" },
+  ) {
+    const allowed = ["active", "busy", "away"] as const;
+    if (!allowed.includes(body?.status)) {
+      throw new BadRequestException(
+        `status must be one of: ${allowed.join(", ")}`,
+      );
+    }
+    const updated = await this.usersService.updateStatus(
+      user.userId,
+      body.status,
+    );
+    return {
+      status: updated.status,
+      statusUpdatedAt: updated.statusUpdatedAt,
+    };
   }
 
   // ============== PRO PROFILE DEACTIVATION ==============

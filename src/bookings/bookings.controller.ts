@@ -69,6 +69,29 @@ export class BookingsController {
     return this.bookingsService.getAvailability(proId, date);
   }
 
+  @Get('pro/:proId/availability/range')
+  @ApiOperation({
+    summary:
+      'Bulk per-day availability summary so the booking modal can pre-mark unavailable days without 14 round-trips',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Array of { date, hasSlots } for the requested range',
+  })
+  async getAvailabilityRange(
+    @Param('proId') proId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    if (!from || !to || !iso.test(from) || !iso.test(to)) {
+      return {
+        error: 'from and to query params required in YYYY-MM-DD format',
+      };
+    }
+    return this.bookingsService.getAvailabilityRange(proId, from, to);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get booking detail' })
   @ApiBearerAuth('JWT-auth')
@@ -114,5 +137,121 @@ export class BookingsController {
     @Body() dto: UpdateBookingStatusDto,
   ) {
     return this.bookingsService.updateStatus(id, user.userId, dto);
+  }
+
+  // ===== Payment-aware endpoints (added 2026-05) =====
+
+  /**
+   * Payment summary for the pay page. Returns provider, status, amount,
+   * and redirectUrl - enough for the page to render "Pay X with [provider]".
+   */
+  @Get(':id/payment')
+  @ApiOperation({ summary: 'Get payment status + redirect URL for a booking' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async getPayment(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.getPaymentSummary(id, user.userId);
+  }
+
+  /**
+   * Create a fresh payment intent for an AWAITING_PAYMENT booking whose
+   * previous intent failed, was cancelled, or timed out.
+   */
+  @Post(':id/retry-payment')
+  @ApiOperation({ summary: 'Create a fresh payment intent for retry' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async retryPayment(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.retryPayment(id, user.userId);
+  }
+
+  /**
+   * Force a status refresh from the payment provider. Frontend calls this
+   * from the /bookings/[id]/pay/return page after the user comes back
+   * from the provider's hosted page, so the UI doesn't have to wait for
+   * the webhook to land.
+   */
+  @Post(':id/reconcile-payment')
+  @ApiOperation({ summary: 'Re-fetch payment status from provider' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async reconcilePayment(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.reconcilePayment(id, user.userId);
+  }
+
+  /**
+   * Client confirms work was completed. Releases escrow to PENDING_RELEASE.
+   * Only the client can call this.
+   */
+  @Post(':id/confirm-completion')
+  @ApiOperation({ summary: 'Client confirms work completion (escrow to release)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async confirmCompletion(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.clientConfirm(id, user.userId);
+  }
+
+  /**
+   * Cancellation quote. Returns the refund/payout split that would apply
+   * if the user cancelled right now. Frontend calls this when the user
+   * clicks "Cancel" to render the preview before they confirm.
+   */
+  @Get(':id/cancellation-quote')
+  @ApiOperation({ summary: 'Refund + payout preview for cancellation' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async getCancellationQuote(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.getCancellationQuote(id, user.userId);
+  }
+
+  /**
+   * Either party cancels. Refund + pro payout split follows the
+   * time-based policy (see BookingsService.computeCancellationQuote).
+   */
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a booking (either party)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async cancelBooking(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.bookingsService.cancel(id, user.userId, body.reason);
+  }
+
+  /**
+   * Raise a dispute. Freezes the escrow until admin resolves.
+   */
+  @Post(':id/dispute')
+  @ApiOperation({ summary: 'Raise a dispute on a booking' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async raiseDispute(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Body()
+    body: {
+      type: 'pro_noshow' | 'client_noshow' | 'quality' | 'other';
+      description: string;
+      evidenceUrls?: string[];
+    },
+  ) {
+    return this.bookingsService.raiseDispute(id, user.userId, body);
   }
 }

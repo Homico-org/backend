@@ -19,9 +19,11 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "seed": "node dist/seed/seed.js"
+    "seed": "node dist/seed/seed.js",
+    "seed:dev": "ts-node -r tsconfig-paths/register scripts/seed-dev.ts"
   },
   "dependencies": {
+    "@amplitude/analytics-node": "^1.5.57",
     "@fluidjs/multer-cloudinary": "^1.0.4",
     "@nestjs/cli": "^10.3.0",
     "@nestjs/common": "^10.3.0",

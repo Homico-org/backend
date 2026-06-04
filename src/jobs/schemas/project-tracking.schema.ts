@@ -235,6 +235,19 @@ export class ProjectTracking extends Document {
   @Prop({ type: Number })
   agreedPrice?: number;
 
+  // Escrow payment (set when the client funds the hire at accept time, mirroring
+  // the booking escrow flow). The tracking is only created once payment
+  // succeeds, so paymentStatus defaults to 'paid'. escrowId drives the
+  // release-on-completion step.
+  @Prop({ type: String, enum: ['awaiting_payment', 'paid'], default: 'paid' })
+  paymentStatus?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Payment' })
+  paymentId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Escrow' })
+  escrowId?: Types.ObjectId;
+
   // Estimated duration from proposal
   @Prop({ type: Number })
   estimatedDuration?: number;
@@ -267,6 +280,17 @@ export class ProjectTracking extends Document {
   @Prop({ type: Date })
   clientConfirmedAt?: Date;
 
+  // SLA-chat latch. Stores the `createdAt` of the most-recent
+  // unanswered client message we already recorded a miss for. The
+  // chat-reply scanner skips threads where `tail.createdAt <= this`,
+  // which means: we already counted this tail. Once a NEW client
+  // message arrives (newer createdAt), the scanner re-evaluates.
+  // Pro replies don't touch this field - they'd advance the tail to
+  // a pro message, which naturally fails the "tail is from client"
+  // filter, so the scanner never reaches the latch comparison.
+  @Prop({ type: Date })
+  lastChatSlaMissAt?: Date;
+
   // Portfolio images uploaded by pro when completing job
   @Prop({ type: [String], default: [] })
   portfolioImages: string[];
@@ -274,6 +298,15 @@ export class ProjectTracking extends Document {
   // Flag indicating if portfolio item was created from this job
   @Prop({ type: Types.ObjectId, ref: 'PortfolioItem' })
   portfolioItemId?: Types.ObjectId;
+
+  // === Project umbrella back-refs (2026-05) ===
+  // Set when this workspace belongs to a multi-worker Project engagement,
+  // so the project dashboard can aggregate per-worker progress/history.
+  @Prop({ type: Types.ObjectId, ref: 'ProjectRequest', index: true })
+  projectId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  engagementId?: string;
 }
 
 export const ProjectTrackingSchema = SchemaFactory.createForClass(ProjectTracking);

@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { CategoriesService } from '../categories/categories.service';
 import { ReviewService } from '../review/review.service';
+import { CURRENCY_BY_COUNTRY, DEFAULT_COUNTRY, type CountryCode } from '../common/countries';
+
+function currencyForCountry(country?: string | null): string {
+  if (!country) return CURRENCY_BY_COUNTRY[DEFAULT_COUNTRY];
+  const code = country.toUpperCase() as CountryCode;
+  return CURRENCY_BY_COUNTRY[code] ?? CURRENCY_BY_COUNTRY[DEFAULT_COUNTRY];
+}
 import {
   ProfessionalCardData,
   CategoryItem,
@@ -20,6 +27,14 @@ import {
 export interface SearchProfessionalsParams {
   category?: string;
   subcategory?: string;
+  /** Specific service key, e.g. "drain-cleaning". Most queries use category instead. */
+  serviceKey?: string;
+  /** District/city name for location filtering. */
+  serviceArea?: string;
+  /** YYYY-MM-DD when the user needs the service. */
+  scheduledDate?: string;
+  /** Language codes the pro must speak (any-of match). */
+  languages?: string[];
   minRating?: number;
   maxPrice?: number;
   minPrice?: number;
@@ -50,6 +65,10 @@ export class AiToolsService {
     const {
       category,
       subcategory,
+      serviceKey,
+      serviceArea,
+      scheduledDate,
+      languages,
       minRating,
       maxPrice,
       minPrice,
@@ -89,6 +108,28 @@ export class AiToolsService {
     if (maxPrice) filters.maxPrice = maxPrice;
     if (minPrice) filters.minPrice = minPrice;
     if (sort) filters.sort = sort;
+
+    // New AI-search filters (added 2026-05). All optional - the model
+    // emits them only when the user mentions the corresponding signal.
+    if (serviceKey && /^[a-z0-9][a-z0-9_-]*$/i.test(serviceKey)) {
+      filters.serviceKey = serviceKey;
+    }
+    if (serviceArea && serviceArea.trim()) {
+      // Keep the value as-is; findAllPros matches against serviceAreas[]
+      // which is an array of district name strings.
+      filters.serviceArea = serviceArea.trim();
+    }
+    if (scheduledDate && /^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+      filters.scheduledDate = scheduledDate;
+    }
+    if (languages && Array.isArray(languages) && languages.length > 0) {
+      // Only accept known language codes - silently drop anything else
+      // so a hallucinated "fr" doesn't return zero results.
+      const valid = languages.filter((l) =>
+        ['en', 'ka', 'ru'].includes(l),
+      );
+      if (valid.length > 0) filters.languages = valid;
+    }
 
     const result = await this.usersService.findAllPros(filters);
 
@@ -340,7 +381,10 @@ export class AiToolsService {
   /**
    * Get price ranges for a category based on real data
    */
-  async getPriceRanges(category: string): Promise<RichContent> {
+  async getPriceRanges(
+    category: string,
+    country?: string,
+  ): Promise<RichContent> {
     // Resolve if it's a category or subcategory
     const categoryInfo = await this.resolveCategory(category);
 
@@ -353,6 +397,12 @@ export class AiToolsService {
       filters.category = categoryInfo.categoryKey;
     } else if (categoryInfo.subcategoryKey) {
       filters.subcategory = categoryInfo.subcategoryKey;
+    }
+
+    // Restrict the aggregation to pros in the active marketplace; without
+    // this a /us visitor would see Tbilisi pro prices labelled in dollars.
+    if (country) {
+      filters.country = country.toUpperCase();
     }
 
     // Get professionals in this category to compute real price ranges
@@ -419,7 +469,7 @@ export class AiToolsService {
         averagePrice: {
           min: avgMin,
           max: avgMax,
-          currency: 'GEL',
+          currency: currencyForCountry(country),
         },
         priceRanges: [
           {
@@ -427,21 +477,21 @@ export class AiToolsService {
             labelKa: 'ეკონომიური',
             min: Math.min(...allMinPrices),
             max: budgetMax,
-            currency: 'GEL',
+            currency: currencyForCountry(country),
           },
           {
             label: 'Mid-range',
             labelKa: 'საშუალო',
             min: budgetMax,
             max: midMax,
-            currency: 'GEL',
+            currency: currencyForCountry(country),
           },
           {
             label: 'Premium',
             labelKa: 'პრემიუმ',
             min: premiumMin,
             max: Math.max(...allMaxPrices),
-            currency: 'GEL',
+            currency: currencyForCountry(country),
           },
         ],
         professionalCount: professionals.length,

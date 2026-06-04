@@ -85,11 +85,33 @@ export class WorkspaceService {
       }>;
     },
   ): Promise<{ section: WorkspaceSection }> {
+    // Validate up front so a malformed direct API call never persists.
+    // Frontend caps the input but server is the source of truth for any
+    // unauthenticated request that slips past the frontend.
+    const title = (data.title || '').trim();
+    if (!title) {
+      throw new BadRequestException('Section title is required');
+    }
+    if (title.length > 200) {
+      throw new BadRequestException('Section title is too long (max 200 characters)');
+    }
+    if (data.description && data.description.length > 2000) {
+      throw new BadRequestException('Section description is too long (max 2000 characters)');
+    }
+
     const workspace = await this.getWorkspace(jobId, userId);
 
     // Only pro can create sections
     if (workspace.proId.toString() !== userId) {
       throw new ForbiddenException('Only the professional can create sections');
+    }
+
+    // Cap sections per workspace so a malicious client can't keep
+    // appending until the document hits Mongo's 16MB limit.
+    if (workspace.sections.length >= 50) {
+      throw new BadRequestException(
+        'Maximum number of sections reached (50 per project)',
+      );
     }
 
     // Process attachments
@@ -104,7 +126,7 @@ export class WorkspaceService {
 
     const section: WorkspaceSection = {
       _id: new Types.ObjectId(),
-      title: data.title,
+      title,
       description: data.description,
       attachments: processedAttachments,
       items: [],
@@ -125,15 +147,21 @@ export class WorkspaceService {
     // Send notification to client
     try {
       const pro = await this.userModel.findById(userId).select('name').exec();
+      const proName = pro?.name || 'A professional';
       await this.notificationsService.notify(
         workspace.clientId.toString(),
         NotificationType.PROJECT_MATERIAL_ADDED,
-        'ახალი მასალა',
-        `${pro?.name || 'სპეციალისტმა'} დაამატა მასალები: "${data.title}"`,
+        'New materials',
+        `${proName} added materials: "${data.title}"`,
         {
           link: `/jobs/${jobId}`,
           referenceId: jobId,
           referenceModel: 'Job',
+          i18n: {
+            titleKey: 'notifications.types.project_material_added.title',
+            messageKey: 'notifications.types.project_material_added.message',
+            params: { proName, sectionTitle: data.title },
+          },
           metadata: { sectionTitle: data.title },
         },
       );
@@ -179,16 +207,43 @@ export class WorkspaceService {
     if (data.title !== undefined) section.title = data.title;
     if (data.description !== undefined) section.description = data.description;
 
-    // Update attachments if provided
+    // Update attachments if provided. Be defensive about `att._id`:
+    //   - missing or temp- prefix: mint a new ObjectId
+    //   - already an ObjectId instance: pass through
+    //   - valid 24-char hex string: convert
+    //   - anything else: mint a new one (avoid CastError 500)
+    // Previously this called `att._id?.startsWith('temp-')` which throws
+    // when `_id` is an ObjectId instance rather than a string, and
+    // `new Types.ObjectId(badInput)` would 500 on any non-hex value.
     if (data.attachments !== undefined) {
-      section.attachments = data.attachments.map(att => ({
-        _id: att._id?.startsWith('temp-') ? new Types.ObjectId() : new Types.ObjectId(att._id),
-        fileName: att.fileName,
-        fileUrl: att.fileUrl,
-        fileType: att.fileType,
-        fileSize: att.fileSize,
-        uploadedAt: new Date(),
-      } as SectionAttachment));
+      section.attachments = data.attachments.map((att) => {
+        // The DTO types `_id` as `string | undefined`, but at runtime
+        // Mongoose can hand back ObjectId instances on populated
+        // subdocs round-tripped through the API. Widen the LHS to
+        // `unknown` so the `instanceof` narrowing typechecks while
+        // keeping the runtime guard intact.
+        const rawId: unknown = att._id;
+        let resolvedId: Types.ObjectId;
+        if (rawId instanceof Types.ObjectId) {
+          resolvedId = rawId;
+        } else if (typeof rawId === 'string') {
+          if (rawId.startsWith('temp-') || !Types.ObjectId.isValid(rawId)) {
+            resolvedId = new Types.ObjectId();
+          } else {
+            resolvedId = new Types.ObjectId(rawId);
+          }
+        } else {
+          resolvedId = new Types.ObjectId();
+        }
+        return {
+          _id: resolvedId,
+          fileName: att.fileName,
+          fileUrl: att.fileUrl,
+          fileType: att.fileType,
+          fileSize: att.fileSize,
+          uploadedAt: new Date(),
+        } as SectionAttachment;
+      });
     }
 
     await workspace.save();
@@ -250,6 +305,20 @@ export class WorkspaceService {
       storeAddress?: string;
     },
   ): Promise<{ item: WorkspaceItem }> {
+    // Validate up front - the frontend ItemModal already enforces these
+    // (after the earlier required-fields fix) but a direct API call
+    // could still POST a blank title or a 100KB description.
+    const title = (data.title || '').trim();
+    if (!title) {
+      throw new BadRequestException('Item title is required');
+    }
+    if (title.length > 200) {
+      throw new BadRequestException('Item title is too long (max 200 characters)');
+    }
+    if (data.description && data.description.length > 2000) {
+      throw new BadRequestException('Item description is too long (max 2000 characters)');
+    }
+
     const workspace = await this.getWorkspace(jobId, userId);
 
     // Only pro can create items
@@ -265,15 +334,35 @@ export class WorkspaceService {
       throw new NotFoundException('Section not found');
     }
 
+    // Cap items per section to prevent unbounded doc growth.
+    if (section.items.length >= 100) {
+      throw new BadRequestException(
+        'Maximum number of items reached (100 per section)',
+      );
+    }
+
+    // Resolve the currency: client-supplied wins, otherwise fall back
+    // to the pro's stored currency (set at signup from marketplace),
+    // and finally to GEL for legacy pros pre-2026-05.
+    let resolvedCurrency = data.currency;
+    if (!resolvedCurrency) {
+      const pro = await this.userModel
+        .findById(workspace.proId)
+        .select({ currency: 1 })
+        .lean()
+        .exec();
+      resolvedCurrency = (pro as { currency?: string } | null)?.currency || 'GEL';
+    }
+
     const item: WorkspaceItem = {
       _id: new Types.ObjectId(),
-      title: data.title,
+      title,
       description: data.description,
       type: data.type,
       fileUrl: data.fileUrl,
       linkUrl: data.linkUrl,
       price: data.price,
-      currency: data.currency || 'GEL',
+      currency: resolvedCurrency,
       storeName: data.storeName,
       storeAddress: data.storeAddress,
       reactions: [],
@@ -423,18 +512,29 @@ export class WorkspaceService {
       .select('name avatar')
       .exec();
 
-    // Check if user already has this reaction
-    const existingReactionIndex = item.reactions.findIndex(
-      (r) => r.userId.toString() === userId && r.type === reactionType,
+    // One reaction per user per item. Previously this only checked for a
+    // (user, type) match, so a user could like AND love the same item and
+    // the UI (which assumes a single reaction per user) would render
+    // inconsistently - the second reaction was invisible until the first
+    // was removed, and the unlike-button would only remove one at a time.
+    // Now: clicking the same type toggles off; clicking a different type
+    // replaces the existing reaction atomically.
+    const existing = item.reactions.find(
+      (r) => r.userId.toString() === userId,
     );
 
     let added = false;
 
-    if (existingReactionIndex >= 0) {
-      // Remove reaction
-      item.reactions.splice(existingReactionIndex, 1);
+    if (existing && existing.type === reactionType) {
+      // Same type - toggle off (remove the user's reaction entirely).
+      item.reactions = item.reactions.filter(
+        (r) => r.userId.toString() !== userId,
+      ) as typeof item.reactions;
     } else {
-      // Add reaction
+      // Different type or no existing reaction - replace/add.
+      const filteredReactions = item.reactions.filter(
+        (r) => r.userId.toString() !== userId,
+      );
       const reaction: ItemReaction = {
         userId: new Types.ObjectId(userId),
         userName: user?.name || 'Unknown',
@@ -442,7 +542,8 @@ export class WorkspaceService {
         type: reactionType,
         createdAt: new Date(),
       } as ItemReaction;
-      item.reactions.push(reaction);
+      filteredReactions.push(reaction);
+      item.reactions = filteredReactions as typeof item.reactions;
       added = true;
     }
 
@@ -460,6 +561,14 @@ export class WorkspaceService {
   ): Promise<{ comments: ItemComment[] }> {
     if (!content || content.trim().length === 0) {
       throw new BadRequestException('Comment content cannot be empty');
+    }
+    // Hard cap so a paste of a 100KB doc doesn't blow up the document
+    // size, the render layout, or the JSON payload size sent back to
+    // every viewer on subsequent fetches. 1000 chars is more than
+    // enough for a workspace item comment (longer thoughts belong in
+    // the project chat).
+    if (content.length > 1000) {
+      throw new BadRequestException('Comment is too long (max 1000 characters)');
     }
 
     const workspace = await this.getWorkspace(jobId, userId);
@@ -569,17 +678,31 @@ export class WorkspaceService {
       sectionMap.set(s._id.toString(), s);
     });
 
-    // Reorder based on provided IDs
+    // Reorder based on provided IDs. Any sections NOT in the input array
+    // are appended after the reordered ones to preserve their data -
+    // previously a partial input silently deleted every section not
+    // mentioned, which would be a catastrophic data-loss bug if the
+    // frontend ever sent a partial list (e.g. a stale view of sections
+    // after a concurrent add).
     const reorderedSections: WorkspaceSection[] = [];
+    const seenIds = new Set<string>();
     sectionIds.forEach((id, index) => {
       const section = sectionMap.get(id);
       if (section) {
         section.order = index;
         reorderedSections.push(section);
+        seenIds.add(id);
+      }
+    });
+    let nextOrder = reorderedSections.length;
+    workspace.sections.forEach((s) => {
+      if (!seenIds.has(s._id.toString())) {
+        s.order = nextOrder++;
+        reorderedSections.push(s);
       }
     });
 
-    workspace.sections = reorderedSections;
+    workspace.sections = reorderedSections as typeof workspace.sections;
     await workspace.save();
 
     return workspace.sections;

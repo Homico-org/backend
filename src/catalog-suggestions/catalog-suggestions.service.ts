@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { UserRole } from "../users/schemas/user.schema";
@@ -29,7 +31,39 @@ export class CatalogSuggestionsService {
     @InjectModel(CatalogSuggestion.name)
     private readonly suggestionModel: Model<CatalogSuggestion>,
     private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * Whitelist of origins we accept for a photoUrl on incoming suggestions.
+   * Without this, a pro could submit any URL - someone else's CDN, a
+   * tracking pixel, even a malicious site - and admin would see it in
+   * the queue without warning.
+   *
+   * Sources allowed:
+   *   - Cloudinary's standard res.cloudinary.com domain
+   *   - Optional CLOUDINARY_CNAME (if set, custom CNAME for branded URLs)
+   *   - Our own backend (for local-stored uploads in dev)
+   */
+  private buildPhotoUrlAllowList(): string[] {
+    const list = ['https://res.cloudinary.com/'];
+    const cname = this.configService.get<string>('CLOUDINARY_CNAME');
+    if (cname) {
+      list.push(cname.startsWith('http') ? cname : `https://${cname}/`);
+    }
+    const backend = this.configService.get<string>('PUBLIC_BACKEND_URL');
+    if (backend) list.push(backend.replace(/\/$/, '') + '/');
+    return list;
+  }
+
+  private validatePhotoUrl(url: string): void {
+    const allow = this.buildPhotoUrlAllowList();
+    if (!allow.some((prefix) => url.startsWith(prefix))) {
+      throw new BadRequestException(
+        'photoUrl must point at our upload domain. Use the /upload endpoint to host the image first.',
+      );
+    }
+  }
 
   /**
    * Create a new catalog suggestion. Identity is auto-attached from the
@@ -56,6 +90,14 @@ export class CatalogSuggestionsService {
       throw new UnauthorizedException(
         "Phone number required on profile to submit suggestions",
       );
+    }
+
+    // Reject arbitrary photo URLs - frontend uploads via /upload first,
+    // gets back a Cloudinary URL, then passes that here. This prevents
+    // pros from injecting third-party / malicious URLs into the admin
+    // queue.
+    if (dto.photoUrl) {
+      this.validatePhotoUrl(dto.photoUrl);
     }
 
     const doc = new this.suggestionModel({

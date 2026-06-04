@@ -50,6 +50,11 @@ export class Proposal extends Document {
   @Prop({ type: Boolean, default: false })
   contactRevealed: boolean;
 
+  // Escrow payment intent created when the client accepts this proposal.
+  // Until reconciled as paid, the hire is not finalized (escrow-at-hire).
+  @Prop({ type: Types.ObjectId, ref: 'Payment' })
+  paymentId?: Types.ObjectId;
+
   @Prop({ type: Date })
   revealedAt: Date;
 

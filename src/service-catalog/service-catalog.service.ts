@@ -221,6 +221,26 @@ export class ServiceCatalogService {
   // === Compatibility endpoints (old Categories API shape) ===
 
   async findAllAsCategories() {
+    // Flatten LocalizedText[] keywords -> string[] so substring search
+    // on the frontend can run a single `.includes()` pass without
+    // knowing the active locale. The schema stores keywords as
+    // { en, ka, ru } triples for authoring clarity; the API contract
+    // is a flat list of every locale value the keyword has. Empty
+    // strings are filtered out so `[{en: "gipso", ka: "", ru: ""}]`
+    // doesn't pollute results with a falsy entry.
+    const flattenKeywords = (
+      input: { en?: string; ka?: string; ru?: string }[] | undefined,
+    ): string[] => {
+      if (!input || input.length === 0) return [];
+      const out: string[] = [];
+      for (const k of input) {
+        if (k.en) out.push(k.en);
+        if (k.ka) out.push(k.ka);
+        if (k.ru) out.push(k.ru);
+      }
+      return out;
+    };
+
     const catalogs = await this.findAll();
     return catalogs.map((cat) => ({
       _id: cat._id?.toString() ?? cat.key,
@@ -236,7 +256,7 @@ export class ServiceCatalogService {
       // throughout the UI. Defined in the seed (e.g. "#3B82F6" for plumbing).
       color: cat.color,
       minPrice: cat.minPrice,
-      keywords: cat.keywords ?? [],
+      keywords: flattenKeywords(cat.keywords),
       isActive: cat.isActive ?? true,
       sortOrder: cat.sortOrder ?? 0,
       // Optional flexibility fields (added 2026-05)
@@ -249,7 +269,7 @@ export class ServiceCatalogService {
         nameKa: sub.label?.ka ?? sub.label?.en ?? sub.key,
         nameRu: sub.label?.ru ?? sub.label?.en ?? sub.key,
         icon: sub.iconName,
-        keywords: sub.keywords ?? [],
+        keywords: flattenKeywords(sub.keywords),
         sortOrder: sub.sortOrder ?? 0,
         isActive: sub.isActive ?? true,
         children: [],
@@ -300,7 +320,7 @@ export class ServiceCatalogService {
               estimatedDurationMin: svc.estimatedDurationMin,
               estimatedDurationMax: svc.estimatedDurationMax,
               tags: svc.tags,
-              keywords: svc.keywords,
+              keywords: flattenKeywords(svc.keywords),
               imageUrl: svc.imageUrl,
             };
           }),
