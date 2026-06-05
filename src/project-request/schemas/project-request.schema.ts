@@ -162,6 +162,12 @@ export class ProjectDocument {
   @Prop()
   stepId?: string; // links to ProjectStep.id; groups the document under a step
 
+  @Prop()
+  roomId?: string; // links to Room.id; files a document under a space
+
+  @Prop()
+  group?: string; // free-text label the uploader gives (e.g. "Renders")
+
   @Prop({ default: 1 })
   version: number;
 
@@ -235,6 +241,12 @@ export class ProjectProduct {
   @Prop()
   roomId?: string; // links to Room.id; absent = whole-object / general
 
+  @Prop()
+  stepId?: string; // links to ProjectStep.id; ties the product to a plan step
+
+  @Prop()
+  category?: string; // user-defined grouping label (e.g. "Lighting")
+
   @Prop({
     type: String,
     enum: Object.values(ProductStatus),
@@ -251,6 +263,24 @@ export class ProjectProduct {
 
 export const ProjectProductSchema =
   SchemaFactory.createForClass(ProjectProduct);
+
+// One entry in the shopping activity log. `action` is one of:
+// added | edited | removed | to_buy | ordered | delivered (the status
+// values double as actions for status changes). `name` is denormalized so
+// removed products still read in the history.
+@Schema({ _id: false })
+export class ProductLogEntry {
+  @Prop({ required: true })
+  action: string;
+
+  @Prop()
+  name?: string;
+
+  @Prop({ type: Date, default: Date.now })
+  at: Date;
+}
+export const ProductLogEntrySchema =
+  SchemaFactory.createForClass(ProductLogEntry);
 
 // A logged decision. `decidedBy` is set server-side from the JWT (source
 // of truth); `decidedByName` is a denormalized display label.
@@ -399,6 +429,9 @@ export class Room {
   area?: number;
 
   @Prop()
+  wallArea?: number; // total wall surface in m² (for paint / tiling takeoff)
+
+  @Prop()
   budget?: number;
 
   @Prop()
@@ -460,6 +493,36 @@ export class ScopeItem {
 
 export const ScopeItemSchema = SchemaFactory.createForClass(ScopeItem);
 
+// A moodboard inspiration image - either uploaded, or pulled from a pasted
+// link's og:image (a Pinterest pin, a store product page, a blog). Kept
+// lightweight: an image plus optional source/title/note, ordered for the grid.
+@Schema({ _id: false })
+export class MoodboardItem {
+  @Prop({ required: true })
+  id: string; // client-stable, e.g. "MB..."
+
+  @Prop({ required: true })
+  imageUrl: string;
+
+  @Prop()
+  title?: string;
+
+  @Prop()
+  sourceUrl?: string; // the link it was pulled from
+
+  @Prop()
+  note?: string;
+
+  @Prop({ default: 0 })
+  order: number;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt: Date;
+}
+
+export const MoodboardItemSchema =
+  SchemaFactory.createForClass(MoodboardItem);
+
 // Per-engagement design-phase gate (architect/designer). Tracks which
 // design phase the pro is on and the client's sign-off on it.
 @Schema({ _id: false })
@@ -519,6 +582,13 @@ export class ProjectEngagement {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   assignedProId?: Types.ObjectId;
 
+  // Client-granted "can manage the project" flag. When true, the assigned pro
+  // becomes an editor (full project access, like a project manager). When
+  // false (default) the pro is a worker: no project-page access - they work
+  // from their service order in my-work.
+  @Prop({ default: false })
+  canManage: boolean;
+
   // Reuse links - populated as the engagement progresses.
   @Prop({ type: Types.ObjectId, ref: 'Job' })
   jobId?: Types.ObjectId;
@@ -531,6 +601,14 @@ export class ProjectEngagement {
 
   @Prop({ type: Types.ObjectId, ref: 'ProjectTracking' })
   projectTrackingId?: Types.ObjectId;
+
+  // When the client wants the work to start, and a free-text period/duration
+  // (e.g. "2 weeks"). Captured at invite time, shown to the pro on the order.
+  @Prop({ type: Date })
+  scheduledStart?: Date;
+
+  @Prop()
+  period?: string;
 
   // Which renovation phase this role belongs to. Auto-assigned from the
   // role's catalog category on create; client can re-assign.
@@ -698,6 +776,10 @@ export class ProjectRequest extends Document {
   @Prop({ type: [ProjectProductSchema], default: [] })
   products: ProjectProduct[];
 
+  // Shopping activity history (added / edited / status changes / removed).
+  @Prop({ type: [ProductLogEntrySchema], default: [] })
+  productLog: ProductLogEntry[];
+
   // Decision log: a running record of decisions made on the project so
   // choices ("client chose oak flooring") don't get lost in chat.
   @Prop({ type: [ProjectDecisionSchema], default: [] })
@@ -716,6 +798,10 @@ export class ProjectRequest extends Document {
   // by room and assigned to engagements. Drives the Scope tab + cost rollup.
   @Prop({ type: [ScopeItemSchema], default: [] })
   scopeItems: ScopeItem[];
+
+  // Moodboard: inspiration images (uploaded or pulled from a pasted link).
+  @Prop({ type: [MoodboardItemSchema], default: [] })
+  moodboardItems: MoodboardItem[];
 
   // Which phase the renovation is currently in (drives the timeline UI).
   @Prop({

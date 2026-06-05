@@ -31,7 +31,11 @@ export type EscrowStatus =
 
 @Schema({ timestamps: true, collection: "escrows" })
 export class Escrow extends Document {
-  @Prop({ required: true, enum: ["booking", "project_milestone", "premium"], index: true })
+  @Prop({
+    required: true,
+    enum: ["booking", "project_milestone", "premium", "product_order"],
+    index: true,
+  })
   entityType: PaymentEntityType;
 
   @Prop({ required: true, index: true })

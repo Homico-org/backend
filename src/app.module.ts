@@ -35,6 +35,8 @@ import { PaymentsModule } from './payments/payments.module';
 import { BusinessModule } from './business/business.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { SupplierCatalogModule } from './supplier-catalog/supplier-catalog.module';
+import { ProductOrdersModule } from './product-orders/product-orders.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { InviteModule } from './invite/invite.module';
 import { SlaModule } from './sla/sla.module';
@@ -129,6 +131,8 @@ import { APP_GUARD } from '@nestjs/core';
     BusinessModule,
     AnalyticsModule,
     ServiceCatalogModule,
+    SupplierCatalogModule,
+    ProductOrdersModule,
     BookingsModule,
     InviteModule,
     ServiceRequestsModule,

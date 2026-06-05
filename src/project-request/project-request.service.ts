@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import * as cheerio from 'cheerio';
 import {
   ApprovalStatus,
   DesignPhase,
@@ -18,6 +20,9 @@ import {
   ProjectPhase,
   ProjectRequest,
   ProjectStatus,
+  ProjectStep,
+  Room,
+  ScopeItem,
   SelectionStatus,
 } from './schemas/project-request.schema';
 import { CreateProjectRequestDto } from './dto/create-project-request.dto';
@@ -28,6 +33,7 @@ import {
   AddDocumentVersionDto,
   AddEngagementDto,
   AddMilestoneDto,
+  AddMoodboardItemDto,
   AddProductDto,
   ApproveDocumentDto,
   ChooseSelectionDto,
@@ -39,6 +45,7 @@ import {
   SelectionOptionDto,
   UpdateEngagementDto,
   UpdateMilestoneDto,
+  UpdateMoodboardItemDto,
   UpdateProductDto,
   UpdateProjectDto,
   UpdateRoomDto,
@@ -166,12 +173,67 @@ export class ProjectRequestService {
       }),
     );
 
-    const { engagements: _e, milestones: _m, ...rest } = createDto;
+    // Spaces, steps and services supplied by the creation wizard. Client-
+    // supplied ids are preserved so scope items can cross-link to the rooms /
+    // steps / engagements created in the same payload; `order` is assigned
+    // from the step's array index.
+    const rooms: Partial<Room>[] = (createDto.rooms ?? []).map((r) => ({
+      id: r.id || this.shortId('RM'),
+      name: r.name,
+      length: r.length,
+      width: r.width,
+      height: r.height,
+      area: this.withArea(r),
+      budget: r.budget,
+      note: r.note,
+      photos: r.photos ?? [],
+      createdAt: new Date(),
+    }));
+
+    const steps: Partial<ProjectStep>[] = (createDto.steps ?? []).map(
+      (s, i) => ({
+        id: s.id || this.shortId('S'),
+        name: s.name,
+        description: s.description,
+        order: i,
+        color: s.color,
+      }),
+    );
+
+    const scopeItems: Partial<ScopeItem>[] = (createDto.scopeItems ?? []).map(
+      (sc) => ({
+        id: sc.id || this.shortId('SC'),
+        roomId: sc.roomId,
+        stepId: sc.stepId,
+        categoryKey: sc.categoryKey,
+        serviceKey: sc.serviceKey,
+        name: sc.name,
+        quantity: sc.quantity,
+        unit: sc.unit,
+        unitLabel: sc.unitLabel,
+        unitPrice: sc.unitPrice,
+        engagementId: sc.engagementId,
+        note: sc.note,
+        createdAt: new Date(),
+      }),
+    );
+
+    const {
+      engagements: _e,
+      milestones: _m,
+      rooms: _r,
+      steps: _s,
+      scopeItems: _sc,
+      ...rest
+    } = createDto;
     const request = new this.projectRequestModel({
       clientId,
       ...rest,
       engagements,
       milestones,
+      rooms,
+      steps,
+      scopeItems,
       status: ProjectStatus.DRAFT,
     });
     return request.save();
@@ -259,22 +321,29 @@ export class ProjectRequestService {
         'engagements.assignedProId',
         'name avatar phone title yearsExperience basePrice maxPrice currency avgRating totalReviews verificationStatus',
       )
+      // Who uploaded each document + each prior version (shown in the file
+      // review activity timeline).
+      .populate('documents.uploadedBy', 'name avatar')
+      .populate('documents.versions.uploadedBy', 'name avatar')
       .lean()
       .exec();
     if (!project) throw new NotFoundException('Project not found');
 
-    // Role-aware: only the client or an engaged pro may view.
+    // Access-tiered: the client owner, or a pro the client granted manage
+    // rights (editor), may view. Workers (engaged pros without manage rights)
+    // are blocked - they work from their order in my-work, not here.
     const clientId =
       (project.clientId as any)?._id?.toString() ||
       project.clientId?.toString();
     const isClient = clientId === userId;
-    const isPro = (project.engagements ?? []).some(
+    const myEng = (project.engagements ?? []).find(
       (e: any) => e.assignedProId?._id?.toString() === userId,
     );
-    if (!isClient && !isPro) {
+    const isEditor = !!myEng && !!(myEng as any).canManage;
+    if (!isClient && !isEditor) {
       throw new ForbiddenException('Not your project');
     }
-    const viewerRole: 'client' | 'pro' = isClient ? 'client' : 'pro';
+    const viewerRole: 'client' | 'editor' = isClient ? 'client' : 'editor';
 
     const trackingIds = (project.engagements ?? [])
       .map((e: any) => e.projectTrackingId)
@@ -351,6 +420,42 @@ export class ProjectRequestService {
     }
 
     const progress = total ? Math.round(progressSum / total) : 0;
+
+    // Auto status: derive the project's lifecycle state from the work so it
+    // advances without manual updates. Rules:
+    //   - cancelled   -> manual terminal; never auto-changed.
+    //   - completed   -> there is work AND rolled-up progress is 100%.
+    //   - in_progress -> work has started: a pro is hired/booked/working,
+    //                    or any progress has accrued.
+    //   - draft       -> planning stage (steps/services/team but nobody hired).
+    // Persisted best-effort only when it actually changes, so the projects
+    // list / sidebar / status pill stay consistent with the dashboard.
+    const allEngs = (project.engagements ?? []) as any[];
+    const workStarted = allEngs.some(
+      (e) =>
+        e.status === EngagementStatus.HIRED ||
+        e.status === EngagementStatus.IN_PROGRESS ||
+        e.status === EngagementStatus.COMPLETED ||
+        !!e.bookingId,
+    );
+    let derivedStatus = project.status as ProjectStatus;
+    if (project.status !== ProjectStatus.CANCELLED) {
+      if (allEngs.length > 0 && progress >= 100) {
+        derivedStatus = ProjectStatus.COMPLETED;
+      } else if (workStarted || progress > 0) {
+        derivedStatus = ProjectStatus.IN_PROGRESS;
+      } else {
+        derivedStatus = ProjectStatus.DRAFT;
+      }
+    }
+    if (derivedStatus !== project.status) {
+      // Fire-and-forget; never block or fail the read on the status write.
+      void this.projectRequestModel
+        .updateOne({ _id: id }, { status: derivedStatus })
+        .exec()
+        .catch(() => undefined);
+    }
+
     activity.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -449,6 +554,7 @@ export class ProjectRequestService {
 
     return {
       ...project,
+      status: derivedStatus,
       progress,
       activity: activity.slice(0, 50),
       phases,
@@ -460,42 +566,56 @@ export class ProjectRequestService {
 
   // Load a project and assert the caller owns it (client). Used by all
   // mutating endpoints so one client can't edit another's project.
+  // Load + assert the user can MANAGE the project. The client owner, or a pro
+  // the client granted `canManage` (an editor). Workers (default pros) and
+  // non-participants are rejected - they never touch project mutations.
+  // (Name kept as findOwned to avoid churning ~22 call sites; semantics now
+  // "client or editor".)
   private async findOwned(
     id: string,
-    clientId: string,
+    userId: string,
   ): Promise<ProjectRequest> {
     const project = await this.projectRequestModel.findById(id).exec();
     if (!project) throw new NotFoundException('Project not found');
-    if (project.clientId.toString() !== clientId) {
+    const access = this.viewerAccess(project, userId);
+    if (access !== 'client' && access !== 'editor') {
       throw new ForbiddenException('Not your project');
     }
     return project;
   }
 
-  // Is this user allowed to view the project? Client owner, or any pro with
-  // an engagement on it (role-aware dashboard). Returns the participant role.
-  private viewerRole(
+  // Participant access tier:
+  //  - client : the owner
+  //  - editor : a pro the client granted `canManage`
+  //  - worker : an engaged pro without manage rights (no project access)
+  //  - null   : not a participant
+  private viewerAccess(
     project: ProjectRequest,
     userId: string,
-  ): 'client' | 'pro' | null {
+  ): 'client' | 'editor' | 'worker' | null {
     if (project.clientId.toString() === userId) return 'client';
-    const isPro = (project.engagements ?? []).some(
+    // A pro can back several engagements (one per service). They are an editor
+    // if ANY of those grants manage rights - never gate on just the first.
+    const engs = (project.engagements ?? []).filter(
       (e) => e.assignedProId?.toString() === userId,
     );
-    return isPro ? 'pro' : null;
+    if (!engs.length) return null;
+    return engs.some((e) => e.canManage) ? 'editor' : 'worker';
   }
 
-  // Load + assert the user is the client or an engaged pro. Used by the
-  // dashboard read and pro-side mutations (their own engagement only).
+  // Load + assert the user can view/edit project content (client or editor).
+  // Workers are blocked - they work from their order in my-work, not here.
   private async findForViewer(
     id: string,
     userId: string,
-  ): Promise<{ project: ProjectRequest; role: 'client' | 'pro' }> {
+  ): Promise<{ project: ProjectRequest; role: 'client' | 'editor' }> {
     const project = await this.projectRequestModel.findById(id).exec();
     if (!project) throw new NotFoundException('Project not found');
-    const role = this.viewerRole(project, userId);
-    if (!role) throw new ForbiddenException('Not your project');
-    return { project, role };
+    const access = this.viewerAccess(project, userId);
+    if (access !== 'client' && access !== 'editor') {
+      throw new ForbiddenException('Not your project');
+    }
+    return { project, role: access };
   }
 
   // === Documents / deliverables ===
@@ -520,12 +640,14 @@ export class ProjectRequestService {
       phase: dto.phase,
       engagementId: dto.engagementId,
       stepId: dto.stepId || undefined,
+      roomId: dto.roomId || undefined,
+      group: dto.group?.trim() || undefined,
       version: 1,
       uploadedBy: new Types.ObjectId(userId),
       // A pro's deliverable starts pending the client's review; client's
       // own uploads need no approval.
       approvalStatus:
-        role === 'pro' && isDeliverable
+        role === 'editor' && isDeliverable
           ? ApprovalStatus.PENDING
           : ApprovalStatus.NONE,
       note: dto.note,
@@ -878,6 +1000,7 @@ export class ProjectRequestService {
       width: dto.width,
       height: dto.height,
       area: this.withArea(dto),
+      wallArea: dto.wallArea,
       budget: dto.budget,
       note: dto.note,
       photos: dto.photos ?? [],
@@ -917,9 +1040,18 @@ export class ProjectRequestService {
   ): Promise<ProjectRequest> {
     const { project } = await this.findForViewer(id, userId);
     project.rooms = (project.rooms ?? []).filter((r) => r.id !== roomId);
-    // Unlink selections that pointed at this room.
+    // Unlink everything that pointed at this space (it falls to whole-object).
     for (const sel of project.selections ?? []) {
       if (sel.roomId === roomId) sel.roomId = undefined;
+    }
+    for (const sc of project.scopeItems ?? []) {
+      if (sc.roomId === roomId) sc.roomId = undefined;
+    }
+    for (const p of project.products ?? []) {
+      if (p.roomId === roomId) p.roomId = undefined;
+    }
+    for (const d of project.documents ?? []) {
+      if (d.roomId === roomId) d.roomId = undefined;
     }
     return project.save();
   }
@@ -1083,6 +1215,14 @@ export class ProjectRequestService {
 
   // === Shopping list / procurement ===
 
+  // Append a shopping-history entry (capped so the array can't grow forever).
+  private logProduct(project: ProjectRequest, action: string, name?: string) {
+    project.productLog.push({ action, name, at: new Date() } as any);
+    if (project.productLog.length > 200) {
+      project.productLog = project.productLog.slice(-200);
+    }
+  }
+
   async addProduct(
     id: string,
     userId: string,
@@ -1100,10 +1240,13 @@ export class ProjectRequestService {
       phase: dto.phase,
       engagementId: dto.engagementId,
       roomId: dto.roomId || undefined,
-      status: ProductStatus.TO_BUY,
+      stepId: dto.stepId || undefined,
+      category: dto.category || undefined,
+      status: dto.status ?? ProductStatus.TO_BUY,
       note: dto.note,
       createdAt: new Date(),
     } as any);
+    this.logProduct(project, 'added', dto.name);
     return project.save();
   }
 
@@ -1116,6 +1259,7 @@ export class ProjectRequestService {
     const { project } = await this.findForViewer(id, userId);
     const product = project.products.find((p) => p.id === productId);
     if (!product) throw new NotFoundException('Product not found');
+    const prevStatus = product.status;
     // Explicit empty string clears the room link (move to whole-object).
     if ('roomId' in dto) product.roomId = dto.roomId || undefined;
     Object.assign(
@@ -1125,6 +1269,14 @@ export class ProjectRequestService {
           ([k, v]) => k !== 'roomId' && v !== undefined,
         ),
       ),
+    );
+    // A status change logs the new status; any other edit logs "edited".
+    const statusChanged =
+      dto.status !== undefined && dto.status !== prevStatus;
+    this.logProduct(
+      project,
+      statusChanged ? dto.status : 'edited',
+      product.name,
     );
     return project.save();
   }
@@ -1137,6 +1289,7 @@ export class ProjectRequestService {
     const { project } = await this.findForViewer(id, userId);
     const product = project.products.find((p) => p.id === productId);
     if (!product) throw new NotFoundException('Product not found');
+    this.logProduct(project, 'removed', product.name);
     project.products = project.products.filter((p) => p.id !== productId);
     return project.save();
   }
@@ -1232,12 +1385,30 @@ export class ProjectRequestService {
       throw new NotFoundException('Step not found on this project');
     }
     // Explicit null/'' detaches; everything else assigns normally.
-    const { stepId, ...rest } = dto;
+    // `canManage` (the editor grant) is client-only - an editor cannot
+    // promote themselves or anyone else.
+    const { stepId, canManage, ...rest } = dto;
     Object.assign(eng, rest);
     if (stepId === null || stepId === '') {
       eng.stepId = undefined;
     } else if (stepId !== undefined) {
       eng.stepId = stepId;
+    }
+    if (
+      canManage !== undefined &&
+      project.clientId.toString() === clientId
+    ) {
+      // The manager (editor) grant is per-person: apply it to every engagement
+      // this pro backs, so a pro on several services has one coherent access
+      // state (and toggling any of their rows is consistent).
+      const proId = eng.assignedProId?.toString();
+      if (proId) {
+        for (const e of project.engagements) {
+          if (e.assignedProId?.toString() === proId) e.canManage = canManage;
+        }
+      } else {
+        eng.canManage = canManage;
+      }
     }
     this.recomputeProgress(project);
     return project.save();
@@ -1252,6 +1423,61 @@ export class ProjectRequestService {
     project.engagements = project.engagements.filter(
       (e) => e.id !== engagementId,
     );
+    this.recomputeProgress(project);
+    return project.save();
+  }
+
+  // One-time cleanup for projects that accumulated duplicate engagements for
+  // the same pro (the old standalone "add person" flow alongside per-service
+  // engagements). Keeps the engagements actually linked to work - a service
+  // (`scopeItem.engagementId`), a job, booking, proposal or tracking - and
+  // drops the unlinked leftovers, preserving the manager grant on a survivor.
+  async dedupeEngagements(
+    id: string,
+    clientId: string,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    const engs = project.engagements ?? [];
+
+    const linkedIds = new Set<string>();
+    for (const s of project.scopeItems ?? []) {
+      if (s.engagementId) linkedIds.add(s.engagementId);
+    }
+    const isLinked = (e: ProjectEngagement) =>
+      linkedIds.has(e.id) ||
+      !!e.jobId ||
+      !!e.bookingId ||
+      !!e.proposalId ||
+      !!e.projectTrackingId;
+
+    const byPro = new Map<string, ProjectEngagement[]>();
+    for (const e of engs) {
+      const pro = e.assignedProId?.toString();
+      if (!pro) continue;
+      const arr = byPro.get(pro) ?? [];
+      arr.push(e);
+      byPro.set(pro, arr);
+    }
+
+    const removeIds = new Set<string>();
+    for (const group of byPro.values()) {
+      if (group.length < 2) continue;
+      const anyManage = group.some((e) => e.canManage);
+      const linked = group.filter(isLinked);
+      // Survivors: the linked engagements, or a single one if none are linked.
+      const survivors =
+        linked.length > 0
+          ? linked
+          : [group.find((e) => e.canManage) ?? group[0]];
+      for (const e of group) {
+        if (!survivors.includes(e)) removeIds.add(e.id);
+      }
+      // Keep the manager (editor) grant alive on the survivors.
+      if (anyManage) for (const e of survivors) e.canManage = true;
+    }
+
+    if (removeIds.size === 0) return project;
+    project.engagements = engs.filter((e) => !removeIds.has(e.id));
     this.recomputeProgress(project);
     return project.save();
   }
@@ -1336,6 +1562,119 @@ export class ProjectRequestService {
       s.order = i != null ? i : tail++;
     });
     project.steps.sort((a, b) => a.order - b.order);
+    return project.save();
+  }
+
+  // === Moodboard ===
+
+  async addMoodboardItem(
+    id: string,
+    clientId: string,
+    dto: AddMoodboardItemDto,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    if (!Array.isArray(project.moodboardItems)) project.moodboardItems = [];
+    project.moodboardItems.push({
+      id: this.shortId('MB'),
+      imageUrl: dto.imageUrl,
+      title: dto.title,
+      sourceUrl: dto.sourceUrl,
+      note: dto.note,
+      order: project.moodboardItems.length,
+      createdAt: new Date(),
+    } as any);
+    return project.save();
+  }
+
+  async updateMoodboardItem(
+    id: string,
+    clientId: string,
+    itemId: string,
+    dto: UpdateMoodboardItemDto,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    const item = (project.moodboardItems ?? []).find((m) => m.id === itemId);
+    if (!item) throw new NotFoundException('Moodboard item not found');
+    if ('title' in dto) item.title = dto.title;
+    if ('note' in dto) item.note = dto.note;
+    return project.save();
+  }
+
+  async removeMoodboardItem(
+    id: string,
+    clientId: string,
+    itemId: string,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    project.moodboardItems = (project.moodboardItems ?? []).filter(
+      (m) => m.id !== itemId,
+    ) as any;
+    return project.save();
+  }
+
+  async reorderMoodboard(
+    id: string,
+    clientId: string,
+    orderedIds: string[],
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    const indexById = new Map(orderedIds.map((mid, i) => [mid, i] as const));
+    let tail = orderedIds.length;
+    (project.moodboardItems ?? []).forEach((m) => {
+      const i = indexById.get(m.id);
+      m.order = i != null ? i : tail++;
+    });
+    project.moodboardItems.sort((a, b) => a.order - b.order);
+    return project.save();
+  }
+
+  // Pull an inspiration image from any pasted link by reading its og:image
+  // server-side (works for a Pinterest pin URL, a store product page, a blog -
+  // no Pinterest API needed). Adds the result as a moodboard item.
+  async moodboardFromUrl(
+    id: string,
+    clientId: string,
+    url: string,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    let html: string;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (compatible; HomicoBot/1.0; +https://homico.ge)',
+          Accept: 'text/html',
+        },
+        redirect: 'follow',
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      html = await res.text();
+    } catch {
+      throw new BadRequestException('Could not open that link');
+    }
+    const $ = cheerio.load(html);
+    const meta = (sel: string) => $(sel).attr('content')?.trim() || undefined;
+    const imageUrl =
+      meta('meta[property="og:image"]') ||
+      meta('meta[property="og:image:url"]') ||
+      meta('meta[name="twitter:image"]') ||
+      meta('meta[name="twitter:image:src"]');
+    if (!imageUrl) {
+      throw new BadRequestException('No image found at that link');
+    }
+    const title =
+      meta('meta[property="og:title"]') ||
+      $('title').first().text().trim() ||
+      undefined;
+    if (!Array.isArray(project.moodboardItems)) project.moodboardItems = [];
+    project.moodboardItems.push({
+      id: this.shortId('MB'),
+      imageUrl,
+      title: title ? title.slice(0, 200) : undefined,
+      sourceUrl: url,
+      order: project.moodboardItems.length,
+      createdAt: new Date(),
+    } as any);
     return project.save();
   }
 
@@ -1427,8 +1766,10 @@ export class ProjectRequestService {
     const eng = project.engagements.find((e) => e.id === engagementId);
     if (!eng) throw new NotFoundException('Engagement not found');
 
+    // The scoped job always belongs to the project's owner, even when an
+    // editor (manager) opens it on the client's behalf.
     const job = await this.jobsService.createJob(
-      clientId,
+      project.clientId.toString(),
       this.buildScopedJob(project, eng),
     );
 
@@ -1446,13 +1787,15 @@ export class ProjectRequestService {
     engagementId: string,
     clientId: string,
     proId: string,
+    schedule?: { scheduledStart?: string; period?: string },
   ): Promise<ProjectRequest> {
     const project = await this.findOwned(id, clientId);
     const eng = project.engagements.find((e) => e.id === engagementId);
     if (!eng) throw new NotFoundException('Engagement not found');
 
+    // Job belongs to the project's owner even when an editor invites.
     const job = await this.jobsService.createJob(
-      clientId,
+      project.clientId.toString(),
       this.buildScopedJob(project, eng, [proId]),
     );
 
@@ -1460,6 +1803,8 @@ export class ProjectRequestService {
     eng.status = EngagementStatus.INVITED;
     eng.jobId = job._id as Types.ObjectId;
     eng.assignedProId = new Types.ObjectId(proId);
+    if (schedule?.scheduledStart) eng.scheduledStart = new Date(schedule.scheduledStart);
+    if (schedule?.period !== undefined) eng.period = schedule.period || undefined;
     return project.save();
   }
 

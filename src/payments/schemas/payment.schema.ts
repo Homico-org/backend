@@ -22,7 +22,11 @@ export type PaymentStatus =
   | "refunded"
   | "partially_refunded";
 
-export type PaymentEntityType = "booking" | "project_milestone" | "premium";
+export type PaymentEntityType =
+  | "booking"
+  | "project_milestone"
+  | "premium"
+  | "product_order";
 
 export type PaymentProviderName = "mock" | "bog" | "tbc" | "pay-ge" | "stripe";
 
@@ -71,7 +75,11 @@ export class Payment extends Document {
   })
   status: PaymentStatus;
 
-  @Prop({ required: true, enum: ["booking", "project_milestone", "premium"], index: true })
+  @Prop({
+    required: true,
+    enum: ["booking", "project_milestone", "premium", "product_order"],
+    index: true,
+  })
   entityType: PaymentEntityType;
 
   @Prop({ required: true, index: true })

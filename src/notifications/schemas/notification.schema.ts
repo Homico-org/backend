@@ -54,6 +54,8 @@ export enum NotificationType {
   SLA_PAUSED = 'sla_paused',
   SLA_RECOVERED = 'sla_recovered',
   PROFILE_INCOMPLETE_NAG = 'profile_incomplete_nag',
+  NEW_ORDER = 'new_order',
+  ORDER_UPDATE = 'order_update',
 }
 
 @Schema({ timestamps: true })
@@ -107,7 +109,7 @@ export class Notification extends Document {
   @Prop({ type: Types.ObjectId, refPath: 'referenceModel' })
   referenceId?: Types.ObjectId;
 
-  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking'] })
+  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking', 'Order'] })
   referenceModel?: string;
 
   @Prop({ type: Object })

@@ -255,11 +255,12 @@ export class PaymentsService {
       payment.providerRawData = decoded.rawProviderData;
       await payment.save();
 
-      // Premium is a platform charge (no pro payee / escrow) - grant the
-      // subscription instead. Everything else holds money in escrow.
+      // Premium and product_order are platform charges (no pro payee / escrow).
+      // Premium grants the subscription; product_order is handled by the orders
+      // module's own syncPaymentStatus. Everything else holds money in escrow.
       if (payment.entityType === "premium") {
         await this.grantPremium(payment);
-      } else {
+      } else if (payment.entityType !== "product_order") {
         await this.createEscrow(payment);
       }
     } else {
@@ -300,9 +301,10 @@ export class PaymentsService {
       payment.status = "succeeded";
       payment.succeededAt = new Date();
       await payment.save();
+      // premium + product_order are platform charges (no escrow).
       if (payment.entityType === "premium") {
         await this.grantPremium(payment);
-      } else {
+      } else if (payment.entityType !== "product_order") {
         await this.createEscrow(payment);
       }
     } else if (status.status === "failed" || status.status === "cancelled") {

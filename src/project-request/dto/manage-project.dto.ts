@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsDateString,
   IsArray,
+  IsBoolean,
   IsEnum,
   ValidateNested,
 } from 'class-validator';
@@ -134,6 +135,10 @@ export class CreateRoomDto {
 
   @IsNumber()
   @IsOptional()
+  wallArea?: number;
+
+  @IsNumber()
+  @IsOptional()
   budget?: number;
 
   @IsString()
@@ -166,6 +171,10 @@ export class UpdateRoomDto {
   @IsNumber()
   @IsOptional()
   area?: number;
+
+  @IsNumber()
+  @IsOptional()
+  wallArea?: number;
 
   @IsNumber()
   @IsOptional()
@@ -406,6 +415,11 @@ export class UpdateEngagementDto {
   @IsString()
   @IsOptional()
   stepId?: string | null;
+
+  // Client-only: grant/revoke project manage (editor) rights for this pro.
+  @IsBoolean()
+  @IsOptional()
+  canManage?: boolean;
 }
 
 // === Project step DTOs ===
@@ -453,6 +467,14 @@ export class AddDocumentDto {
   @IsString()
   @IsOptional()
   stepId?: string;
+
+  @IsString()
+  @IsOptional()
+  roomId?: string;
+
+  @IsString()
+  @IsOptional()
+  group?: string;
 
   @IsString()
   @IsOptional()
@@ -576,6 +598,18 @@ export class AddProductDto {
 
   @IsString()
   @IsOptional()
+  stepId?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsEnum(ProductStatus)
+  @IsOptional()
+  status?: ProductStatus;
+
+  @IsString()
+  @IsOptional()
   note?: string;
 }
 
@@ -615,6 +649,14 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   roomId?: string;
+
+  @IsString()
+  @IsOptional()
+  stepId?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
 
   @IsEnum(ProductStatus)
   @IsOptional()
@@ -676,4 +718,39 @@ export class UpdateMilestoneDto {
   @IsString({ each: true })
   @IsOptional()
   linkedEngagementIds?: string[];
+}
+
+// === Moodboard ===
+export class AddMoodboardItemDto {
+  @IsString()
+  imageUrl: string;
+
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  sourceUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
+export class UpdateMoodboardItemDto {
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
+// Pull an inspiration image from any pasted link (Pinterest pin, store page,
+// blog) by reading its og:image server-side.
+export class MoodboardFromUrlDto {
+  @IsString()
+  url: string;
 }

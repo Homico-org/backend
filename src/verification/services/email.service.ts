@@ -221,4 +221,67 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Order confirmation after a product order is paid. `order` is a lean/doc
+   * with orderNumber, items, totalMinor (tetri), deliveryAddress.
+   */
+  async sendOrderConfirmation(email: string, order: any): Promise<boolean> {
+    const total = ((order.totalMinor || 0) / 100).toLocaleString();
+    const subject = `Homico - order ${order.orderNumber} confirmed`;
+    if (!this.isConfigured) {
+      this.logger.log(`[DEV MODE] Order confirmation for ${email}: ${order.orderNumber} total ${total} GEL`);
+      return true;
+    }
+    return this.sendOrderEmail(email, subject, `
+      <h2 style="color:#1e293b;">Order ${order.orderNumber} confirmed</h2>
+      <p style="color:#64748b;">Thank you - we've received your payment of <strong>${total} ₾</strong> and started processing your order. We'll keep you posted as it ships.</p>
+      ${this.itemsHtml(order)}
+    `);
+  }
+
+  /** Notify the customer when an order's fulfilment status changes. */
+  async sendOrderStatusUpdate(email: string, order: any, status: string): Promise<boolean> {
+    const subject = `Homico - order ${order.orderNumber} ${status}`;
+    if (!this.isConfigured) {
+      this.logger.log(`[DEV MODE] Order ${order.orderNumber} status -> ${status} for ${email}`);
+      return true;
+    }
+    return this.sendOrderEmail(email, subject, `
+      <h2 style="color:#1e293b;">Order ${order.orderNumber}: ${status}</h2>
+      <p style="color:#64748b;">Your order status is now <strong>${status}</strong>.</p>
+      ${this.itemsHtml(order)}
+    `);
+  }
+
+  private itemsHtml(order: any): string {
+    const rows = (order.items || [])
+      .map(
+        (i: any) =>
+          `<tr><td style="padding:6px 0;color:#334155;">${i.qty} x ${i.name}</td><td style="padding:6px 0;text-align:right;color:#334155;">${(((i.lineTotalMinor || 0) / 100)).toLocaleString()} ₾</td></tr>`,
+      )
+      .join('');
+    return `<table style="width:100%;border-collapse:collapse;margin-top:16px;">${rows}</table>`;
+  }
+
+  private async sendOrderEmail(email: string, subject: string, inner: string): Promise<boolean> {
+    const fromEmail = this.configService.get<string>('SENDGRID_FROM_EMAIL') || 'noreply@homico.ge';
+    try {
+      await sgMail.send({
+        to: email,
+        from: { email: fromEmail, name: 'Homico' },
+        subject,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+            <div style="text-align:center;margin-bottom:24px;"><h1 style="color:#EF4E24;margin:0;">Homico</h1></div>
+            <div style="background-color:#f8fafc;border-radius:12px;padding:24px;">${inner}</div>
+          </div>`,
+      });
+      this.logger.log(`Order email sent to ${email}: ${subject}`);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Failed to send order email to ${email}:`, error?.response?.body || error?.message || error);
+      return false;
+    }
+  }
 }

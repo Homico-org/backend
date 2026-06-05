@@ -57,6 +57,118 @@ export class CreateMilestoneDto {
   linkedEngagementIds?: string[];
 }
 
+// A space/room supplied at project-creation time. `id` is optional and, when
+// present, is preserved on the saved doc so scope items can cross-link to it
+// (same pattern as CreateEngagementDto.id).
+export class CreateRoomEntryDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  name: string;
+
+  @IsNumber()
+  @IsOptional()
+  length?: number;
+
+  @IsNumber()
+  @IsOptional()
+  width?: number;
+
+  @IsNumber()
+  @IsOptional()
+  height?: number;
+
+  @IsNumber()
+  @IsOptional()
+  area?: number;
+
+  @IsNumber()
+  @IsOptional()
+  budget?: number;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  photos?: string[];
+}
+
+// A project step supplied at creation time. `order` is assigned server-side
+// from array index; the client only sends name/description/color (+ optional id).
+export class CreateStepEntryDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  @IsOptional()
+  color?: string;
+}
+
+// A scope item (service) supplied at creation time. roomId/stepId/engagementId
+// reference the client-supplied ids of rooms/steps/engagements in the same
+// payload, so the cross-links survive the single atomic create.
+export class CreateScopeItemEntryDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  @IsOptional()
+  roomId?: string;
+
+  @IsString()
+  @IsOptional()
+  stepId?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryKey?: string;
+
+  @IsString()
+  @IsOptional()
+  serviceKey?: string;
+
+  @IsString()
+  name: string;
+
+  @IsNumber()
+  @IsOptional()
+  quantity?: number;
+
+  @IsString()
+  @IsOptional()
+  unit?: string;
+
+  @IsString()
+  @IsOptional()
+  unitLabel?: string;
+
+  @IsNumber()
+  @IsOptional()
+  unitPrice?: number;
+
+  @IsString()
+  @IsOptional()
+  engagementId?: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
 export class CreateProjectRequestDto {
   @IsString()
   category: string;
@@ -114,6 +226,24 @@ export class CreateProjectRequestDto {
   @Type(() => CreateMilestoneDto)
   @IsOptional()
   milestones?: CreateMilestoneDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateRoomEntryDto)
+  @IsOptional()
+  rooms?: CreateRoomEntryDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateStepEntryDto)
+  @IsOptional()
+  steps?: CreateStepEntryDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateScopeItemEntryDto)
+  @IsOptional()
+  scopeItems?: CreateScopeItemEntryDto[];
 
   @IsMongoId()
   @IsOptional()

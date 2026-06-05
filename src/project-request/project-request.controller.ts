@@ -18,6 +18,9 @@ import {
   AddDocumentVersionDto,
   AddEngagementDto,
   AddMilestoneDto,
+  AddMoodboardItemDto,
+  MoodboardFromUrlDto,
+  UpdateMoodboardItemDto,
   AddProductDto,
   AddStepDto,
   ApproveDocumentDto,
@@ -149,6 +152,13 @@ export class ProjectRequestController {
     );
   }
 
+  // One-time cleanup: drop leftover standalone engagements for a pro who is
+  // also engaged elsewhere (e.g. created by the old "add person" flow).
+  @Post(':id/engagements/dedupe')
+  dedupeEngagements(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.projectRequestService.dedupeEngagements(id, user.userId);
+  }
+
   // Open a role to the marketplace (pros quote on a scoped job).
   @Post(':id/engagements/:engagementId/open')
   openEngagement(
@@ -169,13 +179,14 @@ export class ProjectRequestController {
     @CurrentUser() user: any,
     @Param('id') id: string,
     @Param('engagementId') engagementId: string,
-    @Body('proId') proId: string,
+    @Body() body: { proId: string; scheduledStart?: string; period?: string },
   ) {
     return this.projectRequestService.inviteToEngagement(
       id,
       engagementId,
       user.userId,
-      proId,
+      body.proId,
+      { scheduledStart: body.scheduledStart, period: body.period },
     );
   }
 
@@ -553,6 +564,66 @@ export class ProjectRequestController {
     @Param('itemId') itemId: string,
   ) {
     return this.projectRequestService.removeScopeItem(id, user.userId, itemId);
+  }
+
+  // === Moodboard === (static sub-paths declared before :itemId param routes)
+  @Post(':id/moodboard')
+  addMoodboardItem(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: AddMoodboardItemDto,
+  ) {
+    return this.projectRequestService.addMoodboardItem(id, user.userId, dto);
+  }
+
+  @Post(':id/moodboard/from-url')
+  moodboardFromUrl(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: MoodboardFromUrlDto,
+  ) {
+    return this.projectRequestService.moodboardFromUrl(id, user.userId, dto.url);
+  }
+
+  @Post(':id/moodboard/reorder')
+  reorderMoodboard(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body('orderedIds') orderedIds: string[],
+  ) {
+    return this.projectRequestService.reorderMoodboard(
+      id,
+      user.userId,
+      orderedIds,
+    );
+  }
+
+  @Patch(':id/moodboard/:itemId')
+  updateMoodboardItem(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateMoodboardItemDto,
+  ) {
+    return this.projectRequestService.updateMoodboardItem(
+      id,
+      user.userId,
+      itemId,
+      dto,
+    );
+  }
+
+  @Delete(':id/moodboard/:itemId')
+  removeMoodboardItem(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.projectRequestService.removeMoodboardItem(
+      id,
+      user.userId,
+      itemId,
+    );
   }
 
   // Create + link an engagement for a service line so the client can run the
