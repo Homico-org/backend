@@ -9,6 +9,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -638,6 +639,17 @@ export class UsersController {
   @ApiResponse({ status: 404, description: "Pro not found" })
   findProById(@Param("id") id: string) {
     return this.usersService.findProById(id);
+  }
+
+  @Post("pros/:id/phone-view")
+  @ApiOperation({
+    summary: "Track a phone-number reveal on a pro profile (public, deduped by IP)",
+  })
+  @ApiResponse({ status: 201, description: "Phone view tracked" })
+  async trackPhoneView(@Param("id") id: string, @Req() req: any) {
+    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const phoneViewCount = await this.usersService.trackPhoneView(id, ip);
+    return { success: true, phoneViewCount };
   }
 
   @Get("profile/:id")
