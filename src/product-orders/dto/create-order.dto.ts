@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -9,6 +10,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+export type DeliveryMode = 'all' | 'bulk' | 'by_items';
+export const DELIVERY_MODES: DeliveryMode[] = ['all', 'bulk', 'by_items'];
 
 export class OrderItemInputDto {
   /** SupplierProduct _id. Price + availability are re-validated server-side. */
@@ -67,6 +71,11 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => DeliveryAddressDto)
   deliveryAddress: DeliveryAddressDto;
+
+  /** Delivery timing/grouping. Defaults to one combined delivery ('all'). */
+  @IsOptional()
+  @IsIn(DELIVERY_MODES)
+  deliveryMode?: DeliveryMode;
 
   @IsOptional()
   @IsString()

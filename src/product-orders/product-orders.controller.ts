@@ -93,4 +93,18 @@ export class ProductOrdersController {
   reconcile(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
     return this.ordersService.reconcile(user.userId, id);
   }
+
+  // Cancel an order that hasn't been paid yet.
+  @Post(':id/cancel')
+  @UseGuards(JwtAuthGuard)
+  cancel(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.ordersService.cancelMyOrder(user.userId, id);
+  }
+
+  // Resume payment for an unfinished order - returns a fresh redirectUrl.
+  @Post(':id/pay')
+  @UseGuards(JwtAuthGuard)
+  pay(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.ordersService.resumePayment(user.userId, id);
+  }
 }

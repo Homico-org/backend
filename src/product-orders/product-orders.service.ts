@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaymentsService } from '../payments/payments.service';
@@ -19,6 +20,7 @@ import { Order, OrderItem, OrderStatus } from './schemas/order.schema';
 import {
   CreateOrderDto,
   DeliveryAddressDto,
+  DeliveryMode,
   OrderItemInputDto,
 } from './dto/create-order.dto';
 
@@ -31,7 +33,11 @@ interface PricedCart {
   unavailable: string[];
 }
 
-const DEFAULT_FEE_MINOR = 2000; // 20 GEL
+// Service fee is optional now that delivery is an explicit, mandatory line.
+const DEFAULT_SERVICE_FEE_MINOR = 0;
+// One flat rate per delivery trip (tetri). The mode decides the trip count, so
+// fewer trips is always cheaper: all(1) <= bulk(#shops) <= by_items(#items).
+const DEFAULT_DELIVERY_TRIP_MINOR = 1200; // 12 GEL / trip
 
 // Allowed admin status transitions (forward fulfilment + cancel).
 const NEXT_STATUSES: Partial<Record<OrderStatus, OrderStatus[]>> = {
@@ -56,12 +62,41 @@ export class ProductOrdersService {
     private readonly configService: ConfigService,
   ) {}
 
+  private cfgMinor(key: string, fallback: number): number {
+    const v = parseInt(this.configService.get<string>(key) || '', 10);
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+  }
+
+  /** Optional flat Homico service fee (separate from delivery). */
   private get feeMinor(): number {
-    const v = parseInt(
-      this.configService.get<string>('HOMICO_ORDER_FEE_MINOR') || '',
-      10,
+    return this.cfgMinor('HOMICO_ORDER_FEE_MINOR', DEFAULT_SERVICE_FEE_MINOR);
+  }
+
+  /**
+   * Delivery fee per mode for a priced cart. Delivery is mandatory; the
+   * customer chooses how it arrives and the fee scales with the trip count.
+   * - all:      one combined delivery (flat).
+   * - bulk:     one delivery per shop  (rate x distinct shops).
+   * - by_items: one delivery per item  (rate x line items).
+   */
+  private deliveryOptions(items: OrderItem[]): Record<DeliveryMode, number> {
+    if (items.length === 0) return { all: 0, bulk: 0, by_items: 0 };
+    // Free delivery over a configurable subtotal threshold (0 = disabled).
+    const freeOver = this.cfgMinor('HOMICO_DELIVERY_FREE_OVER_MINOR', 0);
+    const subtotal = items.reduce((s, i) => s + i.lineTotalMinor, 0);
+    if (freeOver > 0 && subtotal >= freeOver) {
+      return { all: 0, bulk: 0, by_items: 0 };
+    }
+    const rate = this.cfgMinor(
+      'HOMICO_DELIVERY_TRIP_MINOR',
+      DEFAULT_DELIVERY_TRIP_MINOR,
     );
-    return Number.isFinite(v) && v >= 0 ? v : DEFAULT_FEE_MINOR;
+    const shops = new Set(items.map((i) => i.supplierKey)).size;
+    return {
+      all: rate, // one combined trip
+      bulk: rate * shops, // one trip per shop
+      by_items: rate * items.length, // one trip per product
+    };
   }
 
   /** Re-validate cart against live products; authoritative current prices. */
@@ -122,11 +157,20 @@ export class ProductOrdersService {
   /** Checkout preview - current prices, totals, reprice/unavailable flags. */
   async quote(dto: CreateOrderDto) {
     const priced = await this.priceCart(dto.items);
+    const deliveryMode: DeliveryMode = dto.deliveryMode || 'all';
+    const deliveryOptions = this.deliveryOptions(priced.items);
+    const deliveryFeeMinor = deliveryOptions[deliveryMode];
     return {
       items: priced.items,
       subtotalMinor: priced.subtotalMinor,
       feeMinor: priced.feeMinor,
-      totalMinor: priced.totalMinor,
+      deliveryMode,
+      deliveryFeeMinor,
+      // Fee for every mode so the UI can price each delivery option.
+      deliveryOptions,
+      // Subtotal that unlocks free delivery (0 = disabled) for an upsell hint.
+      deliveryFreeOverMinor: this.cfgMinor('HOMICO_DELIVERY_FREE_OVER_MINOR', 0),
+      totalMinor: priced.subtotalMinor + priced.feeMinor + deliveryFeeMinor,
       currency: 'GEL',
       repriced: priced.repriced,
       unavailable: priced.unavailable,
@@ -146,13 +190,18 @@ export class ProductOrdersService {
       .select('email phone')
       .lean<{ email?: string; phone?: string }>();
 
+    const deliveryMode: DeliveryMode = dto.deliveryMode || 'all';
+    const deliveryFeeMinor = this.deliveryOptions(priced.items)[deliveryMode];
+
     const order = await this.orderModel.create({
       orderNumber: this.makeOrderNumber(),
       customerId: new Types.ObjectId(userId),
       items: priced.items,
       subtotalMinor: priced.subtotalMinor,
       feeMinor: priced.feeMinor,
-      totalMinor: priced.totalMinor,
+      deliveryMode,
+      deliveryFeeMinor,
+      totalMinor: priced.subtotalMinor + priced.feeMinor + deliveryFeeMinor,
       currency: 'GEL',
       deliveryAddress: this.snapshotAddress(dto.deliveryAddress),
       customerNote: dto.customerNote,
@@ -285,6 +334,110 @@ export class ProductOrdersService {
     }
     await this.syncPaymentStatus(order);
     return order.toObject();
+  }
+
+  /**
+   * Customer cancels their own order while it is still unpaid. Syncs payment
+   * first so we never cancel an order the bank already charged (the money path
+   * wins). Paid/processing/shipped orders can't be self-cancelled - those go
+   * through the admin refund flow.
+   */
+  async cancelMyOrder(userId: string, id: string) {
+    const order = await this.loadOwned(id, userId);
+    await this.syncPaymentStatus(order);
+    if (!['awaiting_payment', 'payment_failed'].includes(order.status)) {
+      throw new BadRequestException(
+        `Order ${order.status} can no longer be cancelled`,
+      );
+    }
+    order.status = 'cancelled';
+    order.cancelledAt = new Date();
+    order.statusHistory.push({
+      status: 'cancelled',
+      at: new Date(),
+      byUserId: userId,
+      note: 'cancelled by customer',
+    });
+    await order.save();
+    return order.toObject();
+  }
+
+  /**
+   * Resume payment for an order the customer never finished paying. Re-checks
+   * status, then spins up a fresh payment intent and hands back a redirectUrl
+   * (mock: the return page; BoG: the hosted gateway), mirroring createOrder.
+   */
+  async resumePayment(userId: string, id: string) {
+    const order = await this.loadOwned(id, userId);
+    await this.syncPaymentStatus(order);
+
+    const appUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const orderId = String(order._id);
+
+    // Already settled - just send them to the order page.
+    if (order.status !== 'awaiting_payment' && order.status !== 'payment_failed') {
+      return { redirectUrl: `${appUrl}/orders/${orderId}`, status: order.status };
+    }
+
+    const user = await this.userModel
+      .findById(userId)
+      .select('email phone')
+      .lean<{ email?: string; phone?: string }>();
+
+    const intent = await this.paymentsService.createIntentForEntity({
+      entityType: 'product_order',
+      entityId: orderId,
+      amountMinor: order.totalMinor,
+      currency: 'GEL',
+      description: `Homico order ${order.orderNumber}`,
+      payerUserId: userId,
+      payeeUserId: userId,
+      payerEmail: user?.email,
+      payerPhone: user?.phone || order.deliveryAddress.phone,
+      returnUrl: `${appUrl}/orders/${orderId}/return`,
+      cancelUrl: `${appUrl}/orders/${orderId}`,
+      metadata: { orderNumber: order.orderNumber },
+    });
+
+    // A retry resets a failed order back to awaiting so sync can settle it.
+    order.paymentId = new Types.ObjectId(intent.paymentId);
+    if (order.status === 'payment_failed') {
+      order.status = 'awaiting_payment';
+      order.statusHistory.push({ status: 'awaiting_payment', at: new Date() });
+    }
+    await order.save();
+
+    return { redirectUrl: intent.redirectUrl, status: order.status };
+  }
+
+  /**
+   * Safety net for the money path: a customer can pay at the bank and never
+   * return to the app, so the pull-based sync on the return page never fires
+   * and the order stays 'awaiting_payment' (ops never notified). Every few
+   * minutes, force-reconcile recent unpaid orders straight from the provider;
+   * genuinely-paid ones flip to 'paid' and notify ops.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async reconcilePendingOrders(): Promise<void> {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const pending = await this.orderModel
+      .find({ status: 'awaiting_payment', createdAt: { $gte: since } })
+      .limit(100);
+    for (const order of pending) {
+      try {
+        if (order.paymentId) {
+          await this.paymentsService.reconcileFromReturnUrl(
+            String(order.paymentId),
+          );
+        }
+        await this.syncPaymentStatus(order);
+      } catch (err) {
+        this.logger.warn(
+          `order reconcile cron ${order.orderNumber}: ${(err as Error).message}`,
+        );
+      }
+    }
   }
 
   // === Admin ===

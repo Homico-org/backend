@@ -109,9 +109,17 @@ export class Order extends Document {
   @Prop({ required: true, default: 0 })
   subtotalMinor: number;
 
-  /** Flat Homico service + delivery fee (config). */
+  /** Optional Homico service fee (config; usually 0 now delivery is explicit). */
   @Prop({ required: true, default: 0 })
   feeMinor: number;
+
+  /** How the customer chose to receive the order. Delivery is mandatory. */
+  @Prop({ enum: ['all', 'bulk', 'by_items'], default: 'all' })
+  deliveryMode: 'all' | 'bulk' | 'by_items';
+
+  /** Delivery fee (tetri) for the chosen mode, snapshotted at order time. */
+  @Prop({ required: true, default: 0 })
+  deliveryFeeMinor: number;
 
   @Prop({ required: true, default: 0 })
   totalMinor: number;
