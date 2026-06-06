@@ -162,6 +162,7 @@ export class SupplierCatalogService {
       { key: 'imart', name: 'iMart', baseUrl: 'https://imart.ge', sourceType: 'scrape' as const, isActive: true },
       { key: 'gorgia', name: 'Gorgia', baseUrl: 'https://gorgia.ge', sourceType: 'scrape' as const, isActive: true },
       { key: 'goodbuild', name: 'GoodBuild', baseUrl: 'https://goodbuild.ge', sourceType: 'scrape' as const, isActive: true },
+      { key: 'cavoli', name: 'Cavoli', baseUrl: 'https://cavoligeorgia.ge', sourceType: 'scrape' as const, isActive: true },
       // Headless (Playwright-rendered)
       { key: 'nova', name: 'Nova', baseUrl: 'https://nova.ge', sourceType: 'scrape' as const, isActive: true },
       { key: 'comforter', name: 'Comforter', baseUrl: 'https://comforter.ge', sourceType: 'scrape' as const, isActive: true },
@@ -174,6 +175,7 @@ export class SupplierCatalogService {
       { key: 'homevision', name: 'Home Vision', baseUrl: 'https://homevision.ge', sourceType: 'feed' as const, isActive: true },
       { key: 'qebuli', name: 'Qebuli Climate', baseUrl: 'https://qebuli-climate.ge', sourceType: 'feed' as const, isActive: true },
       { key: 'maxtherm', name: 'Maxtherm', baseUrl: 'https://maxtherm.ge', sourceType: 'feed' as const, isActive: true },
+      { key: 'contempo', name: 'Contempo', baseUrl: 'https://contempo.ge', sourceType: 'feed' as const, isActive: true },
       // Deferred: Domino blocks plain HTTP (Cloudflare). Seeded inactive so the
       // cron skips it; revisit with a headless worker or a partner feed.
       { key: 'domino', name: 'Domino', baseUrl: 'https://domino.ge', sourceType: 'scrape' as const, isActive: false },

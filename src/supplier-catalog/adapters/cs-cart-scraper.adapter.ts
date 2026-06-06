@@ -57,7 +57,8 @@ export interface CsCartAdapterConfig {
 const DEFAULT_SELECTORS: CsCartSelectors = {
   item: '.ut2-gl__item, .ty-grid-list__item',
   productIdInput: 'input[name$="[product_id]"]',
-  title: 'a.product-title',
+  // `.product-title` matches both Unitheme2's <a> and vanilla's <span>.
+  title: '.product-title',
   priceNum: '.ty-price-num',
   image: '.ut2-gl__image img, img.ty-pict',
   subcategory: '.ut2__subcategories a',
@@ -194,7 +195,13 @@ export class CsCartScraperAdapter implements SupplierAdapter {
       ).trim();
       if (!name) return;
 
-      const href = titleEl.attr('href') || '';
+      // Unitheme2 puts the href on the title anchor itself; the vanilla theme
+      // (cavoli) uses a <span class="product-title"> wrapped in an ancestor <a>.
+      const href =
+        titleEl.attr('href') ||
+        titleEl.closest('a').attr('href') ||
+        item.find('a.product-title, a.ty-grid-list__item-name, .ty-grid-list__info').first().attr('href') ||
+        '';
       const externalUrl = this.absolute(href);
 
       const priceMinor = this.parsePriceMinor(

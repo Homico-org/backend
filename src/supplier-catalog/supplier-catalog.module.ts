@@ -84,6 +84,22 @@ const CSCART_CONFIGS: CsCartAdapterConfig[] = [
       'https://thermocenter.ge/იატაკის-გათბობის-აქსესუარი/',
     ],
   },
+  {
+    // CS-Cart (vanilla theme). Tiles + sanitary shop; categories aggregate +
+    // paginate. Renovation-core: floors/tiles, bathroom furniture, sanitary.
+    supplierKey: 'cavoli',
+    baseUrl: 'https://cavoligeorgia.ge',
+    followSubcategories: false,
+    categorySeeds: [
+      'https://cavoligeorgia.ge/ka/იატაკი-და-ფილები-ka/',
+      'https://cavoligeorgia.ge/ka/სააბაზანო-ავეჯი/',
+      'https://cavoligeorgia.ge/ka/უნიტაზები/',
+      'https://cavoligeorgia.ge/ka/კერამიკული-ხელსაბანები/',
+      'https://cavoligeorgia.ge/ka/აბაზანები/',
+      'https://cavoligeorgia.ge/ka/ონკანები/',
+      'https://cavoligeorgia.ge/ka/ჭურჭელი/',
+    ],
+  },
 ];
 
 // === Headless shops (custom/JS-rendered, no API). Rendered via Playwright,
@@ -149,6 +165,7 @@ const WOO_CONFIGS: WooCommerceAdapterConfig[] = [
   { supplierKey: 'homevision', baseUrl: 'https://homevision.ge' },
   { supplierKey: 'qebuli', baseUrl: 'https://qebuli-climate.ge' },
   { supplierKey: 'maxtherm', baseUrl: 'https://maxtherm.ge' },
+  { supplierKey: 'contempo', baseUrl: 'https://contempo.ge' },
 ];
 
 @Module({
