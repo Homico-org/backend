@@ -8,6 +8,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf node_modules/sharp && npm install sharp@0.34.5 || true",
+    "postinstall": "npx playwright install --with-deps chromium || npx playwright install chromium || true",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
