@@ -584,6 +584,16 @@ export class AddProductDto {
   @IsOptional()
   imageUrl?: string;
 
+  // Catalog link (set when added from the supplier catalog) so the row can
+  // be ordered through checkout.
+  @IsString()
+  @IsOptional()
+  supplierProductId?: string;
+
+  @IsString()
+  @IsOptional()
+  supplierKey?: string;
+
   @IsEnum(ProjectPhase)
   @IsOptional()
   phase?: ProjectPhase;
@@ -637,6 +647,16 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   imageUrl?: string;
+
+  // Catalog link (set when added from the supplier catalog) so the row can
+  // be ordered through checkout.
+  @IsString()
+  @IsOptional()
+  supplierProductId?: string;
+
+  @IsString()
+  @IsOptional()
+  supplierKey?: string;
 
   @IsEnum(ProjectPhase)
   @IsOptional()

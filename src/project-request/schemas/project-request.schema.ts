@@ -232,6 +232,16 @@ export class ProjectProduct {
   @Prop()
   imageUrl?: string;
 
+  // Links this shopping-list row back to a supplier-catalog product so it
+  // can be ordered through the real checkout (BoG + delivery). Present only
+  // for products added from the catalog; manual rows leave it empty and are
+  // not orderable. `supplierProductId` is the catalog product's Mongo _id.
+  @Prop()
+  supplierProductId?: string;
+
+  @Prop()
+  supplierKey?: string;
+
   @Prop({ type: String, enum: Object.values(ProjectPhase) })
   phase?: ProjectPhase;
 
@@ -826,9 +836,40 @@ export class ProjectRequest extends Document {
 
   @Prop()
   acceptedOfferId: Types.ObjectId;
+
+  // Soft delete. When set, the project is hidden from every read path (see the
+  // query hooks below) but the document - and all its team/materials/files
+  // history - is preserved and recoverable. Owner-only delete sets this.
+  @Prop({ type: Date, default: null })
+  deletedAt?: Date | null;
+
+  @Prop({ type: Types.ObjectId })
+  deletedBy?: Types.ObjectId;
 }
 
 export const ProjectRequestSchema = SchemaFactory.createForClass(ProjectRequest);
+
+// Soft-delete guard: every query through this model hides soft-deleted docs
+// unless the caller explicitly references `deletedAt` in the filter (e.g. an
+// admin restore/trash view passing `{ deletedAt: { $ne: null } }`). `null`
+// matches both an explicit null and a missing field, so pre-existing projects
+// (no `deletedAt`) are unaffected.
+function excludeSoftDeleted(this: any, next: (err?: unknown) => void): void {
+  const filter = this.getFilter ? this.getFilter() : this._conditions;
+  if (!filter || !('deletedAt' in filter)) {
+    this.where({ deletedAt: null });
+  }
+  next();
+}
+// Cast for registration: Mongoose's typed `pre` overloads don't accept a
+// shared `this: any` query-middleware fn across these hook names.
+const softDeleteSchema = ProjectRequestSchema as unknown as {
+  pre: (hook: string, fn: typeof excludeSoftDeleted) => void;
+};
+softDeleteSchema.pre('find', excludeSoftDeleted);
+softDeleteSchema.pre('findOne', excludeSoftDeleted);
+softDeleteSchema.pre('findOneAndUpdate', excludeSoftDeleted);
+softDeleteSchema.pre('countDocuments', excludeSoftDeleted);
 
 ProjectRequestSchema.index({ clientId: 1 });
 ProjectRequestSchema.index({ proId: 1 });
@@ -836,4 +877,5 @@ ProjectRequestSchema.index({ category: 1 });
 ProjectRequestSchema.index({ status: 1 });
 ProjectRequestSchema.index({ location: 1 });
 ProjectRequestSchema.index({ createdAt: -1 });
+ProjectRequestSchema.index({ deletedAt: 1 });
 ProjectRequestSchema.index({ 'engagements.jobId': 1 });

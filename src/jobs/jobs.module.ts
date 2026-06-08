@@ -5,14 +5,12 @@ import { JobsService } from './jobs.service';
 import { JobsTasksService } from './jobs-tasks.service';
 import { JobCommentsService } from './job-comments.service';
 import { ProjectTrackingService } from './project-tracking.service';
-import { WorkspaceService } from './workspace.service';
 import { PollsService } from './polls.service';
 import { Job, JobSchema, JobView, JobViewSchema } from './schemas/job.schema';
 import { JobComment, JobCommentSchema } from './schemas/job-comment.schema';
 import { Proposal, ProposalSchema } from './schemas/proposal.schema';
 import { SavedJob, SavedJobSchema } from './schemas/saved-job.schema';
 import { ProjectTracking, ProjectTrackingSchema } from './schemas/project-tracking.schema';
-import { ProjectWorkspace, ProjectWorkspaceSchema } from './schemas/workspace.schema';
 import { Poll, PollSchema } from './schemas/poll.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import {
@@ -33,7 +31,6 @@ import { VerificationModule } from '../verification/verification.module';
       { name: Proposal.name, schema: ProposalSchema },
       { name: SavedJob.name, schema: SavedJobSchema },
       { name: ProjectTracking.name, schema: ProjectTrackingSchema },
-      { name: ProjectWorkspace.name, schema: ProjectWorkspaceSchema },
       { name: Poll.name, schema: PollSchema },
       { name: User.name, schema: UserSchema },
       // Registered so acceptProposal can backfill a parent project
@@ -47,7 +44,7 @@ import { VerificationModule } from '../verification/verification.module';
     VerificationModule,
   ],
   controllers: [JobsController],
-  providers: [JobsService, JobsTasksService, JobCommentsService, ProjectTrackingService, WorkspaceService, PollsService],
-  exports: [JobsService, JobCommentsService, ProjectTrackingService, WorkspaceService, PollsService],
+  providers: [JobsService, JobsTasksService, JobCommentsService, ProjectTrackingService, PollsService],
+  exports: [JobsService, JobCommentsService, ProjectTrackingService, PollsService],
 })
 export class JobsModule {}

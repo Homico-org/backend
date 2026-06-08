@@ -269,13 +269,6 @@ export class ProjectTracking extends Document {
   @Prop({ type: Date })
   proLastViewedPollsAt?: Date;
 
-  // Track when each user last viewed materials/workspace
-  @Prop({ type: Date })
-  clientLastViewedMaterialsAt?: Date;
-
-  @Prop({ type: Date })
-  proLastViewedMaterialsAt?: Date;
-
   // Client confirmation of completion (triggers payment)
   @Prop({ type: Date })
   clientConfirmedAt?: Date;

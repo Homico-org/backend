@@ -1237,6 +1237,8 @@ export class ProjectRequestService {
       vendor: dto.vendor,
       url: dto.url,
       imageUrl: dto.imageUrl,
+      supplierProductId: dto.supplierProductId,
+      supplierKey: dto.supplierKey,
       phase: dto.phase,
       engagementId: dto.engagementId,
       roomId: dto.roomId || undefined,
@@ -1311,6 +1313,65 @@ export class ProjectRequestService {
       patch.estimatedEndDate = new Date(dto.estimatedEndDate);
     Object.assign(project, patch);
     return project.save();
+  }
+
+  // Soft-delete the whole project. Owner-only - editors (manage-granted pros)
+  // can edit content but must never delete the project out from under the
+  // client. The document is preserved (recoverable); `deletedAt` hides it from
+  // every read path via the schema query hooks. `findById` already excludes
+  // soft-deleted docs, so a second delete is a 404 (idempotent-ish).
+  async deleteProject(
+    id: string,
+    clientId: string,
+  ): Promise<{ deleted: true }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Project not found');
+    }
+    const project = await this.projectRequestModel.findById(id).exec();
+    if (!project) throw new NotFoundException('Project not found');
+    if (project.clientId.toString() !== clientId) {
+      throw new ForbiddenException('Only the project owner can delete it');
+    }
+    project.deletedAt = new Date();
+    project.deletedBy = new Types.ObjectId(clientId);
+    await project.save();
+    return { deleted: true };
+  }
+
+  // The owner's trash: their soft-deleted projects, newest first. The explicit
+  // `deletedAt` filter opts past the soft-delete query hook.
+  async listDeleted(userId: string): Promise<ProjectRequest[]> {
+    return this.projectRequestModel
+      .find({
+        // clientId is stored as a string (see findForUser) - match it raw, not
+        // as an ObjectId, or nothing comes back.
+        clientId: userId,
+        deletedAt: { $ne: null },
+      })
+      .sort({ deletedAt: -1 })
+      .exec();
+  }
+
+  // Restore a soft-deleted project. Owner-only. The lookup carries an explicit
+  // `deletedAt` filter so the hook doesn't hide the very doc we're restoring.
+  async restoreProject(
+    id: string,
+    clientId: string,
+  ): Promise<{ restored: true }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Project not found');
+    }
+    const project = await this.projectRequestModel
+      .findOne({ _id: new Types.ObjectId(id), deletedAt: { $ne: null } })
+      .exec();
+    if (!project) throw new NotFoundException('Project not found');
+    if (project.clientId.toString() !== clientId) {
+      throw new ForbiddenException('Only the project owner can restore it');
+    }
+    project.deletedAt = null;
+    project.deletedBy = undefined;
+    await project.save();
+    return { restored: true };
   }
 
   async updateStatus(

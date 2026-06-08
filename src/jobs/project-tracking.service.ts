@@ -757,43 +757,11 @@ export class ProjectTrackingService {
     return { success: true };
   }
 
-  // Mark materials as viewed
-  async markMaterialsAsViewed(
-    jobId: string,
-    userId: string,
-  ): Promise<{ success: boolean }> {
-    const project = await this.projectTrackingModel.findOne({
-      jobId: new Types.ObjectId(jobId),
-    });
-
-    if (!project) {
-      throw new NotFoundException("Project tracking not found");
-    }
-
-    const isClient = project.clientId.toString() === userId;
-    const isPro = project.proId.toString() === userId;
-
-    if (!isClient && !isPro) {
-      throw new ForbiddenException("You are not part of this project");
-    }
-
-    const now = new Date();
-    if (isClient) {
-      project.clientLastViewedMaterialsAt = now;
-    } else {
-      project.proLastViewedMaterialsAt = now;
-    }
-
-    await project.save();
-
-    return { success: true };
-  }
-
-  // Get unread counts for chat, polls, materials
+  // Get unread counts for chat + polls (the job's live surfaces).
   async getUnreadCounts(
     jobId: string,
     userId: string,
-  ): Promise<{ chat: number; polls: number; materials: number }> {
+  ): Promise<{ chat: number; polls: number }> {
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
@@ -816,9 +784,6 @@ export class ProjectTrackingService {
     const lastViewedPollsAt = isClient
       ? project.clientLastViewedPollsAt
       : project.proLastViewedPollsAt;
-    const lastViewedMaterialsAt = isClient
-      ? project.clientLastViewedMaterialsAt
-      : project.proLastViewedMaterialsAt;
 
     // Count unread messages (from the other party)
     const userRole = isClient ? "client" : "pro";
@@ -850,27 +815,9 @@ export class ProjectTrackingService {
       // Poll model might not exist or other error, ignore
     }
 
-    // For materials, count items/sections created after lastViewedMaterialsAt
-    // This would require accessing workspace data - for now we track based on history
-    let unreadMaterials = 0;
-    if (project.history) {
-      unreadMaterials = project.history.filter((event: any) => {
-        const isResourceEvent = [
-          "resource_added",
-          "resource_item_added",
-        ].includes(event.eventType);
-        const isFromOther = event.userRole !== userRole;
-        const isAfterLastViewed =
-          !lastViewedMaterialsAt ||
-          new Date(event.createdAt) > lastViewedMaterialsAt;
-        return isResourceEvent && isFromOther && isAfterLastViewed;
-      }).length;
-    }
-
     return {
       chat: unreadMessages,
       polls: unreadPolls,
-      materials: unreadMaterials,
     };
   }
 

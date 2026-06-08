@@ -78,6 +78,13 @@ export class ProjectRequestController {
     });
   }
 
+  // Owner's recently-deleted projects (the trash). Declared before `:id` so
+  // the static segment isn't swallowed by the param route.
+  @Get('trash')
+  listTrash(@CurrentUser() user: any) {
+    return this.projectRequestService.listDeleted(user.userId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.projectRequestService.findOne(id);
@@ -106,6 +113,18 @@ export class ProjectRequestController {
     @Body() dto: UpdateProjectDto,
   ) {
     return this.projectRequestService.updateProject(id, user.userId, dto);
+  }
+
+  // Owner-only soft delete of the whole project.
+  @Delete(':id')
+  deleteProject(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.projectRequestService.deleteProject(id, user.userId);
+  }
+
+  // Owner-only restore of a soft-deleted project.
+  @Post(':id/restore')
+  restoreProject(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.projectRequestService.restoreProject(id, user.userId);
   }
 
   @Patch(':id/assign')

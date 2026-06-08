@@ -307,10 +307,26 @@ export class ProductOrdersService {
   // === Customer reads ===
 
   async listMyOrders(userId: string) {
-    return this.orderModel
+    const orders = await this.orderModel
       .find({ customerId: new Types.ObjectId(userId) })
-      .sort({ createdAt: -1 })
-      .lean();
+      .sort({ createdAt: -1 });
+    // Pull-sync any still-awaiting orders so a just-completed payment shows as
+    // paid in the list immediately - not only after the 5-min reconcile cron
+    // or after opening the detail (which is the only place that synced before).
+    // Cheap: only the awaiting_payment rows hit the payments lookup.
+    await Promise.all(
+      orders
+        .filter((o) => o.status === 'awaiting_payment')
+        .map((o) =>
+          this.syncPaymentStatus(o).catch((err) => {
+            this.logger.warn(
+              `list sync ${o.orderNumber} failed: ${(err as Error).message}`,
+            );
+            return o;
+          }),
+        ),
+    );
+    return orders.map((o) => o.toObject());
   }
 
   async getMyOrder(userId: string, id: string) {

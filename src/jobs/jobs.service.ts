@@ -18,6 +18,7 @@ import {
   type SupportedLocale,
 } from "../common/countries";
 import { CreateJobDto } from "./dto/create-job.dto";
+import { normalizeCategory } from "./category-normalize";
 
 // Localized SMS body for job-invitation notifications sent to pros.
 // The recipient's locale wins (we have the pro's User doc loaded);
@@ -53,7 +54,6 @@ import {
 } from "./schemas/project-tracking.schema";
 import { Proposal, ProposalStatus } from "./schemas/proposal.schema";
 import { SavedJob } from "./schemas/saved-job.schema";
-import { ProjectWorkspace } from "./schemas/workspace.schema";
 import { Poll } from "./schemas/poll.schema";
 import { JobComment } from "./schemas/job-comment.schema";
 import {
@@ -73,8 +73,6 @@ export class JobsService {
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
     @InjectModel(ProjectTracking.name)
     private projectTrackingModel: Model<ProjectTracking>,
-    @InjectModel(ProjectWorkspace.name)
-    private workspaceModel: Model<ProjectWorkspace>,
     @InjectModel(Poll.name) private pollModel: Model<Poll>,
     @InjectModel(JobComment.name) private jobCommentModel: Model<JobComment>,
     @InjectModel(User.name) private userModel: Model<User>,
@@ -93,6 +91,13 @@ export class JobsService {
 
     // Extract invitedPros before spreading DTO into job document
     const { invitedPros: invitedProIds, ...jobData } = createJobDto;
+
+    // Fold the category to its canonical Service-Catalog key so the job
+    // matches the pros listed under that key (e.g. "plumber" -> "plumbing").
+    if (jobData.category) {
+      jobData.category =
+        normalizeCategory(jobData.category) ?? jobData.category;
+    }
 
     // Prevent duplicate job creation within 30 seconds (same user, same title)
     const recentDuplicateCheck = new Date();
@@ -1037,7 +1042,6 @@ export class JobsService {
       this.jobModel.findByIdAndDelete(id),
       this.proposalModel.deleteMany({ jobId: id }),
       this.projectTrackingModel.deleteMany({ jobId: jobObjectId }),
-      this.workspaceModel.deleteMany({ jobId: jobObjectId }),
       this.pollModel.deleteMany({ jobId: jobObjectId }),
       this.jobCommentModel.deleteMany({ jobId: jobObjectId }),
     ]);
@@ -2511,7 +2515,6 @@ export class JobsService {
     const jobObjectId = new Types.ObjectId(jobId);
     await Promise.all([
       this.projectTrackingModel.deleteMany({ jobId: jobObjectId }),
-      this.workspaceModel.deleteMany({ jobId: jobObjectId }),
       this.pollModel.deleteMany({ jobId: jobObjectId }),
     ]);
 
