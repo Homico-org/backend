@@ -740,6 +740,33 @@ export class AdminService {
     if (country) match.country = country.toUpperCase();
 
     const DAY_MS = 24 * 60 * 60 * 1000;
+    // Same stage-count accumulators, reused for the overall total and each
+    // segment ($facet branch) so the breakdown math is identical everywhere.
+    const liquidityGroup = (id: unknown) => ({
+      $group: {
+        _id: id,
+        jobsPosted: { $sum: 1 },
+        withProposal: { $sum: '$hasProposal' },
+        firstProposalIn24h: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ['$ttfpMs', null] },
+                  { $lte: ['$ttfpMs', DAY_MS] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        hired: { $sum: '$hired' },
+        completed: { $sum: '$completed' },
+        reviewed: { $sum: '$reviewed' },
+        avgTtfpMs: { $avg: '$ttfpMs' },
+      },
+    });
     const rows = await this.jobModel.aggregate([
       { $match: match },
       // Earliest proposal time + total proposal count per job. `jobId` may be
@@ -786,6 +813,8 @@ export class AdminService {
       {
         $project: {
           createdAt: 1,
+          category: 1,
+          country: 1,
           hired: { $cond: [{ $ifNull: ['$hiredProId', false] }, 1, 0] },
           completed: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
           reviewed: { $cond: [{ $gt: [{ $size: '$rev' }, 0] }, 1, 0] },
@@ -795,6 +824,8 @@ export class AdminService {
       },
       {
         $project: {
+          category: 1,
+          country: 1,
           hired: 1,
           completed: 1,
           reviewed: 1,
@@ -809,33 +840,35 @@ export class AdminService {
         },
       },
       {
-        $group: {
-          _id: null,
-          jobsPosted: { $sum: 1 },
-          withProposal: { $sum: '$hasProposal' },
-          firstProposalIn24h: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ['$ttfpMs', null] },
-                    { $lte: ['$ttfpMs', DAY_MS] },
-                  ],
-                },
-                1,
-                0,
-              ],
-            },
-          },
-          hired: { $sum: '$hired' },
-          completed: { $sum: '$completed' },
-          reviewed: { $sum: '$reviewed' },
-          avgTtfpMs: { $avg: '$ttfpMs' },
+        $facet: {
+          overall: [liquidityGroup(null)],
+          byCategory: [
+            liquidityGroup('$category'),
+            { $sort: { jobsPosted: -1 } },
+          ],
+          byCountry: [
+            liquidityGroup('$country'),
+            { $sort: { jobsPosted: -1 } },
+          ],
         },
       },
     ]);
 
-    const r = (rows[0] as Record<string, number> | undefined) ?? {
+    type SegAgg = {
+      _id: string | null;
+      jobsPosted: number;
+      withProposal: number;
+      firstProposalIn24h: number;
+      hired: number;
+      completed: number;
+      reviewed: number;
+      avgTtfpMs: number | null;
+    };
+    const facet = rows[0] as
+      | { overall: SegAgg[]; byCategory: SegAgg[]; byCountry: SegAgg[] }
+      | undefined;
+    const r: SegAgg = facet?.overall?.[0] ?? {
+      _id: null,
       jobsPosted: 0,
       withProposal: 0,
       firstProposalIn24h: 0,
@@ -846,6 +879,18 @@ export class AdminService {
     };
     const pct = (n: number, d: number) =>
       d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
+
+    // Per-segment row: counts + the rates that surface WHERE liquidity is
+    // weak. Sorted by volume so the biggest illiquid segments rise first.
+    const seg = (g: SegAgg) => ({
+      key: g._id || 'unknown',
+      jobsPosted: g.jobsPosted,
+      withProposal: g.withProposal,
+      hired: g.hired,
+      anyProposalRate: pct(g.withProposal, g.jobsPosted),
+      proposalIn24hRate: pct(g.firstProposalIn24h, g.jobsPosted),
+      hireRate: pct(g.hired, g.jobsPosted),
+    });
 
     return {
       days,
@@ -870,6 +915,8 @@ export class AdminService {
         r.avgTtfpMs != null && r.avgTtfpMs > 0
           ? Math.round((r.avgTtfpMs / (60 * 60 * 1000)) * 10) / 10
           : null,
+      byCategory: (facet?.byCategory ?? []).map(seg),
+      byCountry: (facet?.byCountry ?? []).map(seg),
     };
   }
 
