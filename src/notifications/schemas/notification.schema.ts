@@ -64,6 +64,10 @@ export enum NotificationType {
   MILESTONE_SUBMITTED = 'milestone_submitted',
   MILESTONE_RELEASED = 'milestone_released',
   MILESTONE_DISPUTED = 'milestone_disputed',
+
+  // Ops alert: a job was posted in a category with no matching pros, so it
+  // would otherwise sit with zero bids and the client would churn.
+  SUPPLY_GAP = 'supply_gap',
 }
 
 @Schema({ timestamps: true })

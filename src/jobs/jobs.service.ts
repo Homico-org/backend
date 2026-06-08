@@ -204,7 +204,15 @@ export class JobsService {
       .lean()
       .exec();
 
-    if (matchingPros.length === 0) return;
+    // Supply gap: nobody can serve this job, so it would sit with zero bids
+    // and the client would churn. Don't fail silently - alert ops to source a
+    // pro or contact the client. (Best-effort; never blocks job creation.)
+    if (matchingPros.length === 0) {
+      this.alertSupplyGap(job).catch((err) =>
+        console.error("Failed to alert supply gap:", err),
+      );
+      return;
+    }
 
     // Currency follows the job's marketplace (where the work happens)
     const jobCurrencyCode =
@@ -251,6 +259,47 @@ export class JobsService {
         // Notification failed for this pro - continue with others
       }
     }
+  }
+
+  /**
+   * No pro matched a freshly-posted job. Alert every admin so ops can source a
+   * pro or contact the client before the job dies with zero bids. Localized so
+   * the bell feed renders in the admin's language.
+   */
+  private async alertSupplyGap(job: Job): Promise<void> {
+    const jobId = (job as any)._id?.toString();
+    const jobTitle = (job as any).title || "";
+    const category = (job as any).category || "";
+    const admins = await this.userModel
+      .find({ role: "admin", isDeactivated: { $ne: true } })
+      .select("_id")
+      .lean<{ _id: any }[]>()
+      .exec();
+    if (admins.length === 0) return;
+    await Promise.all(
+      admins.map((a) =>
+        this.notificationsService
+          .notify(
+            a._id.toString(),
+            NotificationType.SUPPLY_GAP,
+            "Supply gap",
+            `No available pros for "${jobTitle}" (${category}). Source a pro or contact the client.`,
+            {
+              referenceId: jobId,
+              referenceModel: "Job",
+              link: `/admin/jobs`,
+              i18n: {
+                titleKey: "notifications.types.supply_gap.title",
+                messageKey: "notifications.types.supply_gap.message",
+                params: { jobTitle, category },
+              },
+            },
+          )
+          .catch(() => {
+            /* best-effort per admin */
+          }),
+      ),
+    );
   }
 
   async findAllJobs(filters?: {
