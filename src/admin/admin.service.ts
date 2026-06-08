@@ -117,6 +117,18 @@ export class AdminService {
       clients,
       signups7d,
       prosHiredIds,
+      proSignups7d,
+      clientSignups7d,
+      proSignups30d,
+      clientSignups30d,
+      prosVerified,
+      prosWithPortfolio,
+      prosWithPricing,
+      prosWithReviews,
+      jobClientIds,
+      projectClientIds,
+      invitesSent,
+      invitesActivated,
     ] = await Promise.all([
       this.projectModel.countDocuments({ status: { $ne: "draft" } }),
       // Has at least one engagement (real trade/role on the project).
@@ -160,10 +172,70 @@ export class AdminService {
       this.jobModel.distinct("hiredProId", {
         hiredProId: { $ne: null, $exists: true },
       }),
+      // Signup mix by role - is the supply:demand gap widening?
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        createdAt: { $gte: since7d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.CLIENT,
+        createdAt: { $gte: since7d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        createdAt: { $gte: since30d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.CLIENT,
+        createdAt: { $gte: since30d },
+      }),
+      // Supply QUALITY - empty profiles don't convert. A pro with no portfolio
+      // / no price / no review is shelf-space, not inventory.
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        verificationStatus: "verified",
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        "portfolioProjects.0": { $exists: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        "servicePricing.0": { $exists: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        totalReviews: { $gt: 0 },
+      }),
+      // Demand activation - which clients ever took a first action (posted a
+      // job or created a real project). Distinct ids across both surfaces.
+      this.jobModel.distinct("clientId", {
+        clientId: { $ne: null, $exists: true },
+      }),
+      this.projectModel.distinct("clientId", {
+        status: { $ne: "draft" },
+        clientId: { $ne: null, $exists: true },
+      }),
+      // Invite-channel ROI - SMS blasts cost money; are they converting?
+      this.inviteTokenModel.countDocuments({}),
+      this.inviteTokenModel.countDocuments({ status: "activated" }),
     ]);
 
     const gmvMinor = gmvAgg?.[0]?.total ?? 0;
     const prosHired = (prosHiredIds as unknown[]).length;
+
+    // Clients who took any first action (union of demand surfaces).
+    const activatedClientSet = new Set(
+      [
+        ...(jobClientIds as unknown[]),
+        ...(projectClientIds as unknown[]),
+      ]
+        .map((id) => (id == null ? "" : String(id)))
+        .filter(Boolean),
+    );
+    const clientsActivated = Math.min(activatedClientSet.size, clients);
+    const pct = (n: number, d: number) =>
+      d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
 
     return {
       goal: 10, // active projects target for this phase
@@ -181,6 +253,42 @@ export class AdminService {
       jobs: { total: jobsTotal, hired: jobsHired, posted7d: jobsPosted7d },
       orders: { paid: ordersPaid, gmvMinor },
       users: { pros, clients, signups7d, prosHired },
+      // The real health signals for a cold-start marketplace:
+      supply: {
+        pros,
+        clients,
+        // How lopsided is the marketplace? (pros per client)
+        ratio: clients > 0 ? Math.round((pros / clients) * 10) / 10 : null,
+        proSignups7d,
+        clientSignups7d,
+        proSignups30d,
+        clientSignups30d,
+        // Is the gap widening? share of last-7d signups that were clients.
+        clientShare7d: pct(clientSignups7d, proSignups7d + clientSignups7d),
+      },
+      // Empty profiles don't convert - how much supply is actually usable.
+      proQuality: {
+        total: pros,
+        verified: prosVerified,
+        withPortfolio: prosWithPortfolio,
+        withPricing: prosWithPricing,
+        withReviews: prosWithReviews,
+        portfolioRate: pct(prosWithPortfolio, pros),
+      },
+      // The leak that matters: do clients ever do anything?
+      clientFunnel: {
+        total: clients,
+        activated: clientsActivated,
+        activationRate: pct(clientsActivated, clients),
+        new7d: clientSignups7d,
+        new30d: clientSignups30d,
+      },
+      // SMS blasts cost cash - is the channel worth it?
+      invites: {
+        sent: invitesSent,
+        activated: invitesActivated,
+        activationRate: pct(invitesActivated, invitesSent),
+      },
     };
   }
 

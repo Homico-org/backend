@@ -35,8 +35,10 @@ export class SupportService {
       subcategory: contactFormDto.type,
       priority: 'medium',
       messages: [{
+        _id: new Types.ObjectId(),
         content: messageContent,
         isAdmin: false,
+        status: 'sent' as SupportMessageStatus,
         createdAt: new Date(),
       }],
       hasUnreadUserMessages: true,
@@ -64,6 +66,7 @@ export class SupportService {
       relatedItemType: createTicketDto.relatedItemType,
       relatedItemId: createTicketDto.relatedItemId ? new Types.ObjectId(createTicketDto.relatedItemId) : undefined,
       messages: [{
+        _id: new Types.ObjectId(),
         senderId: new Types.ObjectId(userId),
         content: createTicketDto.message,
         isAdmin: false,
@@ -187,6 +190,7 @@ export class SupportService {
 
     const now = new Date();
     const messageIdsToUpdate: string[] = [];
+    let anyModified = false;
 
     // Update message statuses to 'read' for messages from the other
     // party. Mongoose tracks property changes on subdocument arrays
@@ -194,18 +198,21 @@ export class SupportService {
     // /support tickets re-rendering as unread on refresh because the
     // status writes silently lost on `.save()`. Marking the array as
     // modified guarantees the change is persisted.
+    //
+    // Legacy guest/contact tickets stored their first message without an
+    // `_id` (createContactTicket didn't set one), so guard `msg._id` -
+    // calling `.toString()` on undefined was throwing a 500 here and the
+    // admin "open ticket -> clear unread" flow silently failed.
     ticket.messages.forEach((msg: any) => {
-      if (isAdmin && !msg.isAdmin && msg.status !== 'read') {
+      const fromOtherParty = isAdmin ? !msg.isAdmin : msg.isAdmin;
+      if (fromOtherParty && msg.status !== 'read') {
         msg.status = 'read';
         msg.readAt = now;
-        messageIdsToUpdate.push(msg._id.toString());
-      } else if (!isAdmin && msg.isAdmin && msg.status !== 'read') {
-        msg.status = 'read';
-        msg.readAt = now;
-        messageIdsToUpdate.push(msg._id.toString());
+        anyModified = true;
+        if (msg._id) messageIdsToUpdate.push(msg._id.toString());
       }
     });
-    if (messageIdsToUpdate.length > 0) {
+    if (anyModified) {
       ticket.markModified('messages');
     }
 
@@ -236,22 +243,22 @@ export class SupportService {
 
     const now = new Date();
     const messageIdsToUpdate: string[] = [];
+    let anyModified = false;
 
     // Update message statuses to 'delivered' for messages from the
     // other party. Same Mongoose subdoc-tracking gotcha as in
     // markAsRead above - mark the array as modified after mutation.
+    // Guard `msg._id` for legacy guest tickets that lack one.
     ticket.messages.forEach((msg: any) => {
-      if (isAdmin && !msg.isAdmin && msg.status === 'sent') {
+      const fromOtherParty = isAdmin ? !msg.isAdmin : msg.isAdmin;
+      if (fromOtherParty && msg.status === 'sent') {
         msg.status = 'delivered';
         msg.deliveredAt = now;
-        messageIdsToUpdate.push(msg._id.toString());
-      } else if (!isAdmin && msg.isAdmin && msg.status === 'sent') {
-        msg.status = 'delivered';
-        msg.deliveredAt = now;
-        messageIdsToUpdate.push(msg._id.toString());
+        anyModified = true;
+        if (msg._id) messageIdsToUpdate.push(msg._id.toString());
       }
     });
-    if (messageIdsToUpdate.length > 0) {
+    if (anyModified) {
       ticket.markModified('messages');
     }
 
