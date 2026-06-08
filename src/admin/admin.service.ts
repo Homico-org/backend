@@ -1056,7 +1056,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus adminRejectionReason createdAt portfolioProjects",
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured adminRejectionReason createdAt portfolioProjects",
         )
         .lean(),
       this.userModel.countDocuments(query),
@@ -1271,6 +1271,26 @@ export class AdminService {
     }
 
     return user;
+  }
+
+  /**
+   * Editorial featuring toggle. Hand-picks a pro to the top of browse and
+   * lights the "Featured" badge. Pure flag flip - no notification/SMS, since
+   * featuring is an internal promotion lever, not a status the pro earned or
+   * needs to act on.
+   */
+  async setFeatured(
+    proId: string,
+    featured: boolean,
+  ): Promise<{ id: string; isFeatured: boolean }> {
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, { isFeatured: featured }, { new: true })
+      .select("_id isFeatured role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return { id: String(user._id), isFeatured: Boolean(user.isFeatured) };
   }
 
   // ============== JOB MANAGEMENT ==============

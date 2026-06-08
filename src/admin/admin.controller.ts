@@ -356,6 +356,17 @@ export class AdminController {
     return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
   }
 
+  @Patch('pros/:id/featured')
+  @ApiOperation({ summary: 'Toggle a professional as editorially featured' })
+  @ApiResponse({ status: 200, description: 'Featured flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setFeatured(
+    @Param('id') proId: string,
+    @Body('featured') featured: boolean,
+  ) {
+    return this.adminService.setFeatured(proId, !!featured);
+  }
+
   // ============== JOB MANAGEMENT ==============
 
   @Get('jobs/:id')

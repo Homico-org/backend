@@ -519,6 +519,11 @@ export class User extends Document {
   @Prop({ default: false })
   isPremium: boolean;
 
+  // Editorially featured - hand-picked by an admin. Sorts to the top of
+  // browse and shows a "Featured" badge. The promotion lever for the best pros.
+  @Prop({ default: false })
+  isFeatured: boolean;
+
   @Prop()
   premiumExpiresAt: Date;
 

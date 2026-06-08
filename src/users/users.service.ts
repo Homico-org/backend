@@ -1470,25 +1470,26 @@ export class UsersService {
     let sortObj: any = {};
     switch (filters?.sort) {
       case "rating":
-        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
+        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
+        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
+        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
       default:
         // "recommended" - portfolio-having pros at the top of each
         // premium tier, then profileScore, then reviews/rating as
         // tiebreakers within identical-portfolio bands.
         sortObj = {
+          isFeatured: -1,
           isPremium: -1,
           hasVisiblePortfolio: -1,
           profileScore: -1,
