@@ -40,6 +40,7 @@ import { ProductOrdersModule } from './product-orders/product-orders.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { InviteModule } from './invite/invite.module';
 import { SlaModule } from './sla/sla.module';
+import { BadgesModule } from './badges/badges.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -139,6 +140,7 @@ import { APP_GUARD } from '@nestjs/core';
     CatalogSuggestionsModule,
     PaymentsModule,
     SlaModule,
+    BadgesModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default

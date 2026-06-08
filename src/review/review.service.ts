@@ -23,6 +23,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { CreateBookingReviewDto } from './dto/create-booking-review.dto';
 import { ReviewRequest } from './schemas/review-request.schema';
 import { Review, ReviewSource } from './schemas/review.schema';
+import { BadgesService } from '../badges/badges.service';
 
 @Injectable()
 export class ReviewService {
@@ -34,6 +35,7 @@ export class ReviewService {
     private smsService: SmsService,
     private notificationsService: NotificationsService,
     private portfolioService: PortfolioService,
+    private badgesService: BadgesService,
   ) {}
 
   async create(clientId: string, createReviewDto: CreateReviewDto): Promise<Review> {
@@ -62,6 +64,12 @@ export class ReviewService {
       createReviewDto.proId,
       createReviewDto.rating,
     );
+
+    // Gamification: re-evaluate the author's review-driven badges. Fire-and-forget
+    // — badge logic must never block or fail the review creation.
+    this.badgesService
+      .evaluate(clientId, ['review.created'])
+      .catch(() => undefined);
 
     return review;
   }
@@ -115,6 +123,11 @@ export class ReviewService {
 
     // Update pro's rating
     await this.usersService.updateRating(proId, dto.rating);
+
+    // Gamification: re-evaluate the author's review-driven badges (fire-and-forget).
+    this.badgesService
+      .evaluate(clientId, ['review.created'])
+      .catch(() => undefined);
 
     // Notify the pro
     const client = await this.usersService.findById(clientId);

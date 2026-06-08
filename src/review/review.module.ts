@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { VerificationModule } from '../verification/verification.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
+import { BadgesModule } from '../badges/badges.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
     VerificationModule,
     NotificationsModule,
     PortfolioModule,
+    BadgesModule,
   ],
   controllers: [ReviewController],
   providers: [ReviewService],

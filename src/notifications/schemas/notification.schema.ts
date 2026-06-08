@@ -56,6 +56,9 @@ export enum NotificationType {
   PROFILE_INCOMPLETE_NAG = 'profile_incomplete_nag',
   NEW_ORDER = 'new_order',
   ORDER_UPDATE = 'order_update',
+
+  // Gamification
+  BADGE_UNLOCKED = 'badge_unlocked',
 }
 
 @Schema({ timestamps: true })
