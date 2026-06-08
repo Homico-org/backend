@@ -205,6 +205,19 @@ export class AdminController {
     return this.adminService.getDailyProposals(days ? parseInt(days, 10) : 30);
   }
 
+  @Get('funnel')
+  @ApiOperation({ summary: 'Marketplace liquidity funnel (jobs flow)' })
+  @ApiResponse({ status: 200, description: 'Funnel counts + conversion rates' })
+  getFunnel(
+    @Query('days') days?: string,
+    @Query('country') country?: string,
+  ) {
+    return this.adminService.getFunnel(
+      days ? parseInt(days, 10) : 30,
+      country || undefined,
+    );
+  }
+
   // ============== ACTIVITY LOGS ==============
 
   @Get('activity-logs')

@@ -714,6 +714,165 @@ export class AdminService {
     ]);
   }
 
+  /**
+   * Marketplace liquidity funnel for the jobs flow, over the last `days` of
+   * POSTED jobs (cohort = jobs created in the window). Reports the count at
+   * each funnel stage plus the conversion rates between them:
+   *
+   *   posted -> first proposal in 24h (liquidity vital sign)
+   *          -> any proposal
+   *          -> hired (a proposal accepted; Job.hiredProId set)
+   *          -> completed (Job.status = completed)
+   *          -> reviewed (a homico review references the job)
+   *
+   * Built on the real collections via $lookup (proposals/reviews) rather than
+   * fired-event counts, so the percentages are true per-job rates. Scoped to
+   * `jobType: marketplace` because direct_request jobs skip the proposal stage.
+   */
+  async getFunnel(days = 30, country?: string) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const match: Record<string, unknown> = {
+      jobType: 'marketplace',
+      createdAt: { $gte: startDate },
+    };
+    if (country) match.country = country.toUpperCase();
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const rows = await this.jobModel.aggregate([
+      { $match: match },
+      // Earliest proposal time + total proposal count per job. `jobId` may be
+      // stored as a string OR an ObjectId in this collection, so compare on
+      // the string form of both sides.
+      {
+        $lookup: {
+          from: 'proposals',
+          let: { jid: { $toString: '$_id' } },
+          pipeline: [
+            { $match: { $expr: { $eq: [{ $toString: '$jobId' }, '$$jid'] } } },
+            {
+              $group: {
+                _id: null,
+                first: { $min: '$createdAt' },
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          as: 'prop',
+        },
+      },
+      // Any homico review referencing this job (jobId may be string/ObjectId).
+      {
+        $lookup: {
+          from: 'reviews',
+          let: { jid: { $toString: '$_id' } },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: [{ $toString: '$jobId' }, '$$jid'] },
+                    { $eq: ['$source', 'homico'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'rev',
+        },
+      },
+      {
+        $project: {
+          createdAt: 1,
+          hired: { $cond: [{ $ifNull: ['$hiredProId', false] }, 1, 0] },
+          completed: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
+          reviewed: { $cond: [{ $gt: [{ $size: '$rev' }, 0] }, 1, 0] },
+          propCount: { $ifNull: [{ $arrayElemAt: ['$prop.count', 0] }, 0] },
+          firstProposalAt: { $arrayElemAt: ['$prop.first', 0] },
+        },
+      },
+      {
+        $project: {
+          hired: 1,
+          completed: 1,
+          reviewed: 1,
+          hasProposal: { $cond: [{ $gt: ['$propCount', 0] }, 1, 0] },
+          ttfpMs: {
+            $cond: [
+              { $ifNull: ['$firstProposalAt', false] },
+              { $subtract: ['$firstProposalAt', '$createdAt'] },
+              null,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          jobsPosted: { $sum: 1 },
+          withProposal: { $sum: '$hasProposal' },
+          firstProposalIn24h: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ['$ttfpMs', null] },
+                    { $lte: ['$ttfpMs', DAY_MS] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          hired: { $sum: '$hired' },
+          completed: { $sum: '$completed' },
+          reviewed: { $sum: '$reviewed' },
+          avgTtfpMs: { $avg: '$ttfpMs' },
+        },
+      },
+    ]);
+
+    const r = (rows[0] as Record<string, number> | undefined) ?? {
+      jobsPosted: 0,
+      withProposal: 0,
+      firstProposalIn24h: 0,
+      hired: 0,
+      completed: 0,
+      reviewed: 0,
+      avgTtfpMs: 0,
+    };
+    const pct = (n: number, d: number) =>
+      d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
+
+    return {
+      days,
+      country: country ? country.toUpperCase() : 'all',
+      counts: {
+        jobsPosted: r.jobsPosted,
+        withProposal: r.withProposal,
+        firstProposalIn24h: r.firstProposalIn24h,
+        hired: r.hired,
+        completed: r.completed,
+        reviewed: r.reviewed,
+      },
+      rates: {
+        // Liquidity vital sign: did supply respond fast?
+        proposalIn24hRate: pct(r.firstProposalIn24h, r.jobsPosted),
+        anyProposalRate: pct(r.withProposal, r.jobsPosted),
+        hireRate: pct(r.hired, r.jobsPosted),
+        completionRate: pct(r.completed, r.hired),
+        reviewRate: pct(r.reviewed, r.completed),
+      },
+      avgHoursToFirstProposal:
+        r.avgTtfpMs != null && r.avgTtfpMs > 0
+          ? Math.round((r.avgTtfpMs / (60 * 60 * 1000)) * 10) / 10
+          : null,
+    };
+  }
+
   // ============== PENDING PROFESSIONALS MANAGEMENT ==============
 
   async getPendingPros(options: PendingProsOptions) {
