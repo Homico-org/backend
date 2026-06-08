@@ -283,6 +283,14 @@ export class ProductOrdersService {
               link: `/admin/orders`,
               referenceId: String(order._id),
               referenceModel: 'Order',
+              i18n: {
+                titleKey: 'notifications.types.new_order.title',
+                messageKey: 'notifications.types.new_order.message',
+                params: {
+                  orderNumber: order.orderNumber,
+                  amount: (order.totalMinor / 100).toFixed(0),
+                },
+              },
             },
           ),
         ),
@@ -510,7 +518,16 @@ export class ProductOrdersService {
         NotificationType.ORDER_UPDATE,
         'Order update',
         `Order ${order.orderNumber} is now ${status}`,
-        { link: `/orders/${order._id}`, referenceId: String(order._id), referenceModel: 'Order' },
+        {
+          link: `/orders/${order._id}`,
+          referenceId: String(order._id),
+          referenceModel: 'Order',
+          i18n: {
+            titleKey: 'notifications.types.order_update.title',
+            messageKey: `notifications.types.order_status.${status}`,
+            params: { orderNumber: order.orderNumber },
+          },
+        },
       );
       if (user?.email) {
         await this.emailService.sendOrderStatusUpdate(user.email, order, status);
@@ -554,7 +571,16 @@ export class ProductOrdersService {
         NotificationType.ORDER_UPDATE,
         'Order refunded',
         `Order ${order.orderNumber} was refunded`,
-        { link: `/orders/${order._id}`, referenceId: String(order._id), referenceModel: 'Order' },
+        {
+          link: `/orders/${order._id}`,
+          referenceId: String(order._id),
+          referenceModel: 'Order',
+          i18n: {
+            titleKey: 'notifications.types.order_refunded.title',
+            messageKey: 'notifications.types.order_refunded.message',
+            params: { orderNumber: order.orderNumber },
+          },
+        },
       );
     } catch {
       /* best-effort */

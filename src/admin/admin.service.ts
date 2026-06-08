@@ -9,6 +9,8 @@ import { User, UserRole } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { InviteToken } from "../invite/schemas/invite-token.schema";
+import { ProjectRequest } from "../project-request/schemas/project-request.schema";
+import { Order } from "../product-orders/schemas/order.schema";
 import { SmsService } from "../verification/services/sms.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
 import { resolveUserLocale, type SupportedLocale } from "../common/countries";
@@ -82,9 +84,105 @@ export class AdminService {
     private notificationModel: Model<Notification>,
     @InjectModel(InviteToken.name)
     private inviteTokenModel: Model<InviteToken>,
+    @InjectModel(ProjectRequest.name)
+    private projectModel: Model<ProjectRequest>,
+    @InjectModel(Order.name) private orderModel: Model<Order>,
     private readonly smsService: SmsService,
     private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * Founder traction dashboard - the pre-launch 0->10 view. North star is
+   * "active projects" (a non-draft project with a real team that moved in the
+   * last 7 days), with the funnel that feeds it. Computed live from the DB so
+   * it always reflects reality, no event instrumentation needed.
+   */
+  async getTraction() {
+    const now = Date.now();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const since30d = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      projectsTotal,
+      projectsWithTeam,
+      projectsActive7d,
+      projectsCreated7d,
+      projectsCreated30d,
+      jobsTotal,
+      jobsHired,
+      jobsPosted7d,
+      ordersPaid,
+      gmvAgg,
+      pros,
+      clients,
+      signups7d,
+      prosHiredIds,
+    ] = await Promise.all([
+      this.projectModel.countDocuments({ status: { $ne: "draft" } }),
+      // Has at least one engagement (real trade/role on the project).
+      this.projectModel.countDocuments({
+        status: { $ne: "draft" },
+        "engagements.0": { $exists: true },
+      }),
+      // The north star: real team + moved in the last 7 days.
+      this.projectModel.countDocuments({
+        status: { $ne: "draft" },
+        "engagements.0": { $exists: true },
+        updatedAt: { $gte: since7d },
+      }),
+      this.projectModel.countDocuments({ createdAt: { $gte: since7d } }),
+      this.projectModel.countDocuments({ createdAt: { $gte: since30d } }),
+      this.jobModel.countDocuments({}),
+      this.jobModel.countDocuments({
+        $or: [
+          { hiredProId: { $ne: null, $exists: true } },
+          { status: { $in: ["in_progress", "completed"] } },
+        ],
+      }),
+      this.jobModel.countDocuments({ createdAt: { $gte: since7d } }),
+      this.orderModel.countDocuments({
+        status: { $nin: ["awaiting_payment", "payment_failed", "cancelled"] },
+      }),
+      this.orderModel.aggregate([
+        {
+          $match: {
+            status: {
+              $nin: ["awaiting_payment", "payment_failed", "cancelled"],
+            },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$totalMinor" } } },
+      ]),
+      this.userModel.countDocuments({ role: UserRole.PRO }),
+      this.userModel.countDocuments({ role: UserRole.CLIENT }),
+      this.userModel.countDocuments({ createdAt: { $gte: since7d } }),
+      // Distinct pros who have been hired at least once - "bench utilization".
+      this.jobModel.distinct("hiredProId", {
+        hiredProId: { $ne: null, $exists: true },
+      }),
+    ]);
+
+    const gmvMinor = gmvAgg?.[0]?.total ?? 0;
+    const prosHired = (prosHiredIds as unknown[]).length;
+
+    return {
+      goal: 10, // active projects target for this phase
+      northStar: {
+        activeProjects: projectsActive7d,
+        label: "Active projects (real team, moved in last 7 days)",
+      },
+      projects: {
+        total: projectsTotal,
+        withTeam: projectsWithTeam,
+        active7d: projectsActive7d,
+        created7d: projectsCreated7d,
+        created30d: projectsCreated30d,
+      },
+      jobs: { total: jobsTotal, hired: jobsHired, posted7d: jobsPosted7d },
+      orders: { paid: ordersPaid, gmvMinor },
+      users: { pros, clients, signups7d, prosHired },
+    };
+  }
 
   /**
    * Admin-initiated user creation. Delegates the heavy lifting (uniqueness

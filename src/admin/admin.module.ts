@@ -8,6 +8,8 @@ import { Proposal, ProposalSchema } from '../jobs/schemas/proposal.schema';
 import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-ticket.schema';
 import { Notification, NotificationSchema } from '../notifications/schemas/notification.schema';
 import { InviteToken, InviteTokenSchema } from '../invite/schemas/invite-token.schema';
+import { ProjectRequest, ProjectRequestSchema } from '../project-request/schemas/project-request.schema';
+import { Order, OrderSchema } from '../product-orders/schemas/order.schema';
 import { VerificationModule } from '../verification/verification.module';
 import { UsersModule } from '../users/users.module';
 
@@ -20,6 +22,8 @@ import { UsersModule } from '../users/users.module';
       { name: SupportTicket.name, schema: SupportTicketSchema },
       { name: Notification.name, schema: NotificationSchema },
       { name: InviteToken.name, schema: InviteTokenSchema },
+      { name: ProjectRequest.name, schema: ProjectRequestSchema },
+      { name: Order.name, schema: OrderSchema },
     ]),
     VerificationModule,
     UsersModule,

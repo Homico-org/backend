@@ -56,6 +56,14 @@ export enum NotificationType {
   PROFILE_INCOMPLETE_NAG = 'profile_incomplete_nag',
   NEW_ORDER = 'new_order',
   ORDER_UPDATE = 'order_update',
+
+  // Milestone / escrow payments (project engagements).
+  MILESTONE_PROPOSED = 'milestone_proposed',
+  MILESTONE_APPROVED = 'milestone_approved',
+  MILESTONE_FUNDED = 'milestone_funded',
+  MILESTONE_SUBMITTED = 'milestone_submitted',
+  MILESTONE_RELEASED = 'milestone_released',
+  MILESTONE_DISPUTED = 'milestone_disputed',
 }
 
 @Schema({ timestamps: true })
@@ -109,7 +117,7 @@ export class Notification extends Document {
   @Prop({ type: Types.ObjectId, refPath: 'referenceModel' })
   referenceId?: Types.ObjectId;
 
-  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking', 'Order'] })
+  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking', 'Order', 'MilestonePayment'] })
   referenceModel?: string;
 
   @Prop({ type: Object })

@@ -38,6 +38,7 @@ import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
 import { SupplierCatalogModule } from './supplier-catalog/supplier-catalog.module';
 import { ProductOrdersModule } from './product-orders/product-orders.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { MilestonePaymentsModule } from './milestone-payments/milestone-payments.module';
 import { InviteModule } from './invite/invite.module';
 import { SlaModule } from './sla/sla.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -134,6 +135,7 @@ import { APP_GUARD } from '@nestjs/core';
     SupplierCatalogModule,
     ProductOrdersModule,
     BookingsModule,
+    MilestonePaymentsModule,
     InviteModule,
     ServiceRequestsModule,
     CatalogSuggestionsModule,

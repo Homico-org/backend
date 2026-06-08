@@ -135,6 +135,13 @@ export class AdminController {
     return this.adminService.getDashboardStats();
   }
 
+  @Get('traction')
+  @ApiOperation({ summary: 'Founder traction dashboard (0->10 phase)' })
+  @ApiResponse({ status: 200, description: 'Traction metrics' })
+  getTraction() {
+    return this.adminService.getTraction();
+  }
+
   @Get('recent-users')
   @ApiOperation({ summary: 'Get recent users' })
   @ApiResponse({ status: 200, description: 'Recent users list' })
