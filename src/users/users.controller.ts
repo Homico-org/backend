@@ -637,8 +637,9 @@ export class UsersController {
   @ApiOperation({ summary: "Get pro user by ID or UID" })
   @ApiResponse({ status: 200, description: "Pro user profile" })
   @ApiResponse({ status: 404, description: "Pro not found" })
-  findProById(@Param("id") id: string) {
-    return this.usersService.findProById(id);
+  findProById(@Param("id") id: string, @Req() req: any) {
+    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    return this.usersService.findProById(id, ip);
   }
 
   @Post("pros/:id/phone-view")
