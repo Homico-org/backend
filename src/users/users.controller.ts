@@ -642,6 +642,17 @@ export class UsersController {
     return this.usersService.findProById(id, ip);
   }
 
+  @Post("pros/:id/phone-view")
+  @ApiOperation({
+    summary: "Track a phone-number reveal on a pro profile (public, deduped by IP)",
+  })
+  @ApiResponse({ status: 201, description: "Phone view tracked" })
+  async trackPhoneView(@Param("id") id: string, @Req() req: any) {
+    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const phoneViewCount = await this.usersService.trackPhoneView(id, ip);
+    return { success: true, phoneViewCount };
+  }
+
   @Get("profile/:id")
   @ApiOperation({ summary: "Get public user profile by ID" })
   @ApiResponse({ status: 200, description: "User public profile" })

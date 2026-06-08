@@ -1841,6 +1841,40 @@ export class UsersService {
     }
   }
 
+  // Count how many unique visitors revealed a pro's phone number. Deduped by IP
+  // within a 24h window (the ProfileView unique index + TTL handle both), so a
+  // page refresh from the same IP never inflates the count.
+  async trackPhoneView(proId: string, ip: string): Promise<number> {
+    const { Types } = require("mongoose");
+    if (!Types.ObjectId.isValid(proId)) return 0;
+
+    // Upsert the dedup row; only a genuinely new (IP, pro) row reports an
+    // upsertedCount > 0. Refreshes match the existing row and are no-ops.
+    const result = await this.profileViewModel
+      .updateOne(
+        { proId, ip, type: ProfileViewType.PHONE },
+        { $setOnInsert: { viewedAt: new Date() } },
+        { upsert: true },
+      )
+      .exec()
+      .catch(() => null);
+
+    if (result && (result.upsertedCount ?? 0) > 0) {
+      await this.userModel
+        .updateOne({ _id: proId }, { $inc: { phoneViewCount: 1 } })
+        .exec()
+        .catch(() => {});
+    }
+
+    // Return the current count so the client can reflect it immediately.
+    const pro = await this.userModel
+      .findById(proId)
+      .select("phoneViewCount")
+      .exec()
+      .catch(() => null);
+    return pro?.phoneViewCount ?? 0;
+  }
+
   async updateRating(
     userId: string,
     newRating: number,
