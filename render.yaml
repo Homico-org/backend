@@ -144,8 +144,11 @@ services:
       - dev.homico.ge
       # - dev.homico.co   # uncomment once the .co DNS CNAME is in place
     envVars:
+      # MUST be production - `next build` breaks with NODE_ENV=development
+      # (mixes dev/prod React runtimes -> "useContext of null" on prerender).
+      # The dev-environment signal is NEXT_PUBLIC_ENV, not NODE_ENV.
       - key: NODE_ENV
-        value: development
+        value: production
       - key: NEXT_PUBLIC_ENV
         value: development
       - key: NEXT_PUBLIC_API_URL
