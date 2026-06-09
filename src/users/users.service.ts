@@ -1428,6 +1428,13 @@ export class UsersService {
      * stays uncluttered.
      */
     country?: string;
+    /**
+     * Quality floor for the default browse first-impression. When true, hides
+     * "empty shell" pros - those with NO portfolio, NO priced services, and NO
+     * reviews (a client cannot evaluate or hire them). Opt-in so other
+     * consumers (admin, AI search) keep the full set; the browse page sets it.
+     */
+    completeOnly?: boolean;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1484,6 +1491,13 @@ export class UsersService {
       case "newest":
         sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
+      case "badges":
+        // Sort by standing/badges: editor's-pick (featured) first, then paid
+        // premium, then the top-rated badge (rating + review volume), then
+        // portfolio. All listed pros are already verified, so that badge is a
+        // constant rather than a differentiator here.
+        sortObj = { isFeatured: -1, isPremium: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
+        break;
       default:
         // "recommended" - portfolio-having pros at the top of each
         // premium tier, then profileScore, then reviews/rating as
@@ -1536,6 +1550,19 @@ export class UsersService {
         { verificationStatus: "verified" },
       ],
     };
+
+    // Quality floor (opt-in). Empty-shell profiles - no portfolio, no priced
+    // services, no reviews - give a first-time client nothing to judge, so the
+    // default browse hides them. A pro needs ANY one real signal to appear.
+    if (filters?.completeOnly) {
+      query.$and.push({
+        $or: [
+          { "portfolioProjects.0": { $exists: true } },
+          { "servicePricing.0": { $exists: true } },
+          { totalReviews: { $gt: 0 } },
+        ],
+      });
+    }
 
     // Country scoping (added 2026-05). The pro's `country` field is
     // populated by the backfill migration on existing rows and at
