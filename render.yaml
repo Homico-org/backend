@@ -38,7 +38,7 @@ services:
       - key: SENDGRID_API_KEY
         sync: false
       - key: SENDGRID_FROM_EMAIL
-        value: info@homico.ge
+        value: contact@homico.co
       - key: PRELUDE_API_KEY        # SMS (international); +995 uses UBill
         sync: false
       - key: FRONTEND_URL
@@ -119,7 +119,7 @@ services:
       - key: SENDGRID_API_KEY
         sync: false
       - key: SENDGRID_FROM_EMAIL
-        value: info@homico.ge
+        value: contact@homico.co
       - key: PRELUDE_API_KEY
         sync: false
       - key: FRONTEND_URL
