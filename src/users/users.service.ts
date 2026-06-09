@@ -24,6 +24,10 @@ import { Review } from "../review/schemas/review.schema";
 import { SupportTicket } from "../support/schemas/support-ticket.schema";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { PaymentMethod, ServiceAddress, User } from "./schemas/user.schema";
+import {
+  ProfileView,
+  ProfileViewType,
+} from "./schemas/profile-view.schema";
 
 @Injectable()
 export class UsersService {
@@ -46,6 +50,8 @@ export class UsersService {
     @InjectModel(Offer.name) private offerModel: Model<Offer>,
     @InjectModel(SupportTicket.name)
     private supportTicketModel: Model<SupportTicket>,
+    @InjectModel(ProfileView.name)
+    private profileViewModel: Model<ProfileView>,
     private readonly logger: LoggerService,
     // Used by findAllPros to expand the user's search term against the
     // service-catalog labels in all three locales, so "ავეჯი" matches pros
@@ -2059,7 +2065,7 @@ export class UsersService {
     };
   }
 
-  async findProById(id: string): Promise<User> {
+  async findProById(id: string, ip?: string): Promise<User> {
     const { Types } = require("mongoose");
 
     // Check if id is a numeric UID (6-digit number starting with 1)
@@ -2118,13 +2124,75 @@ export class UsersService {
       throw new NotFoundException("Pro profile not found");
     }
 
-    // Best-effort views increment: never block profile reads on write errors
-    this.userModel
-      .updateOne({ _id: user._id }, { $inc: { profileViewCount: 1 } })
-      .exec()
-      .catch(() => {});
+    // Best-effort views increment: never block profile reads on write errors.
+    // When an IP is provided (public profile reads), dedupe by IP (24h TTL) so
+    // a refresh doesn't re-count. Without an IP (internal callers), fall back to
+    // the legacy unconditional increment.
+    if (ip) {
+      this.trackProfileView(user._id, ip).catch(() => {});
+    } else {
+      this.userModel
+        .updateOne({ _id: user._id }, { $inc: { profileViewCount: 1 } })
+        .exec()
+        .catch(() => {});
+    }
 
     return user;
+  }
+
+  // Dedupe profile views by IP within a 24h window (the ProfileView unique
+  // index + TTL handle both), so a page refresh from the same IP never inflates
+  // profileViewCount. Mirrors the upsert/$setOnInsert dedup used in analytics.
+  private async trackProfileView(proId: any, ip: string): Promise<void> {
+    const result = await this.profileViewModel
+      .updateOne(
+        { proId, ip, type: ProfileViewType.PROFILE },
+        { $setOnInsert: { viewedAt: new Date() } },
+        { upsert: true },
+      )
+      .exec()
+      .catch(() => null);
+
+    if (result && (result.upsertedCount ?? 0) > 0) {
+      await this.userModel
+        .updateOne({ _id: proId }, { $inc: { profileViewCount: 1 } })
+        .exec()
+        .catch(() => {});
+    }
+  }
+
+  // Count how many unique visitors revealed a pro's phone number. Deduped by IP
+  // within a 24h window (the ProfileView unique index + TTL handle both), so a
+  // page refresh from the same IP never inflates the count.
+  async trackPhoneView(proId: string, ip: string): Promise<number> {
+    const { Types } = require("mongoose");
+    if (!Types.ObjectId.isValid(proId)) return 0;
+
+    // Upsert the dedup row; only a genuinely new (IP, pro) row reports an
+    // upsertedCount > 0. Refreshes match the existing row and are no-ops.
+    const result = await this.profileViewModel
+      .updateOne(
+        { proId, ip, type: ProfileViewType.PHONE },
+        { $setOnInsert: { viewedAt: new Date() } },
+        { upsert: true },
+      )
+      .exec()
+      .catch(() => null);
+
+    if (result && (result.upsertedCount ?? 0) > 0) {
+      await this.userModel
+        .updateOne({ _id: proId }, { $inc: { phoneViewCount: 1 } })
+        .exec()
+        .catch(() => {});
+    }
+
+    // Return the current count so the client can reflect it immediately.
+    const pro = await this.userModel
+      .findById(proId)
+      .select("phoneViewCount")
+      .exec()
+      .catch(() => null);
+    return pro?.phoneViewCount ?? 0;
   }
 
   async updateRating(

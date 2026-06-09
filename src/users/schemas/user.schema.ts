@@ -360,6 +360,9 @@ export class User extends Document {
   profileViewCount: number;
 
   @Prop({ default: 0 })
+  phoneViewCount: number;
+
+  @Prop({ default: 0 })
   completedJobs: number;
 
   @Prop({ default: 0 })

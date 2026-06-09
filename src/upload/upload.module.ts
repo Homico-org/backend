@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from '@fluidjs/multer-cloudinary';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
@@ -57,6 +56,46 @@ function uploadFileFilter(
   }
 }
 
+class CloudinaryAsyncStorage {
+  private cloudinary: typeof cloudinary;
+  private paramsFactory: (req: Express.Request, file: Express.Multer.File) => Promise<Record<string, unknown>>;
+
+  constructor(options: {
+    cloudinary: typeof cloudinary;
+    params: (req: Express.Request, file: Express.Multer.File) => Promise<Record<string, unknown>>;
+  }) {
+    this.cloudinary = options.cloudinary;
+    this.paramsFactory = options.params;
+  }
+
+  async _handleFile(
+    req: Express.Request,
+    file: Express.Multer.File,
+    callback: (err?: Error | null, info?: Partial<Express.Multer.File & { path?: string }>) => void,
+  ) {
+    try {
+      const params = await this.paramsFactory(req, file);
+      const stream = this.cloudinary.uploader.upload_stream(params as any, (err, result) => {
+        if (err) return callback(err);
+        if (!result) return callback(new Error('No result from Cloudinary'));
+        callback(null, { path: result.secure_url, filename: result.public_id });
+      });
+      file.stream.pipe(stream);
+    } catch (err) {
+      callback(err as Error);
+    }
+  }
+
+  _removeFile(
+    _req: Express.Request,
+    file: Express.Multer.File & { filename?: string },
+    callback: (err: Error | null) => void,
+  ) {
+    if (!file.filename) return callback(null);
+    this.cloudinary.uploader.destroy(file.filename, (err) => callback(err || null));
+  }
+}
+
 @Module({
   imports: [
     MulterModule.registerAsync({
@@ -75,9 +114,9 @@ function uploadFileFilter(
             api_secret: apiSecret,
           });
 
-          const storage = new CloudinaryStorage({
+          const storage = new CloudinaryAsyncStorage({
             cloudinary: cloudinary,
-            params: async (req, file) => {
+            params: async (_req: Express.Request, file: Express.Multer.File) => {
               const isVideo = file.mimetype.startsWith('video/');
               const isImage = file.mimetype.startsWith('image/');
 
@@ -137,7 +176,7 @@ function uploadFileFilter(
         return {
           storage: diskStorage({
             destination: uploadsDir,
-            filename: (req, file, callback) => {
+            filename: (_req, file, callback) => {
               const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
               callback(null, uniqueName);
             },
