@@ -1164,7 +1164,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured adminRejectionReason createdAt portfolioProjects",
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner adminRejectionReason createdAt portfolioProjects",
         )
         .lean(),
       this.userModel.countDocuments(query),
