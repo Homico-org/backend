@@ -67,6 +67,17 @@ export class PollsService {
       throw new ForbiddenException('Only the assigned professional can create polls');
     }
 
+    // Validate title (length + presence). Frontend caps at 200 but
+    // anyone hitting the API directly could send a 100KB title which
+    // breaks layouts and inflates every fetched poll payload.
+    const title = (createPollDto.title || '').trim();
+    if (!title) {
+      throw new BadRequestException('Poll title is required');
+    }
+    if (title.length > 200) {
+      throw new BadRequestException('Poll title is too long (max 200 characters)');
+    }
+
     // Validate options
     if (!createPollDto.options || createPollDto.options.length < 2) {
       throw new BadRequestException('At least 2 options are required');
@@ -74,6 +85,20 @@ export class PollsService {
 
     if (createPollDto.options.length > 6) {
       throw new BadRequestException('Maximum 6 options allowed');
+    }
+
+    // Each option needs text OR imageUrl. Both empty -> bug or malicious
+    // client -> reject. Frontend already filters these out before submit,
+    // but defending the API surface stops a stray POST creating two
+    // blank cards that render as empty placeholders.
+    for (const opt of createPollDto.options) {
+      const hasText = !!(opt.text && opt.text.trim());
+      const hasImage = !!opt.imageUrl;
+      if (!hasText && !hasImage) {
+        throw new BadRequestException(
+          'Each poll option must have text or an image',
+        );
+      }
     }
 
     // Create options with IDs
@@ -86,7 +111,7 @@ export class PollsService {
     const poll = new this.pollModel({
       jobId: new Types.ObjectId(jobId),
       createdBy: new Types.ObjectId(userId),
-      title: createPollDto.title,
+      title,
       description: createPollDto.description,
       options,
       status: PollStatus.ACTIVE,
@@ -110,15 +135,21 @@ export class PollsService {
     try {
       const job = await this.jobModel.findById(jobId).select('title').exec();
       const pro = await this.userModel.findById(userId).select('name').exec();
+      const proName = pro?.name || 'A professional';
       await this.notificationsService.notify(
         project.clientId.toString(),
         NotificationType.PROJECT_POLL_CREATED,
-        'ახალი გამოკითხვა',
-        `${pro?.name || 'სპეციალისტმა'} შექმნა გამოკითხვა: "${createPollDto.title}"`,
+        'New Poll',
+        `${proName} created a poll: "${createPollDto.title}"`,
         {
           link: `/jobs/${jobId}`,
           referenceId: jobId,
           referenceModel: 'Job',
+          i18n: {
+            titleKey: 'notifications.types.project_poll_created.title',
+            messageKey: 'notifications.types.project_poll_created.message',
+            params: { proName, pollTitle: createPollDto.title },
+          },
           metadata: { pollId: poll._id.toString(), pollTitle: createPollDto.title },
         },
       );
@@ -178,15 +209,21 @@ export class PollsService {
       const job = await this.jobModel.findById(poll.jobId).select('title').exec();
       const client = await this.userModel.findById(userId).select('name').exec();
       const votedOption = poll.options.find(opt => opt._id.toString() === optionId);
+      const clientName = client?.name || 'The client';
       await this.notificationsService.notify(
         project.proId.toString(),
         NotificationType.PROJECT_POLL_VOTED,
-        'კლიენტმა ხმა მისცა',
-        `${client?.name || 'კლიენტმა'} ხმა მისცა გამოკითხვაში: "${poll.title}"`,
+        'Client voted',
+        `${clientName} voted in the poll: "${poll.title}"`,
         {
           link: `/jobs/${poll.jobId.toString()}#polls`,
           referenceId: poll.jobId.toString(),
           referenceModel: 'Job',
+          i18n: {
+            titleKey: 'notifications.types.project_poll_voted.title',
+            messageKey: 'notifications.types.project_poll_voted.message',
+            params: { clientName, pollTitle: poll.title },
+          },
           metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: votedOption?.text },
         },
       );
@@ -247,15 +284,21 @@ export class PollsService {
     try {
       const client = await this.userModel.findById(userId).select('name').exec();
       const approvedOption = poll.options.find(opt => opt._id.toString() === optionId);
+      const clientName = client?.name || 'The client';
       await this.notificationsService.notify(
         project.proId.toString(),
         NotificationType.PROJECT_POLL_APPROVED,
-        'გამოკითხვა დამტკიცდა',
-        `${client?.name || 'კლიენტმა'} დაამტკიცა გამოკითხვა: "${poll.title}"`,
+        'Poll approved',
+        `${clientName} approved the poll: "${poll.title}"`,
         {
           link: `/jobs/${poll.jobId.toString()}`,
           referenceId: poll.jobId.toString(),
           referenceModel: 'Job',
+          i18n: {
+            titleKey: 'notifications.types.project_poll_approved.title',
+            messageKey: 'notifications.types.project_poll_approved.message',
+            params: { clientName, pollTitle: poll.title },
+          },
           metadata: { pollId: poll._id.toString(), pollTitle: poll.title, optionText: approvedOption?.text },
         },
       );

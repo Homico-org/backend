@@ -7,12 +7,14 @@ import { ChatSession } from './schemas/chat-session.schema';
 import { ChatMessage } from './schemas/chat-message.schema';
 import { CreateSessionDto, SendMessageDto } from './dto/ai-assistant.dto';
 import { AiToolsService } from './ai-tools.service';
+import { getMarketContext } from '../ai/market-context';
 import {
   RichContent,
   RichContentType,
   AiAssistantResponse,
   SuggestedAction,
 } from './dto/rich-content.dto';
+import { AmplitudeService } from '../analytics/amplitude.service';
 
 type ToolContext = {
   categoryQuery?: string;
@@ -21,6 +23,25 @@ type ToolContext = {
   featureQuery?: string;
   helpQuery?: string;
 };
+
+/**
+ * SSE event types emitted by sendMessageStream. The frontend consumer
+ * maintains an in-flight message reducer keyed off `type`.
+ */
+export type StreamEvent =
+  | { type: 'started' }
+  | { type: 'tool_call_start'; toolName: string }
+  | {
+      type: 'tool_call_end';
+      toolName: string;
+      durationMs: number;
+      hasRichContent: boolean;
+    }
+  | { type: 'rich_content'; block: RichContent }
+  | { type: 'text_delta'; content: string }
+  | { type: 'suggested_actions'; actions: SuggestedAction[] }
+  | { type: 'done'; messageId: string; processingTimeMs: number }
+  | { type: 'error'; errorType: string; message: string };
 
 // OpenAI function definitions for the AI to call
 const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
@@ -36,12 +57,33 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           category: {
             type: 'string',
             description:
-              'Category to search in. Prefer the category key (e.g., "plumbing", "electrical", "interior-design", "architecture"). If the user provides a localized name (e.g., "არქიტექტურა") or a role word (e.g., "არქიტექტორი"), pass it as-is — the backend will resolve it.',
+              'Category to search in. Prefer the category key (e.g., "plumbing", "electrical", "interior-design", "architecture"). If the user provides a localized name (e.g., "არქიტექტურა") or a role word (e.g., "არქიტექტორი"), pass it as-is - the backend will resolve it.',
           },
           subcategory: {
             type: 'string',
             description:
               'Optional subcategory to narrow the search. Can be a key or a localized/free-text term; it will be resolved when possible.',
+          },
+          serviceKey: {
+            type: 'string',
+            description:
+              'Specific service identifier (e.g. "drain-cleaning", "wall-painting"). Use when the user names a very specific service WITHIN a category. Most queries should use `category` instead.',
+          },
+          serviceArea: {
+            type: 'string',
+            description:
+              'Tbilisi district or city name (e.g. "Vake", "Saburtalo", "Old Tbilisi", "Mtskheta"). Use when the user mentions a location, e.g. "plumber in Vake", "ვაკეში სანტექნიკოსი", "сантехник в Ваке".',
+          },
+          scheduledDate: {
+            type: 'string',
+            description:
+              'YYYY-MM-DD date when the user needs the service. Use when the user mentions timing, e.g. "tomorrow", "next Monday", "this Saturday". Resolve relative dates to absolute YYYY-MM-DD before passing.',
+          },
+          languages: {
+            type: 'array',
+            items: { type: 'string', enum: ['en', 'ka', 'ru'] },
+            description:
+              'Language codes the pro must speak. Use when the user mentions language requirements, e.g. "English-speaking plumber" -> ["en"], "русскоговорящий" -> ["ru"]. Pass as an array even for a single language.',
           },
           minRating: {
             type: 'number',
@@ -50,11 +92,11 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           },
           minPrice: {
             type: 'number',
-            description: 'Minimum price in GEL.',
+            description: "Minimum price in the marketplace's local currency.",
           },
           maxPrice: {
             type: 'number',
-            description: 'Maximum price in GEL for budget searches.',
+            description: "Maximum price in the marketplace's local currency for budget searches.",
           },
           sort: {
             type: 'string',
@@ -200,6 +242,7 @@ export class AiAssistantService {
     @InjectModel(ChatMessage.name) private messageModel: Model<ChatMessage>,
     private configService: ConfigService,
     private aiToolsService: AiToolsService,
+    private amplitude: AmplitudeService,
   ) {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     if (apiKey) {
@@ -209,7 +252,33 @@ export class AiAssistantService {
     }
   }
 
-  private getSystemPrompt(locale: string = 'en', userRole?: string): string {
+  private getSystemPrompt(
+    locale: string = 'en',
+    userRole?: string,
+    country?: string,
+  ): string {
+    const market = getMarketContext(country);
+    const marketEn = `${market.city}, ${market.country}`;
+    const currencyEn = `${market.currencyName} (${market.currencyCode}, symbol ${market.currencySymbol})`;
+    const marketDescriptorByLocale: Record<string, { intro: string; expertise: string; pricing: string }> = {
+      en: {
+        intro: `Homico is the leading platform connecting homeowners in ${marketEn} with renovation professionals.`,
+        expertise: `You're an expert on the ${marketEn} renovation market, pricing, and best practices.`,
+        pricing: `Always reason about costs in ${currencyEn}.`,
+      },
+      ka: {
+        intro: `Homico - წამყვანი პლატფორმა, რომელიც ${market.city}-ში სახლის მფლობელებს რემონტის პროფესიონალებთან აკავშირებს.`,
+        expertise: `ექსპერტი ხარ ${market.city}-ის სარემონტო ბაზარზე, ფასებსა და საუკეთესო პრაქტიკაში.`,
+        pricing: `ფასებზე ყოველთვის ისაუბრე ${market.currencyName}-ში (${market.currencyCode}, სიმბოლო ${market.currencySymbol}).`,
+      },
+      ru: {
+        intro: `Homico - ведущая платформа, соединяющая домовладельцев в ${marketEn} с профессионалами по ремонту.`,
+        expertise: `Эксперт по рынку ремонта в ${marketEn}, ценам и лучшим практикам.`,
+        pricing: `О ценах всегда рассуждай в ${market.currencyName} (${market.currencyCode}, символ ${market.currencySymbol}).`,
+      },
+    };
+    const md = marketDescriptorByLocale[locale] ?? marketDescriptorByLocale.en;
+
     const roleContext =
       userRole === 'pro'
         ? 'The user is a professional/contractor on Homico.'
@@ -235,10 +304,29 @@ IMPORTANT GUIDELINES:
 5. When users ask how the platform works / rules / troubleshooting, use search_help
 6. After calling a tool, provide a helpful summary of results and what to do next
 7. If a tool returns no results, suggest alternative approaches and ask 1 clarifying question.
-   - If search_professionals returns 0, suggest 2–5 closest categories and offer to browse all professionals or post a job.`;
+   - If search_professionals returns 0, suggest 2–5 closest categories and offer to browse all professionals or post a job.
+
+OUTPUT RULES (apply to every reply):
+- NEVER expose internal identifiers, slugs, tool names, query parameters,
+  or feature codes. Examples of strings you must NEVER write back to the
+  user: "registration_pro", "search_professionals", "search_help",
+  "explain_feature", or any "tool_name: value" style phrasing. These are
+  internal labels - the user has no idea what they mean. Translate the
+  intent to natural language and answer in plain prose.
+- NEVER write meta-narration about your own process. Do NOT say
+  "Model loaded: X", "Tool: X", "Searching for X", "Query: X", or
+  "I am calling tool X". The user only wants the answer, not a debug log.
+- Do NOT use markdown links like [text](url). Write plain text and put any
+  URL on its own line. Action buttons are rendered separately by the UI -
+  you do not need to inline links.
+- Do NOT wrap output in code fences unless the user explicitly asked for
+  code. Plain prose with simple numbered lists is preferred.
+- Write in the user's language (Georgian / Russian / English). When writing
+  Georgian, use real Georgian words only - never transliterate English or
+  invent new vocabulary.`;
 
     const prompts = {
-      en: `You are Homi, the intelligent AI assistant for Homico - Georgia's leading platform connecting homeowners with renovation professionals.
+      en: `You are Homi, the intelligent AI assistant for Homico. ${md.intro}
 
 ${roleContext}
 
@@ -247,7 +335,7 @@ ${toolInstructions}
 Your personality:
 - Warm, helpful, and knowledgeable about home renovation
 - You are direct and practical
-- You're an expert on Georgian renovation market, pricing, and best practices
+- ${md.expertise} ${md.pricing}
 
 You can help with:
 1. **Finding Professionals**: Search our database to find the best pros for any job
@@ -261,7 +349,7 @@ Response style:
 - Be more detailed when the user asks for details, comparisons, or guidance
 - When showing professionals/prices in rich content, do NOT repeat every number; highlight 2–3 useful insights and next steps`,
 
-      ka: `შენ ხარ ჰომი - Homico-ს ინტელექტუალური AI ასისტენტი. Homico არის საქართველოს წამყვანი პლატფორმა, რომელიც აკავშირებს სახლის მფლობელებს რემონტის პროფესიონალებთან.
+      ka: `შენ ხარ Homi - Homico-ს ინტელექტუალური AI ასისტენტი. ${md.intro}
 
 ${roleContext}
 
@@ -271,7 +359,7 @@ ${toolInstructions}
 - თბილი, დამხმარე და რემონტის საკითხებში მცოდნე
 - საუბრობ მოკლედ, მაგრამ ინფორმატიულად
 - იშვიათად იყენებ მეგობრულ emoji-ებს (მაქსიმუმ 1-2 შეტყობინებაში)
-- ექსპერტი ხარ ქართულ სარემონტო ბაზარზე, ფასებსა და საუკეთესო პრაქტიკაში
+- ${md.expertise} ${md.pricing}
 
 შეგიძლია დაეხმარო:
 1. **პროფესიონალების პოვნა**: მოძებნე საუკეთესო სპეციალისტები ნებისმიერი სამუშაოსთვის
@@ -282,7 +370,7 @@ ${toolInstructions}
 
 პასუხები იყოს მოკლე (ჩვეულებრივ 2-4 წინადადება).`,
 
-      ru: `Ты Homi - интеллектуальный AI-ассистент Homico, ведущей платформы Грузии, соединяющей домовладельцев с профессионалами по ремонту.
+      ru: `Ты Homi - интеллектуальный AI-ассистент Homico. ${md.intro}
 
 ${roleContext}
 
@@ -292,7 +380,7 @@ ${toolInstructions}
 - Тёплый, отзывчивый и знающий в вопросах ремонта
 - Говоришь кратко, но информативно
 - Редко используешь дружелюбные эмодзи (максимум 1-2 на сообщение)
-- Эксперт по грузинскому рынку ремонта, ценам и лучшим практикам
+- ${md.expertise} ${md.pricing}
 
 Ты можешь помочь с:
 1. **Поиск профессионалов**: Найти лучших специалистов для любой работы
@@ -364,6 +452,7 @@ ${toolInstructions}
     sessionId: string,
     dto: SendMessageDto,
     userId?: string,
+    clientDeviceId?: string,
   ): Promise<AiAssistantResponse> {
     // Check if OpenAI is configured
     if (!this.openai) {
@@ -374,6 +463,11 @@ ${toolInstructions}
           : locale === 'ru'
             ? 'AI ассистент временно недоступен. Попробуйте позже.'
             : 'AI assistant is temporarily unavailable. Please try again later.';
+      this.amplitude.track('ai_chat_error', {
+        userId,
+        deviceId: clientDeviceId,
+        properties: { errorType: 'openai_not_configured', locale },
+      });
       return { response: errorMessage };
     }
 
@@ -390,6 +484,21 @@ ${toolInstructions}
 
     const locale = dto.locale || session.context?.preferredLocale || 'en';
     const startTime = Date.now();
+
+    // Track at the very start so we capture the inbound query even if the
+    // OpenAI call later times out or errors.
+    this.amplitude.track('ai_chat_message_sent', {
+      userId,
+      deviceId: clientDeviceId,
+      properties: {
+        sessionId,
+        locale,
+        messageLength: dto.message.length,
+        currentPage: dto.currentPage,
+        userRole: session.context?.userRole,
+        isAnonymous: !userId,
+      },
+    });
 
     // Save user message
     const userMessage = new this.messageModel({
@@ -411,7 +520,15 @@ ${toolInstructions}
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       {
         role: 'system',
-        content: this.getSystemPrompt(locale, session.context?.userRole),
+        content: this.getSystemPrompt(
+          locale,
+          session.context?.userRole,
+          // Marketplace country flows from the request (URL segment ->
+          // useCountry() on the client -> dto.country). Falls back to
+          // any previously-stored session context country, then to GE
+          // via getMarketContext's own default.
+          dto.country ?? (session.context as { country?: string } | undefined)?.country,
+        ),
       },
       ...history.reverse().map((msg) => ({
         role: msg.role as 'user' | 'assistant',
@@ -443,6 +560,7 @@ ${toolInstructions}
       const toolContext: ToolContext = {};
 
       // Process tool calls if any
+      const toolsUsed: string[] = [];
       if (assistantMessage?.tool_calls && assistantMessage.tool_calls.length > 0) {
         // Add assistant message with tool calls to conversation
         messages.push(assistantMessage as OpenAI.Chat.ChatCompletionMessageParam);
@@ -452,11 +570,32 @@ ${toolInstructions}
           // Type guard for function tool calls
           if (toolCall.type !== 'function') continue;
 
+          const toolStartMs = Date.now();
           const toolResult = await this.executeToolCall(
             toolCall.function.name,
             JSON.parse(toolCall.function.arguments),
             locale as 'en' | 'ka' | 'ru',
+            dto.country ?? (session.context as { country?: string } | undefined)?.country,
           );
+          const toolDurationMs = Date.now() - toolStartMs;
+          toolsUsed.push(toolCall.function.name);
+
+          // Track each tool call so we can see which tools fire most, which
+          // are slow, and which return empty (richContent missing) - the
+          // latter is the most actionable signal for tuning the matcher.
+          this.amplitude.track('ai_chat_tool_called', {
+            userId,
+            deviceId: clientDeviceId,
+            properties: {
+              sessionId,
+              toolName: toolCall.function.name,
+              durationMs: toolDurationMs,
+              hasRichContent: Boolean(
+                toolResult.richContent && toolResult.richContent.length > 0,
+              ),
+              locale,
+            },
+          });
 
           // Add tool result to rich content if it has data
           if (toolResult.richContent && toolResult.richContent.length > 0) {
@@ -530,6 +669,27 @@ ${toolInstructions}
         lastMessageAt: new Date(),
       });
 
+      // Track the completed turn. Token count and processing time are
+      // useful for cost and latency dashboards; toolsUsed lets us cohort
+      // queries by which tools resolved them.
+      this.amplitude.track('ai_chat_response_returned', {
+        userId,
+        deviceId: clientDeviceId,
+        properties: {
+          sessionId,
+          locale,
+          processingTimeMs,
+          tokensUsed: completion.usage?.total_tokens,
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+          toolsUsed: toolsUsed.length > 0 ? toolsUsed.join(',') : undefined,
+          toolCount: toolsUsed.length,
+          hasRichContent: richContent.length > 0,
+          responseLength: assistantContent.length,
+          suggestedActionCount: suggestedActions.length,
+        },
+      });
+
       return {
         response: assistantContent,
         richContent: richContent.length > 0 ? richContent : undefined,
@@ -537,6 +697,19 @@ ${toolInstructions}
       };
     } catch (error) {
       console.error('OpenAI API error:', error);
+
+      this.amplitude.track('ai_chat_error', {
+        userId,
+        deviceId: clientDeviceId,
+        properties: {
+          sessionId,
+          locale,
+          errorType: 'openai_call_failed',
+          errorMessage:
+            error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+          processingTimeMs: Date.now() - startTime,
+        },
+      });
 
       const errorMessage =
         locale === 'ka'
@@ -549,10 +722,308 @@ ${toolInstructions}
     }
   }
 
+  /**
+   * Streaming variant of sendMessage. Yields typed events as work happens
+   * (tool calls fire, response tokens stream in) so the client can render
+   * progressive UI instead of staring at a spinner for several seconds.
+   *
+   * Two phases internally:
+   *   1. Tool-selection completion (non-streaming, fast - ~500ms typical).
+   *      We can't stream tool_calls usefully because clients need the
+   *      whole tool decision before we execute anything.
+   *   2. Response-generation completion (streaming). After all tool calls
+   *      execute, we make a second OpenAI call with stream: true and
+   *      yield text_delta per chunk.
+   *
+   * The MongoDB Message + Amplitude analytics fire at `done` time, after
+   * we've collected the full response from the stream.
+   */
+  async *sendMessageStream(
+    sessionId: string,
+    dto: SendMessageDto,
+    userId?: string,
+    clientDeviceId?: string,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<StreamEvent> {
+    if (!this.openai) {
+      yield {
+        type: 'error',
+        errorType: 'openai_not_configured',
+        message: 'AI assistant is temporarily unavailable.',
+      };
+      return;
+    }
+
+    const session = await this.sessionModel.findById(sessionId).exec();
+    if (!session) {
+      yield { type: 'error', errorType: 'session_not_found', message: 'Chat session not found' };
+      return;
+    }
+    if (userId && session.visitorId && session.visitorId.toString() !== userId) {
+      yield { type: 'error', errorType: 'forbidden', message: 'Forbidden' };
+      return;
+    }
+
+    const locale = dto.locale || session.context?.preferredLocale || 'en';
+    const startTime = Date.now();
+
+    // Save user message immediately so the chat history stays consistent
+    // even if the stream is aborted partway.
+    const userMessage = new this.messageModel({
+      sessionId: new Types.ObjectId(sessionId),
+      role: 'user',
+      content: dto.message,
+    });
+    await userMessage.save();
+
+    this.amplitude.track('ai_chat_message_sent', {
+      userId,
+      deviceId: clientDeviceId,
+      properties: {
+        sessionId,
+        locale,
+        messageLength: dto.message.length,
+        currentPage: dto.currentPage,
+        userRole: session.context?.userRole,
+        isAnonymous: !userId,
+        streaming: true,
+      },
+    });
+
+    yield { type: 'started' };
+
+    const history = await this.messageModel
+      .find({ sessionId: new Types.ObjectId(sessionId) })
+      .sort({ createdAt: -1 })
+      .limit(15)
+      .lean()
+      .exec();
+
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: this.getSystemPrompt(locale, session.context?.userRole),
+      },
+      ...history.reverse().map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      })),
+    ];
+    if (dto.currentPage) {
+      messages.push({
+        role: 'system',
+        content: `The user is currently on the ${dto.currentPage} page.`,
+      });
+    }
+
+    const richContent: RichContent[] = [];
+    const toolContext: ToolContext = {};
+    const toolsUsed: string[] = [];
+    let assistantContent = '';
+
+    try {
+      // Phase 1: tool-selection (non-streaming, deterministic temp).
+      const selection = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages,
+        tools: AI_TOOLS,
+        tool_choice: 'auto',
+        max_tokens: 600,
+        temperature: 0.3,
+      });
+
+      if (abortSignal?.aborted) {
+        yield { type: 'error', errorType: 'aborted', message: 'Client aborted' };
+        return;
+      }
+
+      const selectionMessage = selection.choices[0]?.message;
+
+      // Execute tool calls if any.
+      if (selectionMessage?.tool_calls && selectionMessage.tool_calls.length > 0) {
+        messages.push(selectionMessage as OpenAI.Chat.ChatCompletionMessageParam);
+
+        for (const toolCall of selectionMessage.tool_calls) {
+          if (toolCall.type !== 'function') continue;
+          if (abortSignal?.aborted) {
+            yield { type: 'error', errorType: 'aborted', message: 'Client aborted' };
+            return;
+          }
+
+          yield { type: 'tool_call_start', toolName: toolCall.function.name };
+          const toolStartMs = Date.now();
+
+          const toolResult = await this.executeToolCall(
+            toolCall.function.name,
+            JSON.parse(toolCall.function.arguments),
+            locale as 'en' | 'ka' | 'ru',
+            dto.country ?? (session.context as { country?: string } | undefined)?.country,
+          );
+          const toolDurationMs = Date.now() - toolStartMs;
+          toolsUsed.push(toolCall.function.name);
+
+          this.amplitude.track('ai_chat_tool_called', {
+            userId,
+            deviceId: clientDeviceId,
+            properties: {
+              sessionId,
+              toolName: toolCall.function.name,
+              durationMs: toolDurationMs,
+              hasRichContent: Boolean(toolResult.richContent && toolResult.richContent.length > 0),
+              locale,
+              streaming: true,
+            },
+          });
+
+          if (toolResult.richContent && toolResult.richContent.length > 0) {
+            richContent.push(...toolResult.richContent);
+            for (const block of toolResult.richContent) {
+              yield { type: 'rich_content', block };
+            }
+          }
+          if (toolResult.context) {
+            if (toolResult.context.categoryQuery) toolContext.categoryQuery = toolResult.context.categoryQuery;
+            if (toolResult.context.proIds) toolContext.proIds = toolResult.context.proIds;
+            if (toolResult.context.proUids) toolContext.proUids = toolResult.context.proUids;
+            if (toolResult.context.featureQuery) toolContext.featureQuery = toolResult.context.featureQuery;
+            if (toolResult.context.helpQuery) toolContext.helpQuery = toolResult.context.helpQuery;
+          }
+
+          yield {
+            type: 'tool_call_end',
+            toolName: toolCall.function.name,
+            durationMs: toolDurationMs,
+            hasRichContent: Boolean(toolResult.richContent && toolResult.richContent.length > 0),
+          };
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult.summary),
+          });
+        }
+
+        // Phase 2: response generation with streaming. The non-streaming
+        // sendMessage uses max_tokens 900 here; we cap tighter so the
+        // streamed text feels concise (it streams visibly, the user can
+        // see length growing). If you re-introduce a humanizer/style
+        // prompt later, push it into `messages` before this call.
+        const stream = await this.openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages,
+          max_tokens: 400,
+          temperature: 0.7,
+          stream: true,
+        });
+
+        for await (const chunk of stream) {
+          if (abortSignal?.aborted) break;
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            assistantContent += delta;
+            yield { type: 'text_delta', content: delta };
+          }
+        }
+      } else {
+        // No tools fired. The selectionMessage already contains the
+        // assistant's reply - just emit it as one delta. (Could stream
+        // this path too in future, but it's usually short.)
+        assistantContent = selectionMessage?.content ?? '';
+        if (assistantContent) {
+          yield { type: 'text_delta', content: assistantContent };
+        }
+      }
+
+      if (!assistantContent) {
+        assistantContent =
+          locale === 'ka'
+            ? 'ბოდიში, ვერ დავამუშავე თქვენი მოთხოვნა.'
+            : locale === 'ru'
+              ? 'Извините, не удалось обработать ваш запрос.'
+              : 'Sorry, I could not process your request.';
+        yield { type: 'text_delta', content: assistantContent };
+      }
+
+      const processingTimeMs = Date.now() - startTime;
+
+      const suggestedActions = this.generateSuggestedActions(
+        assistantContent,
+        richContent,
+        locale,
+        toolContext,
+        dto.currentPage,
+      );
+      if (suggestedActions.length > 0) {
+        yield { type: 'suggested_actions', actions: suggestedActions };
+      }
+
+      // Persist the assistant message + bump session counters.
+      const savedAssistantMessage = new this.messageModel({
+        sessionId: new Types.ObjectId(sessionId),
+        role: 'assistant',
+        content: assistantContent,
+        metadata: {
+          model: 'gpt-4o-mini',
+          processingTimeMs,
+          suggestedActions,
+          richContent,
+          streamed: true,
+        },
+      });
+      await savedAssistantMessage.save();
+      await this.sessionModel.findByIdAndUpdate(sessionId, {
+        $inc: { messageCount: 2 },
+        lastMessageAt: new Date(),
+      });
+
+      this.amplitude.track('ai_chat_response_returned', {
+        userId,
+        deviceId: clientDeviceId,
+        properties: {
+          sessionId,
+          locale,
+          processingTimeMs,
+          toolsUsed: toolsUsed.length > 0 ? toolsUsed.join(',') : undefined,
+          toolCount: toolsUsed.length,
+          hasRichContent: richContent.length > 0,
+          responseLength: assistantContent.length,
+          suggestedActionCount: suggestedActions.length,
+          streaming: true,
+        },
+      });
+
+      yield {
+        type: 'done',
+        messageId: String(savedAssistantMessage._id),
+        processingTimeMs,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown';
+      this.amplitude.track('ai_chat_error', {
+        userId,
+        deviceId: clientDeviceId,
+        properties: {
+          sessionId,
+          locale,
+          errorType: 'openai_call_failed',
+          errorMessage: message.slice(0, 200),
+          processingTimeMs: Date.now() - startTime,
+          streaming: true,
+        },
+      });
+      yield {
+        type: 'error',
+        errorType: 'openai_call_failed',
+        message,
+      };
+    }
+  }
+
   private async executeToolCall(
     toolName: string,
     args: any,
     locale: 'en' | 'ka' | 'ru',
+    country?: string,
   ): Promise<{ summary: any; richContent?: RichContent[]; context?: ToolContext }> {
     try {
       switch (toolName) {
@@ -655,7 +1126,7 @@ ${toolInstructions}
         }
 
         case 'get_price_ranges': {
-          const result = await this.aiToolsService.getPriceRanges(args.category);
+          const result = await this.aiToolsService.getPriceRanges(args.category, country);
           const priceInfo = result.data as any;
           return {
             summary: {
@@ -680,12 +1151,42 @@ ${toolInstructions}
             };
           }
           const feature = result.data as any;
+          // Important: do NOT include the internal `feature` slug in the
+          // summary. The LLM was echoing it back to users as
+          // "მოდელი დაბმარია: registration_pro" instead of writing a real
+          // answer. Send localized content (titles + step titles) so the
+          // model has something concrete to summarize.
+          const localizedSteps = (feature.steps || []).map((s: any) => ({
+            step: s.step,
+            title:
+              locale === 'ka'
+                ? s.titleKa
+                : locale === 'ru'
+                  ? s.titleRu
+                  : s.title,
+          }));
           return {
             summary: {
-              feature: feature.feature,
-              title: locale === 'ka' ? feature.titleKa : locale === 'ru' ? feature.titleRu : feature.title,
-              steps: feature.steps?.length || 0,
+              title:
+                locale === 'ka'
+                  ? feature.titleKa
+                  : locale === 'ru'
+                    ? feature.titleRu
+                    : feature.title,
+              description:
+                locale === 'ka'
+                  ? feature.descriptionKa
+                  : locale === 'ru'
+                    ? feature.descriptionRu
+                    : feature.description,
+              steps: localizedSteps,
               actionUrl: feature.actionUrl,
+              actionLabel:
+                locale === 'ka'
+                  ? feature.actionLabelKa
+                  : locale === 'ru'
+                    ? feature.actionLabelRu
+                    : feature.actionLabel,
             },
             richContent: [result],
             context: { featureQuery: args.feature },
@@ -725,11 +1226,35 @@ ${toolInstructions}
             });
           }
 
+          // Same trap as explain_feature: when we shipped only counts to the
+          // LLM it had nothing to work with and parroted the raw query back
+          // as "მოძებნე დახმარება: registration_pro". Send localized titles
+          // for matched features and the actual FAQ Q/A text so the model
+          // can summarize real content. The internal `query` arg is never
+          // sent back - the model already remembers what it asked for.
+          const featureSummaries = (kb.features || []).slice(0, 5).map((f: any) => ({
+            title:
+              locale === 'ka' ? f.titleKa : locale === 'ru' ? f.titleRu : f.title,
+            description:
+              locale === 'ka'
+                ? f.descriptionKa
+                : locale === 'ru'
+                  ? f.descriptionRu
+                  : f.description,
+            actionUrl: f.actionUrl,
+          }));
+          const faqSummaries = (kb.faqs || []).slice(0, limit).map((f: any) => ({
+            question:
+              (locale === 'ka' ? f.question?.ka : locale === 'ru' ? f.question?.ru : f.question?.en) ||
+              f.question?.en,
+            answer:
+              (locale === 'ka' ? f.answer?.ka : locale === 'ru' ? f.answer?.ru : f.answer?.en) ||
+              f.answer?.en,
+          }));
           return {
             summary: {
-              query,
-              matchedFeatures: kb.features?.length || 0,
-              matchedFaqs: kb.faqs?.length || 0,
+              features: featureSummaries,
+              faqs: faqSummaries,
             },
             richContent: blocks.length ? blocks : undefined,
             context: { helpQuery: query },
@@ -765,7 +1290,13 @@ ${toolInstructions}
     const hasFaqs = richContent.some((rc) => rc.type === RichContentType.FAQ_LIST);
     const hasFeatureList = richContent.some((rc) => rc.type === RichContentType.FEATURE_LIST);
 
-    // If showing professionals, suggest browsing more or posting a job
+    // If showing professionals, suggest browsing more or posting a job.
+    // Action TEXT must never include raw slugs (e.g. "plumbing",
+    // "general_construction") or numeric UIDs (e.g. "100027") because that
+    // text becomes the user's next chat message, and the user sees it in
+    // their own bubble. Use pronoun references ("this", "the top result")
+    // and rely on the LLM's conversation history to resolve them - the
+    // previous turn's tool result is right there in the messages array.
     if (hasProList) {
       if (toolContext?.categoryQuery) {
         actions.push({
@@ -773,9 +1304,9 @@ ${toolInstructions}
           label: 'Show typical prices',
           labelKa: 'აჩვენე ტიპური ფასები',
           labelRu: 'Показать типичные цены',
-          action: `What are typical prices for ${toolContext.categoryQuery}?`,
-          actionKa: `${toolContext.categoryQuery} — რა არის ტიპური ფასები?`,
-          actionRu: `Какие типичные цены для ${toolContext.categoryQuery}?`,
+          action: 'What are typical prices for this category?',
+          actionKa: 'რა არის ტიპური ფასები ამ კატეგორიაში?',
+          actionRu: 'Какие типичные цены в этой категории?',
         });
       }
       actions.push({
@@ -786,15 +1317,14 @@ ${toolInstructions}
         url: '/professionals',
       });
       if (toolContext?.proUids?.length) {
-        const uid = toolContext.proUids[0];
         actions.unshift({
           type: 'action',
           label: 'Show reviews for top result',
           labelKa: 'იხილე საუკეთესო შედეგის შეფასებები',
           labelRu: 'Отзывы по лучшему результату',
-          action: `Show me reviews for professional ${uid}`,
-          actionKa: `მაჩვენე პროფესიონალ ${uid}-ის შეფასებები`,
-          actionRu: `Покажи отзывы специалиста ${uid}`,
+          action: 'Show me reviews for the top professional in the list above',
+          actionKa: 'მაჩვენე ზემოთ ნაჩვენები საუკეთესო პროფესიონალის შეფასებები',
+          actionRu: 'Покажи отзывы лучшего специалиста из списка выше',
         });
       }
       actions.push({
@@ -814,9 +1344,9 @@ ${toolInstructions}
           label: 'Show top professionals for this',
           labelKa: 'აჩვენე საუკეთესო პროფესიონალები',
           labelRu: 'Показать лучших специалистов',
-          action: `Show top ${toolContext.categoryQuery} professionals`,
-          actionKa: `მაჩვენე საუკეთესო პროფესიონალები: ${toolContext.categoryQuery}`,
-          actionRu: `Покажи лучших специалистов: ${toolContext.categoryQuery}`,
+          action: 'Show me the top professionals for this category',
+          actionKa: 'მაჩვენე საუკეთესო პროფესიონალები ამ კატეგორიაში',
+          actionRu: 'Покажи лучших специалистов в этой категории',
         });
       }
       actions.push({
@@ -844,14 +1374,25 @@ ${toolInstructions}
             url: feature.actionUrl,
           });
         }
+        // Use the localized feature TITLE in the action text, never the
+        // internal slug. Previously this interpolated `feature.feature`
+        // (e.g. "registration_pro") into the user message, producing
+        // strings like "მოძებნე დახმარება: registration_pro" - which then
+        // appeared as a literal user message and confused the LLM into
+        // echoing the slug back. Also rephrased from a colon "tool: arg"
+        // shape to natural prose so it reads like something a person
+        // would actually type.
+        const featureTitleEn = feature.title || 'this topic';
+        const featureTitleKa = feature.titleKa || feature.title || 'ეს თემა';
+        const featureTitleRu = feature.titleRu || feature.title || 'эта тема';
         actions.push({
           type: 'action',
           label: 'Show related FAQs',
           labelKa: 'იხილე დაკავშირებული კითხვები',
           labelRu: 'Показать связанные вопросы',
-          action: `Search help about ${toolContext?.featureQuery || feature.feature || 'this feature'}`,
-          actionKa: `მოძებნე დახმარება: ${toolContext?.featureQuery || feature.feature || 'ფუნქცია'}`,
-          actionRu: `Найди помощь: ${toolContext?.featureQuery || feature.feature || 'функция'}`,
+          action: `Show me FAQs about ${featureTitleEn}`,
+          actionKa: `მაჩვენე ხშირი კითხვები ${featureTitleKa}-ის შესახებ`,
+          actionRu: `Покажи частые вопросы о ${featureTitleRu}`,
         });
       }
     }

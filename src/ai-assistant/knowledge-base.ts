@@ -933,11 +933,11 @@ export const KNOWLEDGE_BASE: KnowledgeBase = {
       titleKa: 'ფასების მონაცემთა ბაზა',
       titleRu: 'База данных цен',
       description:
-        'Browse current market prices for renovation services in Georgia.',
+        'Browse current market prices for renovation services.',
       descriptionKa:
-        'დაათვალიერეთ მიმდინარე საბაზრო ფასები რემონტის სერვისებზე საქართველოში.',
+        'დაათვალიერეთ მიმდინარე საბაზრო ფასები რემონტის სერვისებზე.',
       descriptionRu:
-        'Просматривайте текущие рыночные цены на ремонтные услуги в Грузии.',
+        'Просматривайте текущие рыночные цены на ремонтные услуги.',
       steps: [
         {
           step: 1,

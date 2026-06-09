@@ -1,10 +1,17 @@
+# Render blueprint - REFERENCE for the Homico services (prod + dev).
+# Secrets (sync: false) are NOT stored here - set them per service in the
+# Render dashboard. `value:` entries are safe, non-secret config.
+#
+# Custom domains (set under each service -> Settings -> Custom Domains, with
+# matching CNAME records at the registrar):
+#   prod:  homico.ge / www.homico.ge        ->  api.homico.ge
+#   dev:   dev.homico.ge (+ dev.homico.co)  ->  api.dev.homico.ge
+
 # ===========================================
-# PRODUCTION ENVIRONMENT
-# Domain: homico.ge
+# PRODUCTION ENVIRONMENT  (branch: main)
 # ===========================================
 services:
-  # Production Backend API (NestJS)
-  # Custom domain: api.homico.ge
+  # Production Backend API (NestJS) - api.homico.ge
   - type: web
     name: homico-backend
     env: node
@@ -13,30 +20,42 @@ services:
     branch: main
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
+    domains:
+      - api.homico.ge
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: MONGODB_URI
+      - key: MONGODB_URI            # homi_prod
         sync: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: OPENAI_API_KEY
+        sync: false
       - key: SENDGRID_API_KEY
         sync: false
       - key: SENDGRID_FROM_EMAIL
-        value: info@homico.ge
-      - key: TWILIO_ACCOUNT_SID
+        value: contact@homico.co
+      - key: PRELUDE_API_KEY        # SMS (international); +995 uses UBill
         sync: false
-      - key: TWILIO_AUTH_TOKEN
+      - key: FRONTEND_URL
+        value: https://homico.ge
+      - key: PUBLIC_BACKEND_URL
+        value: https://api.homico.ge
+      # Payments: a real provider is REQUIRED in production (mock is rejected).
+      - key: PAYMENT_PROVIDER
+        value: bog
+      - key: BOG_CLIENT_ID
         sync: false
-      - key: TWILIO_VERIFY_SID
+      - key: BOG_CLIENT_SECRET
+        sync: false
+      - key: BOG_PUBLIC_KEY
         sync: false
 
-  # Production Frontend App (Next.js)
-  # Custom domain: homico.ge
+  # Production Frontend App (Next.js) - homico.ge
   - type: web
     name: homico-frontend
     env: node
@@ -45,6 +64,9 @@ services:
     branch: main
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
+    domains:
+      - homico.ge
+      - www.homico.ge
     envVars:
       - key: NODE_ENV
         value: production
@@ -56,14 +78,21 @@ services:
         value: https://homico.ge
       - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_MVP_MODE
+        value: "true"
+      # Gated features - flip to "true" in prod only when ready to go live.
+      - key: NEXT_PUBLIC_FEATURE_BOOKINGS
+        value: "false"
+      - key: NEXT_PUBLIC_FEATURE_PAYMENTS
+        value: "false"
 
 # ===========================================
-# DEVELOPMENT ENVIRONMENT
-# Domain: dev.homico.ge
+# DEVELOPMENT / PREVIEW ENVIRONMENT  (branch: dev)
 # ===========================================
 
-  # Dev Backend API (NestJS)
-  # Custom domain: api.dev.homico.ge
+  # Dev Backend API (NestJS) - api.dev.homico.ge
   - type: web
     name: homico-backend-dev
     env: node
@@ -72,30 +101,37 @@ services:
     branch: dev
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
+    domains:
+      - api.dev.homico.ge
     envVars:
       - key: NODE_ENV
         value: development
       - key: PORT
         value: 10000
-      - key: MONGODB_URI
+      - key: MONGODB_URI            # homi_dev - NEVER point dev at homi_prod
         sync: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: OPENAI_API_KEY
+        sync: false
       - key: SENDGRID_API_KEY
         sync: false
       - key: SENDGRID_FROM_EMAIL
-        value: info@homico.ge
-      - key: TWILIO_ACCOUNT_SID
+        value: contact@homico.co
+      - key: PRELUDE_API_KEY
         sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_VERIFY_SID
-        sync: false
+      - key: FRONTEND_URL
+        value: https://dev.homico.ge
+      - key: PUBLIC_BACKEND_URL
+        value: https://api.dev.homico.ge
+      # mock = instant-success payments, no real charges. Switch to "bog" +
+      # set the BOG_* secrets only when testing the real sandbox on dev.
+      - key: PAYMENT_PROVIDER
+        value: mock
 
-  # Dev Frontend App (Next.js)
-  # Custom domain: dev.homico.ge
+  # Dev Frontend App (Next.js) - dev.homico.ge
   - type: web
     name: homico-frontend-dev
     env: node
@@ -104,9 +140,15 @@ services:
     branch: dev
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
+    domains:
+      - dev.homico.ge
+      # - dev.homico.co   # uncomment once the .co DNS CNAME is in place
     envVars:
+      # MUST be production - `next build` breaks with NODE_ENV=development
+      # (mixes dev/prod React runtimes -> "useContext of null" on prerender).
+      # The dev-environment signal is NEXT_PUBLIC_ENV, not NODE_ENV.
       - key: NODE_ENV
-        value: development
+        value: production
       - key: NEXT_PUBLIC_ENV
         value: development
       - key: NEXT_PUBLIC_API_URL
@@ -115,3 +157,10 @@ services:
         value: https://dev.homico.ge
       - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
         sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        sync: false
+      # On in dev so the preview env exercises bookings + payments end to end.
+      - key: NEXT_PUBLIC_FEATURE_BOOKINGS
+        value: "true"
+      - key: NEXT_PUBLIC_FEATURE_PAYMENTS
+        value: "true"

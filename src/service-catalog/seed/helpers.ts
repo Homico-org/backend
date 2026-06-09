@@ -6,7 +6,31 @@
  */
 
 import { translations } from './translations';
-import type { SeedCategory, SeedService, SeedSubcategory, SeedUnitOption } from './types';
+import type { SeedCategory, SeedLocalizedText, SeedService, SeedSubcategory, SeedUnitOption } from './types';
+
+/**
+ * Optional extras a `sub()` / `svc()` call can carry on top of the
+ * required positional args. Kept as a trailing options bag rather than
+ * extra positional params so the common single-line `sub("Sxx", ...)`
+ * call sites stay readable. Today only `keywords` + `tags` flow
+ * through; add more fields here as the seed schema grows.
+ */
+export interface SeedExtras {
+  /**
+   * Localized search synonyms. Each entry is a single concept spelled
+   * in each locale we care about - e.g. drywall as
+   * `{ en: "gipso drywall gypsum plasterboard",
+   *    ka: "გიფსოკარტონი გიფსო",
+   *    ru: "гипсокартон штукатурка" }`.
+   * The API flattens these into a single `string[]` for the frontend.
+   */
+  keywords?: SeedLocalizedText[];
+  /**
+   * Flat free-form tags (locale-agnostic). Use for `urgent`, `eco`,
+   * `licensed`, `weekend`, etc. - not for translations.
+   */
+  tags?: string[];
+}
 
 function lookup(id: string): { en: string; ka: string; ru: string } {
   const tr = translations[id];
@@ -18,7 +42,12 @@ function lookup(id: string): { en: string; ka: string; ru: string } {
   return tr;
 }
 
-export function svc(id: string, key: string, unitOpts: SeedUnitOption[]): SeedService {
+export function svc(
+  id: string,
+  key: string,
+  unitOpts: SeedUnitOption[],
+  extras?: SeedExtras,
+): SeedService {
   if (unitOpts.length === 0) {
     throw new Error(`Service "${id}" must have at least one unit option.`);
   }
@@ -32,6 +61,8 @@ export function svc(id: string, key: string, unitOpts: SeedUnitOption[]): SeedSe
     maxPrice: primary.maxPrice,
     unit: primary.unit,
     unitLabel: primary.label,
+    keywords: extras?.keywords,
+    tags: extras?.tags,
   };
 }
 
@@ -41,6 +72,7 @@ export function sub(
   iconName: string,
   services: SeedService[],
   sortOrder: number,
+  extras?: SeedExtras,
 ): SeedSubcategory {
   // NOTE: matches legacy seed-catalog-v3 behavior — `min` was always 0 because
   // `Math.min(..., 0)` floors the result. Kept as-is for parity; revisit when
@@ -60,6 +92,8 @@ export function sub(
     services,
     addons: [],
     additionalServices: [],
+    keywords: extras?.keywords,
+    tags: extras?.tags,
   };
 }
 

@@ -9,6 +9,7 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
+import { AmplitudeService } from "../analytics/amplitude.service";
 import { ActivityType, LoggerService } from "../common/logger";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { User, UserRole } from "../users/schemas/user.schema";
@@ -28,7 +29,46 @@ export class AuthService {
     private readonly verificationService: VerificationService,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly logger: LoggerService,
+    private readonly amplitude: AmplitudeService,
   ) {}
+
+  /**
+   * Mirror auth events to Amplitude. Server-side tracking is more reliable
+   * than the frontend equivalents (no ad-blocker drop, no client-side
+   * skip-on-error), and we use it as ground truth for funnel metrics.
+   *
+   * Past-tense names (`user_registered`, `user_logged_in`) intentionally
+   * differ from the frontend's present-tense (`register`, `login`) so the
+   * two sources don't collide in Amplitude dashboards during the parallel
+   * period. Once we're confident in server tracking, the frontend hooks
+   * for these specific actions can be deleted to remove the duplicate.
+   */
+  private trackAuthEvent(
+    eventName: "user_registered" | "user_logged_in",
+    user: { _id: { toString(): string }; uid?: number; role: string; city?: string; email?: string; phone?: string },
+    extras?: Record<string, string | number | boolean | undefined>,
+  ) {
+    const userId = user._id.toString();
+    if (eventName === "user_registered") {
+      // Set persistent user properties on register so every subsequent
+      // event has role / city attached without re-identifying.
+      this.amplitude.identify(userId, {
+        role: user.role,
+        uid: user.uid,
+        city: user.city,
+        hasEmail: Boolean(user.email),
+        hasPhone: Boolean(user.phone),
+      });
+    }
+    this.amplitude.track(eventName, {
+      userId,
+      properties: {
+        role: user.role,
+        uid: user.uid,
+        ...extras,
+      },
+    });
+  }
 
   private buildUserResponse(user: any) {
     return {
@@ -75,6 +115,10 @@ export class AuthService {
         phone: user.phone,
         registrationMethod: user.phone ? "phone" : "email",
       },
+    });
+
+    this.trackAuthEvent("user_registered", user, {
+      registrationMethod: user.phone ? "phone" : "email",
     });
 
     return {
@@ -127,6 +171,8 @@ export class AuthService {
       },
     });
 
+    this.trackAuthEvent("user_logged_in", user, { loginMethod });
+
     return {
       ...this.generateTokens(user),
       user: this.buildUserResponse(user),
@@ -159,6 +205,8 @@ export class AuthService {
         userAgent: requestMeta?.userAgent,
         details: { role: existing.role, loginMethod: "phone_otp" },
       });
+
+      this.trackAuthEvent("user_logged_in", existing, { loginMethod: "phone_otp" });
 
       return {
         ...this.generateTokens(existing),
@@ -196,6 +244,8 @@ export class AuthService {
       userAgent: requestMeta?.userAgent,
       details: { role: user.role, registrationMethod: "phone_otp" },
     });
+
+    this.trackAuthEvent("user_registered", user, { registrationMethod: "phone_otp" });
 
     return {
       ...this.generateTokens(user),
@@ -246,6 +296,11 @@ export class AuthService {
         },
       });
 
+      this.trackAuthEvent("user_registered", existing, {
+        registrationMethod: "phone_otp",
+        upgradedFromClient: true,
+      });
+
       return {
         ...this.generateTokens(existing),
         user: this.buildUserResponse(existing),
@@ -278,6 +333,8 @@ export class AuthService {
       userAgent: requestMeta?.userAgent,
       details: { role: UserRole.PRO, registrationMethod: "phone_otp" },
     });
+
+    this.trackAuthEvent("user_registered", user, { registrationMethod: "phone_otp" });
 
     return {
       ...this.generateTokens(user),

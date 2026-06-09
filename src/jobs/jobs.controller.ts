@@ -27,8 +27,6 @@ import { PollsService } from './polls.service';
 import { ProjectTrackingService } from './project-tracking.service';
 import { JobPropertyType, JobStatus } from './schemas/job.schema';
 import { ProjectStage } from './schemas/project-tracking.schema';
-import { ReactionType, WorkspaceItemType } from './schemas/workspace.schema';
-import { WorkspaceService } from './workspace.service';
 
 @ApiTags('Jobs')
 @Controller('jobs')
@@ -37,7 +35,6 @@ export class JobsController {
     private readonly jobsService: JobsService,
     private readonly jobCommentsService: JobCommentsService,
     private readonly projectTrackingService: ProjectTrackingService,
-    private readonly workspaceService: WorkspaceService,
     private readonly pollsService: PollsService,
   ) {}
 
@@ -74,6 +71,12 @@ export class JobsController {
   @ApiQuery({ name: 'clientType', required: false, description: 'Filter by client type: individual or organization' })
   @ApiQuery({ name: 'deadline', required: false, description: 'Deadline filter: urgent (< 7 days), week, month, flexible' })
   @ApiQuery({ name: 'savedOnly', required: false, description: 'Filter to only show saved/favorite jobs (requires auth)' })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    description:
+      'ISO 3166-1 alpha-2 country code. Scopes the listing to jobs in that marketplace. Defaults to "GE" for non-admin callers.',
+  })
   @ApiResponse({ status: 200, description: 'List of jobs with pagination' })
   @UseGuards(OptionalJwtAuthGuard)
   findAllJobs(
@@ -97,6 +100,7 @@ export class JobsController {
     @Query('clientType') clientType?: string,
     @Query('deadline') deadline?: string,
     @Query('savedOnly') savedOnly?: string,
+    @Query('country') country?: string,
   ) {
     // Handle categories - can be array of params or comma-separated string
     let categoriesArray: string[] | undefined;
@@ -139,6 +143,13 @@ export class JobsController {
       deadline,
       savedOnly: savedOnly === 'true',
       userId: user?.userId,
+      // Same scoping rule as /users/pros: non-admin callers default to
+      // the GE marketplace; admins omit the filter for cross-country
+      // moderation views. Uppercased to match the stored ISO 3166-1
+      // form in case a caller sends "us" or "Us" from a URL segment.
+      country: country
+        ? country.toUpperCase()
+        : (user?.role === 'admin' ? undefined : 'GE'),
     });
   }
 
@@ -304,6 +315,15 @@ export class JobsController {
     return this.jobsService.acceptProposal(proposalId, user.userId);
   }
 
+  @Post('proposals/:proposalId/reconcile-payment')
+  @ApiOperation({ summary: 'Reconcile a proposal-hire escrow payment after returning from the provider' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO)
+  reconcileProjectPayment(@Param('proposalId') proposalId: string, @CurrentUser() user: any) {
+    return this.jobsService.reconcileProjectPayment(proposalId, user.userId);
+  }
+
   @Post('proposals/:proposalId/reject')
   @ApiOperation({ summary: 'Reject a proposal' })
   @ApiBearerAuth('JWT-auth')
@@ -362,7 +382,13 @@ export class JobsController {
   @ApiOperation({ summary: 'Update project stage' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Stage updated successfully' })
-  @UseGuards(JwtAuthGuard)
+  // Defense in depth: the service already enforces "pro advances, client
+  // can only do COMPLETED→REVIEW", but adding the role guard rejects
+  // anonymous-token-but-other-role calls at the controller layer so
+  // they never reach the service. The full audit history (#15) flagged
+  // the same inconsistency on every project-tracking endpoint.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async updateProjectStage(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -375,7 +401,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Client confirms project completion and triggers payment' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Project confirmed and closed successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN)
   async confirmProjectCompletion(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -419,7 +446,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Add comment to project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Comment added successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async addProjectComment(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -431,7 +459,8 @@ export class JobsController {
   @Get('projects/:jobId/messages')
   @ApiOperation({ summary: 'Get project messages' })
   @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getProjectMessages(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -443,7 +472,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Send message in project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Message sent successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async sendProjectMessage(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -456,7 +486,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Mark project messages as read' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Messages marked as read' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async markMessagesAsRead(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -468,7 +499,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Mark polls as viewed' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Polls marked as viewed' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async markPollsAsViewed(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -476,22 +508,11 @@ export class JobsController {
     return this.projectTrackingService.markPollsAsViewed(jobId, user.userId);
   }
 
-  @Post('projects/:jobId/materials/viewed')
-  @ApiOperation({ summary: 'Mark materials as viewed' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Materials marked as viewed' })
-  @UseGuards(JwtAuthGuard)
-  async markMaterialsAsViewed(
-    @Param('jobId') jobId: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.projectTrackingService.markMaterialsAsViewed(jobId, user.userId);
-  }
-
   @Get('projects/:jobId/unread-counts')
   @ApiOperation({ summary: 'Get unread counts for chat, polls, materials' })
   @ApiBearerAuth('JWT-auth')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getUnreadCounts(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -503,7 +524,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Add attachment to project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 201, description: 'Attachment added successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async addProjectAttachment(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -522,7 +544,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Delete attachment from project' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Attachment deleted successfully' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async deleteProjectAttachment(
     @Param('jobId') jobId: string,
     @Param('index') index: string,
@@ -535,7 +558,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Get project history/activity log' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Project history' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.PRO, UserRole.ADMIN)
   async getProjectHistory(
     @Param('jobId') jobId: string,
     @CurrentUser() user: any,
@@ -550,225 +574,6 @@ export class JobsController {
       eventTypes: eventTypes ? eventTypes.split(',') as any : undefined,
       userFilter,
     });
-  }
-
-  // ============== WORKSPACE ROUTES ==============
-
-  @Get('projects/:jobId/workspace')
-  @ApiOperation({ summary: 'Get workspace for a project' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Workspace data' })
-  @UseGuards(JwtAuthGuard)
-  async getWorkspace(@Param('jobId') jobId: string, @CurrentUser() user: any) {
-    return this.workspaceService.getWorkspace(jobId, user.userId);
-  }
-
-  @Post('projects/:jobId/workspace/sections')
-  @ApiOperation({ summary: 'Create a new section in workspace' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 201, description: 'Section created successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async createSection(
-    @Param('jobId') jobId: string,
-    @CurrentUser() user: any,
-    @Body() body: {
-      title: string;
-      description?: string;
-      attachments?: Array<{
-        fileName: string;
-        fileUrl: string;
-        fileType: string;
-        fileSize?: number;
-      }>;
-    },
-  ) {
-    return this.workspaceService.createSection(jobId, user.userId, body);
-  }
-
-  @Patch('projects/:jobId/workspace/sections/:sectionId')
-  @ApiOperation({ summary: 'Update a section' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Section updated successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async updateSection(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @CurrentUser() user: any,
-    @Body() body: {
-      title?: string;
-      description?: string;
-      attachments?: Array<{
-        _id?: string;
-        fileName: string;
-        fileUrl: string;
-        fileType: string;
-        fileSize?: number;
-      }>;
-    },
-  ) {
-    return this.workspaceService.updateSection(jobId, sectionId, user.userId, body);
-  }
-
-  @Delete('projects/:jobId/workspace/sections/:sectionId')
-  @ApiOperation({ summary: 'Delete a section' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Section deleted successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async deleteSection(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.workspaceService.deleteSection(jobId, sectionId, user.userId);
-    return { success: true };
-  }
-
-  @Post('projects/:jobId/workspace/sections/:sectionId/items')
-  @ApiOperation({ summary: 'Add an item to a section' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 201, description: 'Item added successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async createItem(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @CurrentUser() user: any,
-    @Body() body: {
-      title: string;
-      description?: string;
-      type: WorkspaceItemType;
-      fileUrl?: string;
-      linkUrl?: string;
-      price?: number;
-      currency?: string;
-      storeName?: string;
-      storeAddress?: string;
-    },
-  ) {
-    return this.workspaceService.createItem(jobId, sectionId, user.userId, body);
-  }
-
-  @Patch('projects/:jobId/workspace/sections/:sectionId/items/:itemId')
-  @ApiOperation({ summary: 'Update an item' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Item updated successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async updateItem(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @Param('itemId') itemId: string,
-    @CurrentUser() user: any,
-    @Body() body: {
-      title?: string;
-      description?: string;
-      fileUrl?: string;
-      linkUrl?: string;
-      price?: number;
-      currency?: string;
-      storeName?: string;
-      storeAddress?: string;
-    },
-  ) {
-    return this.workspaceService.updateItem(jobId, sectionId, itemId, user.userId, body);
-  }
-
-  @Delete('projects/:jobId/workspace/sections/:sectionId/items/:itemId')
-  @ApiOperation({ summary: 'Delete an item' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Item deleted successfully' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async deleteItem(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @Param('itemId') itemId: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.workspaceService.deleteItem(jobId, sectionId, itemId, user.userId);
-    return { success: true };
-  }
-
-  @Post('projects/:jobId/workspace/sections/:sectionId/items/:itemId/reactions')
-  @ApiOperation({ summary: 'Toggle reaction on an item' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Reaction toggled' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.CLIENT, UserRole.PRO)
-  async toggleReaction(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @Param('itemId') itemId: string,
-    @CurrentUser() user: any,
-    @Body() body: { type: ReactionType },
-  ) {
-    return this.workspaceService.toggleReaction(
-      jobId,
-      sectionId,
-      itemId,
-      user.userId,
-      body.type,
-    );
-  }
-
-  @Post('projects/:jobId/workspace/sections/:sectionId/items/:itemId/comments')
-  @ApiOperation({ summary: 'Add comment on an item' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 201, description: 'Comment added' })
-  @UseGuards(JwtAuthGuard)
-  async addItemComment(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @Param('itemId') itemId: string,
-    @CurrentUser() user: any,
-    @Body() body: { content: string },
-  ) {
-    return this.workspaceService.addComment(
-      jobId,
-      sectionId,
-      itemId,
-      user.userId,
-      body.content,
-    );
-  }
-
-  @Delete('projects/:jobId/workspace/sections/:sectionId/items/:itemId/comments/:commentId')
-  @ApiOperation({ summary: 'Delete a comment' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Comment deleted' })
-  @UseGuards(JwtAuthGuard)
-  async deleteItemComment(
-    @Param('jobId') jobId: string,
-    @Param('sectionId') sectionId: string,
-    @Param('itemId') itemId: string,
-    @Param('commentId') commentId: string,
-    @CurrentUser() user: any,
-  ) {
-    await this.workspaceService.deleteComment(
-      jobId,
-      sectionId,
-      itemId,
-      commentId,
-      user.userId,
-    );
-    return { success: true };
-  }
-
-  @Patch('projects/:jobId/workspace/sections/reorder')
-  @ApiOperation({ summary: 'Reorder sections' })
-  @ApiBearerAuth('JWT-auth')
-  @ApiResponse({ status: 200, description: 'Sections reordered' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PRO)
-  async reorderSections(
-    @Param('jobId') jobId: string,
-    @CurrentUser() user: any,
-    @Body() body: { sectionIds: string[] },
-  ) {
-    return this.workspaceService.reorderSections(jobId, user.userId, body.sectionIds);
   }
 
   // ============== JOB INVITATION ROUTES ==============

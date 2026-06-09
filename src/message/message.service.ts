@@ -7,6 +7,17 @@ import { ConversationService } from '../conversation/conversation.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { User } from '../users/schemas/user.schema';
 import { SmsService } from '../verification/services/sms.service';
+import { resolveUserLocale, type SupportedLocale } from '../common/countries';
+
+// Fallback wrapper for SMS notifications when the message body is
+// empty (e.g. attachment-only sends). Localized to the recipient's
+// resolved locale; with a snippet we keep the snippet verbatim and
+// only the URL trails, no wrapper text needed.
+const MESSAGE_NEW_SMS: Record<SupportedLocale, (sender: string, url: string) => string> = {
+  en: (sender, url) => `${sender} sent you a message on Homico. ${url}`,
+  ka: (sender, url) => `${sender}-მ მოგწერათ Homico-ზე. ${url}`,
+  ru: (sender, url) => `${sender} написал(а) вам сообщение в Homico. ${url}`,
+};
 
 @Injectable()
 export class MessageService {
@@ -80,7 +91,7 @@ export class MessageService {
         try {
           const recipient = await this.userModel
             .findById(recipientUserId)
-            .select('phone notificationPreferences')
+            .select('phone notificationPreferences country languages preferredLocale')
             .lean();
 
           const phone = (recipient as any)?.phone as string | undefined;
@@ -100,10 +111,20 @@ export class MessageService {
               .trim()
               .slice(0, 80);
 
-            const url = `https://www.homico.ge/messages?recipient=${senderId}`;
+            // Marketplace-aware host for the deep link. The /messages
+            // route is country-agnostic so we don't need a country
+            // prefix - just point at the international root.
+            const appUrl =
+              process.env.APP_URL ||
+              process.env.NEXT_PUBLIC_APP_URL ||
+              'https://homico.co';
+            const url = `${appUrl}/messages?recipient=${senderId}`;
+
+            // Localize the wrapper text to the *recipient's* locale.
+            const locale = resolveUserLocale(recipient as never);
             const smsText = snippet
               ? `${senderName}: "${snippet}" ${url}`
-              : `${senderName} sent you a message on Homico. ${url}`;
+              : MESSAGE_NEW_SMS[locale](senderName, url);
 
             await this.smsService.sendNotificationSms(phone, smsText);
           }

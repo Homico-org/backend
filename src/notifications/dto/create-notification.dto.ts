@@ -40,6 +40,20 @@ export class CreateNotificationDto {
   @ApiPropertyOptional()
   @IsOptional()
   metadata?: Record<string, any>;
+
+  @ApiPropertyOptional({ description: "i18n key for the notification title, resolved by the frontend at render time (e.g. 'notif.profile_approved.title')" })
+  @IsString()
+  @IsOptional()
+  titleKey?: string;
+
+  @ApiPropertyOptional({ description: "i18n key for the notification message" })
+  @IsString()
+  @IsOptional()
+  messageKey?: string;
+
+  @ApiPropertyOptional({ description: "Interpolation params for the localized strings ({clientName}, {jobTitle}, etc.)" })
+  @IsOptional()
+  i18nParams?: Record<string, string | number>;
 }
 
 export class MarkReadDto {

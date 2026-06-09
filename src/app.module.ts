@@ -31,11 +31,16 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { PublicModule } from './public/public.module';
 import { ServiceRequestsModule } from './service-requests/service-requests.module';
 import { CatalogSuggestionsModule } from './catalog-suggestions/catalog-suggestions.module';
+import { PaymentsModule } from './payments/payments.module';
 import { BusinessModule } from './business/business.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ServiceCatalogModule } from './service-catalog/service-catalog.module';
+import { SupplierCatalogModule } from './supplier-catalog/supplier-catalog.module';
+import { ProductOrdersModule } from './product-orders/product-orders.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { MilestonePaymentsModule } from './milestone-payments/milestone-payments.module';
 import { InviteModule } from './invite/invite.module';
+import { SlaModule } from './sla/sla.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -95,6 +100,11 @@ import { APP_GUARD } from '@nestjs/core';
       { name: 'default', ttl: 60_000, limit: 120 },
       // Extra protection against burst traffic
       { name: 'burst', ttl: 10_000, limit: 40 },
+      // AI cost ceiling: caps any single IP at ~200 OpenAI-billable
+      // requests per day. Cost math: 200 * ~$0.001 = ~$0.20/IP/day, so
+      // worst case (1000 attackers) = $200/day cap. Layered on top of
+      // the per-route limits, not instead of.
+      { name: 'ai-cost', ttl: 24 * 60 * 60_000, limit: 200 },
     ]),
     AuthModule,
     UsersModule,
@@ -122,10 +132,15 @@ import { APP_GUARD } from '@nestjs/core';
     BusinessModule,
     AnalyticsModule,
     ServiceCatalogModule,
+    SupplierCatalogModule,
+    ProductOrdersModule,
     BookingsModule,
+    MilestonePaymentsModule,
     InviteModule,
     ServiceRequestsModule,
     CatalogSuggestionsModule,
+    PaymentsModule,
+    SlaModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default

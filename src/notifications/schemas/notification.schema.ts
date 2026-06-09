@@ -30,6 +30,10 @@ export enum NotificationType {
   ACCOUNT_VERIFIED = 'account_verified',
   PROFILE_UPDATE = 'profile_update',
   SYSTEM_ANNOUNCEMENT = 'system_announcement',
+
+  // Premium subscription lifecycle
+  PREMIUM_EXPIRING = 'premium_expiring',
+  PREMIUM_EXPIRED = 'premium_expired',
   
   // Admin actions
   PROFILE_APPROVED = 'profile_approved',
@@ -41,9 +45,33 @@ export enum NotificationType {
   BOOKING_STARTED = 'booking_started',
   BOOKING_CANCELLED = 'booking_cancelled',
   BOOKING_COMPLETED = 'booking_completed',
+  BOOKING_DISPUTED = 'booking_disputed',
 
   // Review prompt
   REVIEW_PROMPT = 'review_prompt',
+
+  // SLA accountability (added 2026-05). Fired by SlaService when a pro
+  // misses a response deadline or has their penalty level change. See
+  // `~/.claude/plans/staged-crunching-meadow.md`.
+  SLA_WARNING = 'sla_warning',
+  SLA_DEMOTED = 'sla_demoted',
+  SLA_PAUSED = 'sla_paused',
+  SLA_RECOVERED = 'sla_recovered',
+  PROFILE_INCOMPLETE_NAG = 'profile_incomplete_nag',
+  NEW_ORDER = 'new_order',
+  ORDER_UPDATE = 'order_update',
+
+  // Milestone / escrow payments (project engagements).
+  MILESTONE_PROPOSED = 'milestone_proposed',
+  MILESTONE_APPROVED = 'milestone_approved',
+  MILESTONE_FUNDED = 'milestone_funded',
+  MILESTONE_SUBMITTED = 'milestone_submitted',
+  MILESTONE_RELEASED = 'milestone_released',
+  MILESTONE_DISPUTED = 'milestone_disputed',
+
+  // Ops alert: a job was posted in a category with no matching pros, so it
+  // would otherwise sit with zero bids and the client would churn.
+  SUPPLY_GAP = 'supply_gap',
 }
 
 @Schema({ timestamps: true })
@@ -58,11 +86,35 @@ export class Notification extends Document {
   })
   type: NotificationType;
 
+  // The English fallback copy. Kept required so legacy documents and
+  // surfaces that don't read i18nKey (push, email digests, admin
+  // logs) always have something to render.
   @Prop({ required: true })
   title: string;
 
   @Prop({ required: true })
   message: string;
+
+  // i18n keys for localized rendering on the frontend (added 2026-05).
+  // When present, the bell-icon feed resolves `t(titleKey, params)` /
+  // `t(messageKey, params)` against the active locale. The `title` /
+  // `message` strings above are the EN fallback used when the i18n
+  // map doesn't include the key (e.g. older notification types).
+  //
+  // Format: `notif.<type>.title`, `notif.<type>.message` - matches
+  // the frontend locale namespace.
+  @Prop({ type: String })
+  titleKey?: string;
+
+  @Prop({ type: String })
+  messageKey?: string;
+
+  // Interpolation params for {placeholder}-style values inside the
+  // localized title/message (e.g. job title, client name, amount).
+  // Stored as a plain object to avoid coupling to a specific i18n
+  // library's argument format.
+  @Prop({ type: Object })
+  i18nParams?: Record<string, string | number>;
 
   @Prop({ type: Boolean, default: false, index: true })
   isRead: boolean;
@@ -73,7 +125,7 @@ export class Notification extends Document {
   @Prop({ type: Types.ObjectId, refPath: 'referenceModel' })
   referenceId?: Types.ObjectId;
 
-  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking'] })
+  @Prop({ type: String, enum: ['Job', 'User', 'Review', 'Message', 'Proposal', 'Booking', 'Order', 'MilestonePayment'] })
   referenceModel?: string;
 
   @Prop({ type: Object })

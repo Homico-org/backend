@@ -36,6 +36,15 @@ export class SendOtpDto {
   @IsOptional()
   @IsEnum(OtpChannel)
   channel?: OtpChannel;
+
+  @ApiProperty({
+    description: "UI locale (en/ka/ru) for the OTP email body. Defaults to 'en' when omitted; ignored for SMS (UBill ships KA, Prelude ships EN).",
+    example: 'en',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  locale?: string;
 }
 
 export class VerifyOtpDto {

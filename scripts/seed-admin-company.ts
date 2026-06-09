@@ -1,10 +1,24 @@
 /**
- * Seed Admin and Company users for dev and prod environments
+ * Seed Admin and Company users for dev and prod environments.
+ *
+ * IMPORTANT (security update 2026-05): this script previously contained
+ * hardcoded passwords. Those are now refused. Passwords MUST come from
+ * env vars at invocation time so credentials never enter git.
+ *
+ * For a SINGLE admin: use `scripts/make-admin.ts` instead - it's the
+ * supported path for adding admin accounts post-launch.
+ *
+ * For BULK seeding (dev demo data only): set SEED_DEFAULT_PASSWORD env
+ * var. The same password is applied to all seeded accounts - rotate
+ * immediately after seeding.
  *
  * Usage:
- *   npx ts-node scripts/seed-admin-company.ts dev
- *   npx ts-node scripts/seed-admin-company.ts prod
- *   npx ts-node scripts/seed-admin-company.ts both
+ *   SEED_DEFAULT_PASSWORD='strong-temp-password' \
+ *     npx ts-node scripts/seed-admin-company.ts dev
+ *
+ * Production usage is strongly discouraged - use make-admin.ts instead.
+ * If you must run this against prod, set FORCE_SEED_PROD=1 explicitly
+ * AND change every seeded password immediately after.
  */
 
 import * as bcrypt from "bcrypt";
@@ -18,6 +32,51 @@ dotenv.config({ path: resolve(__dirname, "../.env") });
 // Check for command line argument for database
 const args = process.argv.slice(2);
 const targetEnv = args[0] || "both";
+
+// ---- Security guards (added 2026-05) ----
+
+const SEED_DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD?.trim();
+if (!SEED_DEFAULT_PASSWORD || SEED_DEFAULT_PASSWORD.length < 10) {
+  console.error(
+    "\nSEED_DEFAULT_PASSWORD env var is required (min 10 chars).\n" +
+      "This script previously had hardcoded passwords - those are removed.\n" +
+      "For a SINGLE admin, prefer scripts/make-admin.ts instead.\n",
+  );
+  process.exit(1);
+}
+
+// Production needs explicit confirmation. Seeding 5+ demo company users
+// into prod is rarely what you actually want.
+if (
+  (targetEnv === "prod" || targetEnv === "both") &&
+  process.env.FORCE_SEED_PROD !== "1"
+) {
+  console.error(
+    "\nSeeding to production requires FORCE_SEED_PROD=1.\n" +
+      "Consider running against dev only, or use scripts/make-admin.ts for a single admin.\n",
+  );
+  process.exit(1);
+}
+
+// Reject any leaked-in-git password as the SEED_DEFAULT_PASSWORD (people
+// often paste the old one to "make it work again"). Add new known-bad
+// values here as needed.
+const LEAKED_PASSWORDS = new Set([
+  "HomAdmin2024!",
+  "SuperAdmin2024!",
+  "BuildMaster2024!",
+  "RemontPlus2024!",
+  "HomeServe2024!",
+  "DesignHouse2024!",
+  "BatumiBuilders2024!",
+]);
+if (LEAKED_PASSWORDS.has(SEED_DEFAULT_PASSWORD)) {
+  console.error(
+    "\nSEED_DEFAULT_PASSWORD matches a previously-leaked password. " +
+      "Pick a different one.\n",
+  );
+  process.exit(1);
+}
 
 // Database URIs
 const DB_URIS: Record<string, string> = {
@@ -89,7 +148,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "Homico Admin",
     email: "admin@homico.ge",
-    password: "HomAdmin2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "admin",
     phone: "+995599000001",
     city: "tbilisi",
@@ -99,7 +158,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "Super Admin",
     email: "superadmin@homico.ge",
-    password: "SuperAdmin2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "admin",
     phone: "+995599000002",
     city: "tbilisi",
@@ -110,7 +169,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "BuildMaster Georgia",
     email: "info@buildmaster.ge",
-    password: "BuildMaster2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "company",
     phone: "+995599100001",
     city: "tbilisi",
@@ -141,7 +200,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "რემონტ პლუსი",
     email: "contact@remontplus.ge",
-    password: "RemontPlus2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "company",
     phone: "+995599100002",
     city: "tbilisi",
@@ -173,7 +232,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "HomeServe Georgia",
     email: "service@homeserve.ge",
-    password: "HomeServe2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "company",
     phone: "+995599100003",
     city: "tbilisi",
@@ -205,7 +264,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "Design House Tbilisi",
     email: "hello@designhouse.ge",
-    password: "DesignHouse2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "company",
     phone: "+995599100004",
     city: "tbilisi",
@@ -232,7 +291,7 @@ const ADMIN_COMPANY_USERS = [
   {
     name: "Batumi Builders",
     email: "info@batumibuilders.ge",
-    password: "BatumiBuilders2024!",
+    password: SEED_DEFAULT_PASSWORD,
     role: "company",
     phone: "+995599100005",
     city: "batumi",

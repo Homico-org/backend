@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -182,6 +183,18 @@ export class CreateJobDto {
   @Type(() => JobAddressDto)
   @IsOptional()
   address?: JobAddressDto;
+
+  // ISO 3166-1 alpha-2 country code where the work happens (added
+  // 2026-05). Defaults to "GE" in jobs.service if omitted so existing
+  // clients keep posting without breaking. New marketplaces send this
+  // explicitly from the country-prefixed frontend route.
+  @ApiPropertyOptional({
+    description:
+      "ISO 3166-1 alpha-2 country code where the work will be performed. Defaults to 'GE' if omitted.",
+  })
+  @IsString()
+  @IsOptional()
+  country?: string;
 
   @ApiPropertyOptional({ enum: JobPropertyType })
   @IsEnum(JobPropertyType)
@@ -393,4 +406,16 @@ export class CreateJobDto {
   @IsString({ each: true })
   @IsOptional()
   invitedPros?: string[];
+
+  // === Project umbrella linkage (2026-05) ===
+  // Set when this job is created to fill a role inside a Project.
+  @ApiPropertyOptional({ description: "Parent project id (umbrella)" })
+  @IsMongoId()
+  @IsOptional()
+  projectId?: string;
+
+  @ApiPropertyOptional({ description: "Parent project engagement id" })
+  @IsString()
+  @IsOptional()
+  engagementId?: string;
 }

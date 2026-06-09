@@ -19,7 +19,12 @@ export const electricalCategory = cat(
       svc("V090", "wiring_outlet_svc", [U.point(20, 50)]),
       svc("V091", "wiring_repair_svc", [U.job(30, 150)]),
       svc("V092", "wiring_ev_svc", [U.unit(200, 800)]),
-    ], 0),
+    ], 0, {
+      keywords: [
+        { en: "electrical electrician wiring cable outlet socket", ka: "ელექტრობა ელექტრიკოსი გაყვანილობა როზეტი", ru: "электрика электрик проводка розетка" },
+        { en: "eltechnik elektrika", ka: "ელექტრო", ru: "электро" },
+      ],
+    }),
     sub("S027", "lighting", "Lightbulb", [
       svc("V093", "light_ceiling_svc", [U.unit(25, 80)]),
       svc("V094", "light_spot_svc", [U.unit(15, 50)]),

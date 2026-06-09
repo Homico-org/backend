@@ -11,6 +11,14 @@ export class AnalyzeEstimateDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export enum RenovationType {
@@ -61,6 +69,14 @@ export class CalculateRenovationDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class EstimateItemDto {
@@ -84,6 +100,14 @@ export class CompareEstimatesDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class GetPriceInfoDto {
@@ -95,6 +119,14 @@ export class GetPriceInfoDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class ChatMessageDto {
@@ -118,6 +150,14 @@ export class ChatDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class GenerateBioDto {
@@ -129,6 +169,14 @@ export class GenerateBioDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class AnalyzeProjectDto {
@@ -151,4 +199,12 @@ export class AnalyzeProjectDto {
   @IsOptional()
   @IsString()
   locale?: string;
+
+  @ApiPropertyOptional({
+    description: 'Marketplace country code (GE/IL/FR/US/DE/UK). Drives currency and reference-price block.',
+    default: 'GE',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 }

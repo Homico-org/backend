@@ -19,6 +19,7 @@ import {
 import { Otp, OtpPurpose, OtpType } from "./schemas/otp.schema";
 import { EmailService } from "./services/email.service";
 import { OtpChannelType, SmsService } from "./services/sms.service";
+import { resolveUserLocale, type SupportedLocale } from "../common/countries";
 
 @Injectable()
 export class VerificationService {
@@ -45,7 +46,7 @@ export class VerificationService {
   async sendOtp(
     sendOtpDto: SendOtpDto,
   ): Promise<{ message: string; expiresIn: number; channel?: string }> {
-    const { identifier, type, channel } = sendOtpDto;
+    const { identifier, type, channel, locale: requestedLocale } = sendOtpDto;
 
     // Check rate limiting - max 3 OTPs per identifier in 10 minutes
     const recentOtps = await this.otpModel.countDocuments({
@@ -90,11 +91,16 @@ export class VerificationService {
       // Store OTP record
       // For UBill/dev: Store actual code for local verification
       // For Prelude: Store placeholder (Prelude manages the code)
+      // Channel is persisted so verifyOtp can route to the SAME
+      // provider that actually sent the code (critical for WhatsApp
+      // OTPs on Georgian numbers where the default routing would
+      // otherwise check against UBill).
       const otp = new this.otpModel({
         identifier,
         code: result.provider === "prelude" ? "PRELUDE_VERIFY" : code,
         type,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+        channel: otpChannel,
       });
       await otp.save();
 
@@ -130,7 +136,24 @@ export class VerificationService {
 
     await otp.save();
 
-    const sent = await this.emailService.sendOtp(identifier, code);
+    // Resolve the locale for the OTP email body. Order of precedence:
+    //   1. Locale explicitly passed by the frontend (the visitor's
+    //      active UI language at the moment of the request)
+    //   2. Locale derived from the existing user record (country /
+    //      languages / preferredLocale) - covers password-reset and
+    //      login flows where the user already exists in our DB
+    //   3. English fallback
+    const existingUser = await this.userModel
+      .findOne({ email: identifier })
+      .select("country languages preferredLocale")
+      .lean();
+    const resolvedLocale: SupportedLocale = requestedLocale
+      ? ((["en", "ka", "ru"].includes(requestedLocale)
+          ? requestedLocale
+          : "en") as SupportedLocale)
+      : resolveUserLocale(existingUser as never);
+
+    const sent = await this.emailService.sendOtp(identifier, code, resolvedLocale);
     if (!sent) {
       this.logger.warn(
         `Failed to send email OTP to ${identifier}, but OTP was created`,
@@ -158,8 +181,32 @@ export class VerificationService {
         return { verified: true };
       }
 
-      // First try Prelude verification for international numbers
-      const smsResult = await this.smsService.verifyOtp(identifier, code);
+      // Look up the most recent unused OTP record to discover the
+      // channel it was sent through. We need this so the provider
+      // routing matches what `requestOtp` picked - critical for
+      // WhatsApp on Georgian numbers, where the OTP was issued via
+      // Prelude but the default verify routing would otherwise hit
+      // UBill and fall through to local DB verification of a
+      // PRELUDE_VERIFY placeholder that never matches.
+      const recentOtpForChannel = await this.otpModel
+        .findOne({
+          identifier,
+          type,
+          isUsed: false,
+          expiresAt: { $gt: new Date() },
+        })
+        .sort({ createdAt: -1 })
+        .exec();
+      const sentChannel: OtpChannelType =
+        (recentOtpForChannel?.channel as OtpChannelType) || "sms";
+
+      // First try Prelude verification for international numbers (or
+      // for any WhatsApp OTP, regardless of country)
+      const smsResult = await this.smsService.verifyOtp(
+        identifier,
+        code,
+        sentChannel,
+      );
 
       if (smsResult.provider === "prelude" && smsResult.verified) {
         // Prelude verified the code
@@ -302,8 +349,23 @@ export class VerificationService {
       throw new NotFoundException("No account found with this phone number");
     }
 
-    // Try Prelude verification first for international numbers
-    const smsResult = await this.smsService.verifyOtp(phone, code);
+    // Look up the most recent reset OTP so we know which provider it
+    // came from (mirrors the verifyOtp flow above).
+    const recentResetOtp = await this.otpModel
+      .findOne({
+        identifier: phone,
+        purpose: OtpPurpose.PASSWORD_RESET,
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+    const resetChannel: OtpChannelType =
+      (recentResetOtp?.channel as OtpChannelType) || "sms";
+
+    // Try Prelude verification first for international numbers (or for
+    // any WhatsApp OTP regardless of country)
+    const smsResult = await this.smsService.verifyOtp(phone, code, resetChannel);
 
     if (smsResult.provider === "prelude" && smsResult.verified) {
       // Prelude verified

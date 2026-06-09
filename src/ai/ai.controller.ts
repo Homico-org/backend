@@ -22,8 +22,13 @@ import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('AI Tools')
 @Controller('ai')
-// AI endpoints can be expensive; keep a stricter limit than global default.
-@Throttle({ default: { ttl: 60_000, limit: 30 } })
+// AI endpoints can be expensive; keep a stricter limit than global default
+// + a per-day cost ceiling on top so a determined attacker can't run up
+// thousands of $$ in OpenAI bills by spreading requests over hours.
+@Throttle({
+  default: { ttl: 60_000, limit: 30 },
+  'ai-cost': { ttl: 24 * 60 * 60_000, limit: 200 },
+})
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
@@ -37,7 +42,7 @@ export class AiController {
     if (!dto.estimateText?.trim()) {
       throw new BadRequestException('Estimate text is required');
     }
-    return this.aiService.analyzeEstimate(dto.estimateText, dto.locale || 'en');
+    return this.aiService.analyzeEstimate(dto.estimateText, dto.locale || 'en', dto.country);
   }
 
   @Post('calculate-renovation')
@@ -58,6 +63,7 @@ export class AiController {
         propertyType: dto.propertyType,
       },
       dto.locale || 'en',
+      dto.country,
     );
   }
 
@@ -74,7 +80,7 @@ export class AiController {
     if (dto.estimates.length > 5) {
       throw new BadRequestException('Maximum 5 estimates can be compared');
     }
-    return this.aiService.compareEstimates(dto.estimates, dto.locale || 'en');
+    return this.aiService.compareEstimates(dto.estimates, dto.locale || 'en', dto.country);
   }
 
   @Post('price-info')
@@ -87,7 +93,7 @@ export class AiController {
     if (!dto.item?.trim()) {
       throw new BadRequestException('Item is required');
     }
-    return this.aiService.getPriceInfo(dto.item, dto.locale || 'en');
+    return this.aiService.getPriceInfo(dto.item, dto.locale || 'en', dto.country);
   }
 
   @Post('generate-bio')
@@ -114,7 +120,7 @@ export class AiController {
     if (!dto.messages || dto.messages.length === 0) {
       throw new BadRequestException('At least one message is required');
     }
-    const response = await this.aiService.chat(dto.messages, dto.locale || 'en');
+    const response = await this.aiService.chat(dto.messages, dto.locale || 'en', dto.country);
     return { response };
   }
 
@@ -133,6 +139,7 @@ export class AiController {
       dto.locale || 'en',
       dto.imageBase64,
       dto.imageMimeType,
+      dto.country,
     );
   }
 }

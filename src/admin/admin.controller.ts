@@ -24,11 +24,11 @@ export class AdminController {
   @Post('users')
   @ApiOperation({ summary: 'Create a new user (any role, including admin)' })
   @ApiResponse({ status: 201, description: 'Created user' })
-  async createUser(@Body() dto: AdminCreateUserDto, @Req() req: { user: { sub: string } }) {
+  async createUser(@Body() dto: AdminCreateUserDto, @Req() req: { user: { userId: string } }) {
     const created = await this.adminService.createUser(dto);
     await this.loggerService.logActivity({
       type: ActivityType.ADMIN_USER_CREATE,
-      userId: req.user.sub,
+      userId: req.user.userId,
       targetId: String(created._id),
       targetType: 'user',
       details: {
@@ -95,6 +95,34 @@ export class AdminController {
     });
   }
 
+  @Get('bookings')
+  @ApiOperation({ summary: 'Get all bookings with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by client/pro name or phone' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by booking status' })
+  @ApiResponse({ status: 200, description: 'Paginated bookings list' })
+  getAllBookings(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllBookings({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Get('bookings/stats')
+  @ApiOperation({ summary: 'Booking status + paid-GMV counters' })
+  @ApiResponse({ status: 200, description: 'Booking statistics' })
+  getBookingStats() {
+    return this.adminService.getBookingStats();
+  }
+
   @Get('reports')
   @ApiOperation({ summary: 'Get all reports with pagination and filters' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
@@ -133,6 +161,13 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Dashboard statistics' })
   getDashboardStats() {
     return this.adminService.getDashboardStats();
+  }
+
+  @Get('traction')
+  @ApiOperation({ summary: 'Founder traction dashboard (0->10 phase)' })
+  @ApiResponse({ status: 200, description: 'Traction metrics' })
+  getTraction() {
+    return this.adminService.getTraction();
   }
 
   @Get('recent-users')
@@ -203,6 +238,19 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Daily proposals data' })
   getDailyProposals(@Query('days') days?: string) {
     return this.adminService.getDailyProposals(days ? parseInt(days, 10) : 30);
+  }
+
+  @Get('funnel')
+  @ApiOperation({ summary: 'Marketplace liquidity funnel (jobs flow)' })
+  @ApiResponse({ status: 200, description: 'Funnel counts + conversion rates' })
+  getFunnel(
+    @Query('days') days?: string,
+    @Query('country') country?: string,
+  ) {
+    return this.adminService.getFunnel(
+      days ? parseInt(days, 10) : 30,
+      country || undefined,
+    );
   }
 
   // ============== ACTIVITY LOGS ==============
@@ -306,7 +354,7 @@ export class AdminController {
     @Param('id') proId: string,
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.approvePro(proId, adminId);
   }
 
@@ -319,7 +367,7 @@ export class AdminController {
     @Body('reason') reason: string,
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.rejectPro(proId, adminId, reason);
   }
 
@@ -332,8 +380,32 @@ export class AdminController {
     @Body() body: { status: string; notes?: string; notifyUser?: boolean },
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
+  }
+
+  @Patch('pros/:id/featured')
+  @ApiOperation({ summary: 'Toggle a professional as editorially featured' })
+  @ApiResponse({ status: 200, description: 'Featured flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setFeatured(
+    @Param('id') proId: string,
+    @Body('featured') featured: boolean,
+  ) {
+    return this.adminService.setFeatured(proId, !!featured);
+  }
+
+  @Patch('pros/:id/homico-partner')
+  @ApiOperation({
+    summary: 'Toggle a professional as a Homico Partner (bookable)',
+  })
+  @ApiResponse({ status: 200, description: 'Partner flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setHomicoPartner(
+    @Param('id') proId: string,
+    @Body('partner') partner: boolean,
+  ) {
+    return this.adminService.setHomicoPartner(proId, !!partner);
   }
 
   // ============== JOB MANAGEMENT ==============

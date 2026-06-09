@@ -9,8 +9,39 @@ import { User, UserRole } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { InviteToken } from "../invite/schemas/invite-token.schema";
+import { ProjectRequest } from "../project-request/schemas/project-request.schema";
+import { Order } from "../product-orders/schemas/order.schema";
+import { Booking } from "../bookings/schemas/booking.schema";
 import { SmsService } from "../verification/services/sms.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
+import { resolveUserLocale, type SupportedLocale } from "../common/countries";
+
+// Localized SMS bodies for admin-initiated transactions. Keys mirror
+// the message-type identifier we'd use if these moved to an i18n
+// catalog later. English serves as the fallback for unsupported
+// locales rather than blank text.
+const ADMIN_SMS_COPY: Record<string, Record<SupportedLocale, string>> = {
+  proApproved: {
+    en: "Congrats! Your Homico profile is approved. Clients can now find you. homico.co",
+    ka: "გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. ახლა კლიენტებს შეუძლიათ თქვენი ნახვა. homico.co",
+    ru: "Поздравляем! Ваш профиль Homico одобрен. Клиенты теперь могут вас найти. homico.co",
+  },
+  proRejected: {
+    en: "Your Homico profile needs updates. Please check the in-app notifications. homico.co",
+    ka: "თქვენი Homico პროფილი საჭიროებს განახლებას. გთხოვთ შეამოწმოთ შეტყობინებები აპლიკაციაში. homico.co",
+    ru: "Ваш профиль Homico требует обновления. Пожалуйста, проверьте уведомления в приложении. homico.co",
+  },
+  statusVerified: {
+    en: "Congrats! Your Homico profile is approved. homico.co",
+    ka: "გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. homico.co",
+    ru: "Поздравляем! Ваш профиль Homico одобрен. homico.co",
+  },
+  statusRejected: {
+    en: "Your Homico profile needs updates. Please check the notifications. homico.co",
+    ka: "თქვენი Homico პროფილი საჭიროებს განახლებას. შეამოწმეთ შეტყობინებები. homico.co",
+    ru: "Ваш профиль Homico требует обновления. Проверьте уведомления. homico.co",
+  },
+};
 
 interface PaginationOptions {
   page: number;
@@ -54,9 +85,292 @@ export class AdminService {
     private notificationModel: Model<Notification>,
     @InjectModel(InviteToken.name)
     private inviteTokenModel: Model<InviteToken>,
+    @InjectModel(ProjectRequest.name)
+    private projectModel: Model<ProjectRequest>,
+    @InjectModel(Order.name) private orderModel: Model<Order>,
+    @InjectModel(Booking.name) private bookingModel: Model<Booking>,
     private readonly smsService: SmsService,
     private readonly usersService: UsersService,
   ) {}
+
+  // ============== BOOKINGS OVERSIGHT ==============
+
+  /**
+   * Paginated bookings list for the admin panel - full marketplace visibility
+   * (every booking, both parties, money + status). Filters by status; search
+   * matches the client/pro name via a pre-resolved id set so the page query
+   * stays a single round-trip.
+   */
+  async getAllBookings(options: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }) {
+    const { page, limit, status, search } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<Booking> = {};
+    if (status && status !== "all") query.status = status;
+    if (search) {
+      const rx = { $regex: search, $options: "i" };
+      const ids = await this.userModel
+        .find({ $or: [{ name: rx }, { phone: rx }] })
+        .select("_id")
+        .lean();
+      const idList = ids.map((u) => u._id);
+      query.$or = [{ professional: { $in: idList } }, { client: { $in: idList } }];
+    }
+
+    const [bookings, total] = await Promise.all([
+      this.bookingModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("professional", "name avatar phone")
+        .populate("client", "name avatar phone")
+        .lean(),
+      this.bookingModel.countDocuments(query),
+    ]);
+
+    return {
+      bookings,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /** Status + paid-GMV counters for the bookings page header. */
+  async getBookingStats() {
+    const [total, awaitingPayment, pending, confirmed, completed, cancelled, disputed, gmvAgg] =
+      await Promise.all([
+        this.bookingModel.countDocuments(),
+        this.bookingModel.countDocuments({ status: "awaiting_payment" }),
+        this.bookingModel.countDocuments({ status: "pending" }),
+        this.bookingModel.countDocuments({ status: "confirmed" }),
+        this.bookingModel.countDocuments({ status: "completed" }),
+        this.bookingModel.countDocuments({ status: "cancelled" }),
+        this.bookingModel.countDocuments({ status: "disputed" }),
+        this.bookingModel.aggregate([
+          { $match: { paymentStatus: { $in: ["paid", "partially_refunded"] } } },
+          { $group: { _id: null, total: { $sum: "$totalAmountMinor" } } },
+        ]),
+      ]);
+    return {
+      total,
+      awaitingPayment,
+      pending,
+      confirmed,
+      completed,
+      cancelled,
+      disputed,
+      gmvMinor: gmvAgg?.[0]?.total ?? 0,
+    };
+  }
+
+  /**
+   * Founder traction dashboard - the pre-launch 0->10 view. North star is
+   * "active projects" (a non-draft project with a real team that moved in the
+   * last 7 days), with the funnel that feeds it. Computed live from the DB so
+   * it always reflects reality, no event instrumentation needed.
+   */
+  async getTraction() {
+    const now = Date.now();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const since30d = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      projectsTotal,
+      projectsWithTeam,
+      projectsActive7d,
+      projectsCreated7d,
+      projectsCreated30d,
+      jobsTotal,
+      jobsHired,
+      jobsPosted7d,
+      ordersPaid,
+      gmvAgg,
+      pros,
+      clients,
+      signups7d,
+      prosHiredIds,
+      proSignups7d,
+      clientSignups7d,
+      proSignups30d,
+      clientSignups30d,
+      prosVerified,
+      prosWithPortfolio,
+      prosWithPricing,
+      prosWithReviews,
+      jobClientIds,
+      projectClientIds,
+      invitesSent,
+      invitesActivated,
+    ] = await Promise.all([
+      this.projectModel.countDocuments({ status: { $ne: "draft" } }),
+      // Has at least one engagement (real trade/role on the project).
+      this.projectModel.countDocuments({
+        status: { $ne: "draft" },
+        "engagements.0": { $exists: true },
+      }),
+      // The north star: real team + moved in the last 7 days.
+      this.projectModel.countDocuments({
+        status: { $ne: "draft" },
+        "engagements.0": { $exists: true },
+        updatedAt: { $gte: since7d },
+      }),
+      this.projectModel.countDocuments({ createdAt: { $gte: since7d } }),
+      this.projectModel.countDocuments({ createdAt: { $gte: since30d } }),
+      this.jobModel.countDocuments({}),
+      this.jobModel.countDocuments({
+        $or: [
+          { hiredProId: { $ne: null, $exists: true } },
+          { status: { $in: ["in_progress", "completed"] } },
+        ],
+      }),
+      this.jobModel.countDocuments({ createdAt: { $gte: since7d } }),
+      this.orderModel.countDocuments({
+        status: { $nin: ["awaiting_payment", "payment_failed", "cancelled"] },
+      }),
+      this.orderModel.aggregate([
+        {
+          $match: {
+            status: {
+              $nin: ["awaiting_payment", "payment_failed", "cancelled"],
+            },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$totalMinor" } } },
+      ]),
+      this.userModel.countDocuments({ role: UserRole.PRO }),
+      this.userModel.countDocuments({ role: UserRole.CLIENT }),
+      this.userModel.countDocuments({ createdAt: { $gte: since7d } }),
+      // Distinct pros who have been hired at least once - "bench utilization".
+      this.jobModel.distinct("hiredProId", {
+        hiredProId: { $ne: null, $exists: true },
+      }),
+      // Signup mix by role - is the supply:demand gap widening?
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        createdAt: { $gte: since7d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.CLIENT,
+        createdAt: { $gte: since7d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        createdAt: { $gte: since30d },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.CLIENT,
+        createdAt: { $gte: since30d },
+      }),
+      // Supply QUALITY - empty profiles don't convert. A pro with no portfolio
+      // / no price / no review is shelf-space, not inventory.
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        verificationStatus: "verified",
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        "portfolioProjects.0": { $exists: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        "servicePricing.0": { $exists: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.PRO,
+        totalReviews: { $gt: 0 },
+      }),
+      // Demand activation - which clients ever took a first action (posted a
+      // job or created a real project). Distinct ids across both surfaces.
+      this.jobModel.distinct("clientId", {
+        clientId: { $ne: null, $exists: true },
+      }),
+      this.projectModel.distinct("clientId", {
+        status: { $ne: "draft" },
+        clientId: { $ne: null, $exists: true },
+      }),
+      // Invite-channel ROI - SMS blasts cost money; are they converting?
+      this.inviteTokenModel.countDocuments({}),
+      this.inviteTokenModel.countDocuments({ status: "activated" }),
+    ]);
+
+    const gmvMinor = gmvAgg?.[0]?.total ?? 0;
+    const prosHired = (prosHiredIds as unknown[]).length;
+
+    // Clients who took any first action (union of demand surfaces).
+    const activatedClientSet = new Set(
+      [
+        ...(jobClientIds as unknown[]),
+        ...(projectClientIds as unknown[]),
+      ]
+        .map((id) => (id == null ? "" : String(id)))
+        .filter(Boolean),
+    );
+    const clientsActivated = Math.min(activatedClientSet.size, clients);
+    const pct = (n: number, d: number) =>
+      d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
+
+    return {
+      goal: 10, // active projects target for this phase
+      northStar: {
+        activeProjects: projectsActive7d,
+        label: "Active projects (real team, moved in last 7 days)",
+      },
+      projects: {
+        total: projectsTotal,
+        withTeam: projectsWithTeam,
+        active7d: projectsActive7d,
+        created7d: projectsCreated7d,
+        created30d: projectsCreated30d,
+      },
+      jobs: { total: jobsTotal, hired: jobsHired, posted7d: jobsPosted7d },
+      orders: { paid: ordersPaid, gmvMinor },
+      users: { pros, clients, signups7d, prosHired },
+      // The real health signals for a cold-start marketplace:
+      supply: {
+        pros,
+        clients,
+        // How lopsided is the marketplace? (pros per client)
+        ratio: clients > 0 ? Math.round((pros / clients) * 10) / 10 : null,
+        proSignups7d,
+        clientSignups7d,
+        proSignups30d,
+        clientSignups30d,
+        // Is the gap widening? share of last-7d signups that were clients.
+        clientShare7d: pct(clientSignups7d, proSignups7d + clientSignups7d),
+      },
+      // Empty profiles don't convert - how much supply is actually usable.
+      proQuality: {
+        total: pros,
+        verified: prosVerified,
+        withPortfolio: prosWithPortfolio,
+        withPricing: prosWithPricing,
+        withReviews: prosWithReviews,
+        portfolioRate: pct(prosWithPortfolio, pros),
+      },
+      // The leak that matters: do clients ever do anything?
+      clientFunnel: {
+        total: clients,
+        activated: clientsActivated,
+        activationRate: pct(clientsActivated, clients),
+        new7d: clientSignups7d,
+        new30d: clientSignups30d,
+      },
+      // SMS blasts cost cash - is the channel worth it?
+      invites: {
+        sent: invitesSent,
+        activated: invitesActivated,
+        activationRate: pct(invitesActivated, invitesSent),
+      },
+    };
+  }
 
   /**
    * Admin-initiated user creation. Delegates the heavy lifting (uniqueness
@@ -686,6 +1000,212 @@ export class AdminService {
     ]);
   }
 
+  /**
+   * Marketplace liquidity funnel for the jobs flow, over the last `days` of
+   * POSTED jobs (cohort = jobs created in the window). Reports the count at
+   * each funnel stage plus the conversion rates between them:
+   *
+   *   posted -> first proposal in 24h (liquidity vital sign)
+   *          -> any proposal
+   *          -> hired (a proposal accepted; Job.hiredProId set)
+   *          -> completed (Job.status = completed)
+   *          -> reviewed (a homico review references the job)
+   *
+   * Built on the real collections via $lookup (proposals/reviews) rather than
+   * fired-event counts, so the percentages are true per-job rates. Scoped to
+   * `jobType: marketplace` because direct_request jobs skip the proposal stage.
+   */
+  async getFunnel(days = 30, country?: string) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const match: Record<string, unknown> = {
+      jobType: 'marketplace',
+      createdAt: { $gte: startDate },
+    };
+    if (country) match.country = country.toUpperCase();
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    // Same stage-count accumulators, reused for the overall total and each
+    // segment ($facet branch) so the breakdown math is identical everywhere.
+    const liquidityGroup = (id: unknown) => ({
+      $group: {
+        _id: id,
+        jobsPosted: { $sum: 1 },
+        withProposal: { $sum: '$hasProposal' },
+        firstProposalIn24h: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ['$ttfpMs', null] },
+                  { $lte: ['$ttfpMs', DAY_MS] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        hired: { $sum: '$hired' },
+        completed: { $sum: '$completed' },
+        reviewed: { $sum: '$reviewed' },
+        avgTtfpMs: { $avg: '$ttfpMs' },
+      },
+    });
+    const rows = await this.jobModel.aggregate([
+      { $match: match },
+      // Earliest proposal time + total proposal count per job. `jobId` may be
+      // stored as a string OR an ObjectId in this collection, so compare on
+      // the string form of both sides.
+      {
+        $lookup: {
+          from: 'proposals',
+          let: { jid: { $toString: '$_id' } },
+          pipeline: [
+            { $match: { $expr: { $eq: [{ $toString: '$jobId' }, '$$jid'] } } },
+            {
+              $group: {
+                _id: null,
+                first: { $min: '$createdAt' },
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          as: 'prop',
+        },
+      },
+      // Any homico review referencing this job (jobId may be string/ObjectId).
+      {
+        $lookup: {
+          from: 'reviews',
+          let: { jid: { $toString: '$_id' } },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: [{ $toString: '$jobId' }, '$$jid'] },
+                    { $eq: ['$source', 'homico'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'rev',
+        },
+      },
+      {
+        $project: {
+          createdAt: 1,
+          category: 1,
+          country: 1,
+          hired: { $cond: [{ $ifNull: ['$hiredProId', false] }, 1, 0] },
+          completed: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
+          reviewed: { $cond: [{ $gt: [{ $size: '$rev' }, 0] }, 1, 0] },
+          propCount: { $ifNull: [{ $arrayElemAt: ['$prop.count', 0] }, 0] },
+          firstProposalAt: { $arrayElemAt: ['$prop.first', 0] },
+        },
+      },
+      {
+        $project: {
+          category: 1,
+          country: 1,
+          hired: 1,
+          completed: 1,
+          reviewed: 1,
+          hasProposal: { $cond: [{ $gt: ['$propCount', 0] }, 1, 0] },
+          ttfpMs: {
+            $cond: [
+              { $ifNull: ['$firstProposalAt', false] },
+              { $subtract: ['$firstProposalAt', '$createdAt'] },
+              null,
+            ],
+          },
+        },
+      },
+      {
+        $facet: {
+          overall: [liquidityGroup(null)],
+          byCategory: [
+            liquidityGroup('$category'),
+            { $sort: { jobsPosted: -1 } },
+          ],
+          byCountry: [
+            liquidityGroup('$country'),
+            { $sort: { jobsPosted: -1 } },
+          ],
+        },
+      },
+    ]);
+
+    type SegAgg = {
+      _id: string | null;
+      jobsPosted: number;
+      withProposal: number;
+      firstProposalIn24h: number;
+      hired: number;
+      completed: number;
+      reviewed: number;
+      avgTtfpMs: number | null;
+    };
+    const facet = rows[0] as
+      | { overall: SegAgg[]; byCategory: SegAgg[]; byCountry: SegAgg[] }
+      | undefined;
+    const r: SegAgg = facet?.overall?.[0] ?? {
+      _id: null,
+      jobsPosted: 0,
+      withProposal: 0,
+      firstProposalIn24h: 0,
+      hired: 0,
+      completed: 0,
+      reviewed: 0,
+      avgTtfpMs: 0,
+    };
+    const pct = (n: number, d: number) =>
+      d > 0 ? Math.round((n / d) * 1000) / 10 : 0;
+
+    // Per-segment row: counts + the rates that surface WHERE liquidity is
+    // weak. Sorted by volume so the biggest illiquid segments rise first.
+    const seg = (g: SegAgg) => ({
+      key: g._id || 'unknown',
+      jobsPosted: g.jobsPosted,
+      withProposal: g.withProposal,
+      hired: g.hired,
+      anyProposalRate: pct(g.withProposal, g.jobsPosted),
+      proposalIn24hRate: pct(g.firstProposalIn24h, g.jobsPosted),
+      hireRate: pct(g.hired, g.jobsPosted),
+    });
+
+    return {
+      days,
+      country: country ? country.toUpperCase() : 'all',
+      counts: {
+        jobsPosted: r.jobsPosted,
+        withProposal: r.withProposal,
+        firstProposalIn24h: r.firstProposalIn24h,
+        hired: r.hired,
+        completed: r.completed,
+        reviewed: r.reviewed,
+      },
+      rates: {
+        // Liquidity vital sign: did supply respond fast?
+        proposalIn24hRate: pct(r.firstProposalIn24h, r.jobsPosted),
+        anyProposalRate: pct(r.withProposal, r.jobsPosted),
+        hireRate: pct(r.hired, r.jobsPosted),
+        completionRate: pct(r.completed, r.hired),
+        reviewRate: pct(r.reviewed, r.completed),
+      },
+      avgHoursToFirstProposal:
+        r.avgTtfpMs != null && r.avgTtfpMs > 0
+          ? Math.round((r.avgTtfpMs / (60 * 60 * 1000)) * 10) / 10
+          : null,
+      byCategory: (facet?.byCategory ?? []).map(seg),
+      byCountry: (facet?.byCountry ?? []).map(seg),
+    };
+  }
+
   // ============== PENDING PROFESSIONALS MANAGEMENT ==============
 
   async getPendingPros(options: PendingProsOptions) {
@@ -724,7 +1244,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus adminRejectionReason createdAt portfolioProjects",
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner adminRejectionReason createdAt portfolioProjects",
         )
         .lean(),
       this.userModel.countDocuments(query),
@@ -779,21 +1299,29 @@ export class AdminService {
 
     await user.save();
 
-    // Create notification for the pro
+    // Create notification for the pro. Stores English fallback copy
+    // and i18n keys; the bell-icon feed resolves `t(titleKey, params)`
+    // at view time so the same notification reads as Georgian or
+    // Russian for users on those locales.
     await this.notificationModel.create({
       userId: proId,
       type: "profile_approved",
       title: "Profile Approved",
       message:
         "Your professional profile has been approved! You are now visible to clients.",
+      titleKey: "notifications.types.profile_approved.title",
+      messageKey: "notifications.types.profile_approved.message",
       isRead: false,
       createdAt: new Date(),
     });
 
     // Send SMS notification if user has a phone number
     if (user.phone) {
-      const smsMessage = `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. ახლა კლიენტებს შეუძლიათ თქვენი ნახვა. homico.ge`;
-      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+      const locale = resolveUserLocale(user);
+      await this.smsService.sendNotificationSms(
+        user.phone,
+        ADMIN_SMS_COPY.proApproved[locale],
+      );
     }
 
     return user;
@@ -817,20 +1345,28 @@ export class AdminService {
 
     await user.save();
 
-    // Create notification for the pro
+    // Create notification for the pro. The reason is interpolated
+    // into both the EN fallback and the localized message via
+    // `{reason}` so admins can include any free-text rejection note.
     await this.notificationModel.create({
       userId: proId,
       type: "profile_rejected",
       title: "Profile Needs Updates",
       message: `Your profile was not approved. Reason: ${reason}`,
+      titleKey: "notifications.types.profile_rejected.title",
+      messageKey: "notifications.types.profile_rejected.message",
+      i18nParams: { reason },
       isRead: false,
       createdAt: new Date(),
     });
 
     // Send SMS notification if user has a phone number
     if (user.phone) {
-      const smsMessage = `თქვენი Homico პროფილი საჭიროებს განახლებას. გთხოვთ შეამოწმოთ შეტყობინებები აპლიკაციაში. homico.ge`;
-      await this.smsService.sendNotificationSms(user.phone, smsMessage);
+      const locale = resolveUserLocale(user);
+      await this.smsService.sendNotificationSms(
+        user.phone,
+        ADMIN_SMS_COPY.proRejected[locale],
+      );
     }
 
     return user;
@@ -883,15 +1419,22 @@ export class AdminService {
       let notificationType = 'verification_update';
       let title = 'Verification Status Updated';
       let message = notes || `Your verification status has been updated to: ${status}`;
+      let titleKey = 'notifications.types.verification_update.title';
+      let messageKey = 'notifications.types.verification_update.message';
+      const i18nParams: Record<string, string> = { status, notes: notes || '' };
 
       if (status === 'verified') {
         notificationType = 'profile_approved';
         title = 'Profile Approved';
         message = notes || 'Your professional profile has been approved! You are now visible to clients.';
+        titleKey = 'notifications.types.profile_approved.title';
+        messageKey = notes ? 'notifications.types.profile_approved.messageWithNote' : 'notifications.types.profile_approved.message';
       } else if (status === 'rejected') {
         notificationType = 'profile_rejected';
         title = 'Profile Needs Updates';
         message = notes || 'Your profile was not approved. Please check the admin notes.';
+        titleKey = 'notifications.types.profile_rejected.title';
+        messageKey = notes ? 'notifications.types.profile_rejected.messageWithNote' : 'notifications.types.profile_rejected.messageDefault';
       }
 
       await this.notificationModel.create({
@@ -899,20 +1442,60 @@ export class AdminService {
         type: notificationType,
         title,
         message,
+        titleKey,
+        messageKey,
+        i18nParams,
         isRead: false,
         createdAt: new Date(),
       });
 
       // Send SMS notification for significant status changes
       if (user.phone && (status === 'verified' || status === 'rejected')) {
-        const smsMessage = status === 'verified'
-          ? `გილოცავთ! თქვენი Homico პროფილი დადასტურებულია. homico.ge`
-          : `თქვენი Homico პროფილი საჭიროებს განახლებას. შეამოწმეთ შეტყობინებები. homico.ge`;
+        const locale = resolveUserLocale(user);
+        const smsMessage =
+          ADMIN_SMS_COPY[status === 'verified' ? 'statusVerified' : 'statusRejected'][locale];
         await this.smsService.sendNotificationSms(user.phone, smsMessage);
       }
     }
 
     return user;
+  }
+
+  /**
+   * Editorial featuring toggle. Hand-picks a pro to the top of browse and
+   * lights the "Featured" badge. Pure flag flip - no notification/SMS, since
+   * featuring is an internal promotion lever, not a status the pro earned or
+   * needs to act on.
+   */
+  async setFeatured(
+    proId: string,
+    featured: boolean,
+  ): Promise<{ id: string; isFeatured: boolean }> {
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, { isFeatured: featured }, { new: true })
+      .select("_id isFeatured role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return { id: String(user._id), isFeatured: Boolean(user.isFeatured) };
+  }
+
+  async setHomicoPartner(
+    proId: string,
+    partner: boolean,
+  ): Promise<{ id: string; isHomicoPartner: boolean }> {
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, { isHomicoPartner: partner }, { new: true })
+      .select("_id isHomicoPartner role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return {
+      id: String(user._id),
+      isHomicoPartner: Boolean(user.isHomicoPartner),
+    };
   }
 
   // ============== JOB MANAGEMENT ==============

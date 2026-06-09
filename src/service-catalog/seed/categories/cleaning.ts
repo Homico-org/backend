@@ -17,22 +17,39 @@ export const cleaningCategory = cat(
     sub("S001", "regular_clean", "Sparkles", [
       svc("V001", "regular_standard_svc", [U.sqm(3, 10), U.hour(15, 40), U.studio(40, 120), U.oneBr(60, 180), U.twoBr(90, 250), U.threeBr(130, 350)]),
       svc("V002", "regular_recurring_svc", [U.sqm(2, 8), U.hour(15, 35), U.studio(35, 100), U.oneBr(50, 140), U.twoBr(70, 200)]),
-    ], 0),
+    ], 0, {
+      keywords: [
+        { en: "cleaning clean housekeeping maid", ka: "დასუფთავება დალაგება დამლაგებელი", ru: "уборка клининг" },
+        { en: "daltageba", ka: "დასუფ დალაგ", ru: "" },
+      ],
+    }),
     sub("S002", "deep_clean", "SprayCan", [
       svc("V003", "deep_full_svc", [U.sqm(6, 18), U.hour(25, 60), U.studio(80, 250), U.oneBr(120, 350), U.twoBr(180, 500), U.threeBr(250, 700)]),
       svc("V004", "deep_kitchen_svc", [U.job(50, 200)]),
       svc("V005", "deep_bathroom_svc", [U.job(40, 150)]),
-    ], 1),
+    ], 1, {
+      keywords: [
+        { en: "deep clean thorough scrub", ka: "ღრმა დასუფთავება", ru: "генеральная уборка" },
+      ],
+    }),
     sub("S003", "post_renovation_clean", "Construction", [
       svc("V006", "post_reno_full_svc", [U.sqm(5, 15), U.room(60, 200), U.studio(100, 300), U.oneBr(150, 450), U.twoBr(220, 650), U.threeBr(300, 900)]),
       svc("V007", "post_reno_dust_svc", [U.sqm(3, 10)]),
       svc("V008", "post_reno_floor_svc", [U.sqm(4, 12)]),
-    ], 2),
+    ], 2, {
+      keywords: [
+        { en: "post construction post renovation dust", ka: "სარემონტო შემდგომი დასუფთავება", ru: "после ремонта строительная" },
+      ],
+    }),
     sub("S004", "move_clean", "Truck", [
       svc("V009", "move_full_svc", [U.sqm(4, 12), U.room(50, 150), U.studio(70, 200), U.oneBr(100, 280), U.twoBr(150, 400), U.threeBr(200, 550)]),
       svc("V010", "move_empty_svc", [U.sqm(3, 10), U.studio(50, 150), U.oneBr(70, 200), U.twoBr(110, 300)]),
       svc("V011", "move_cabinet_svc", [U.job(40, 150)]),
-    ], 3),
+    ], 3, {
+      keywords: [
+        { en: "move in move out moving cleanup", ka: "გადასვლა გადმოსვლა", ru: "переезд после переезда" },
+      ],
+    }),
     sub("S005", "window_clean", "PanelTop", [
       svc("V012", "window_interior_svc", [U.window(8, 20)]),
       svc("V013", "window_exterior_svc", [U.window(12, 30)]),

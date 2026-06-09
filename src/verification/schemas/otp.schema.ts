@@ -41,6 +41,14 @@ export class Otp extends Document {
 
   @Prop({ default: 0 })
   attempts: number;
+
+  // Channel the OTP was sent through. We need this on verify so we
+  // route to the SAME provider that actually issued the code - a
+  // WhatsApp OTP sent via Prelude on a Georgian number must be
+  // verified against Prelude, not UBill (which was the silent
+  // mis-routing that caused "WhatsApp registration code not coming").
+  @Prop({ type: String, enum: ['sms', 'whatsapp'], default: 'sms' })
+  channel: 'sms' | 'whatsapp';
 }
 
 export const OtpSchema = SchemaFactory.createForClass(Otp);

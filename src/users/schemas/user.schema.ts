@@ -33,6 +33,38 @@ export enum ProStatus {
   AWAY = "away",
 }
 
+// SLA accountability system (added 2026-05). Tracks per-pro misses
+// against response-time deadlines and applies a gentle ladder of
+// penalties: warning -> ranking demotion -> temporary pause. See
+// `~/.claude/plans/staged-crunching-meadow.md` for the full design.
+export enum SlaMissType {
+  // Pro didn't accept/decline a paid PENDING booking within 30 min.
+  BOOKING_ACCEPT = "booking_accept",
+  // Pro didn't reply to a client's project-chat message within 1 hour.
+  CHAT_REPLY = "chat_reply",
+  // Pro didn't respond to a direct job invitation within 2 hours.
+  DIRECT_INVITE = "direct_invite",
+  // Profile completeness below threshold; nag fires from weekly cron.
+  PROFILE_INCOMPLETE = "profile_incomplete",
+}
+
+export enum SlaPenaltyLevel {
+  NONE = "none",
+  WARNING = "warning",
+  DEMOTED = "demoted",
+  PAUSED = "paused",
+}
+
+export class SlaMissEntry {
+  type: SlaMissType;
+  // Stored as string so the same array can reference Bookings,
+  // Messages, Jobs, etc. without a discriminator collection.
+  eventModel: string;
+  eventId: string;
+  missedAt: Date;
+  severityApplied: "warning" | "demoted" | "paused";
+}
+
 // Service address embedded schema
 export class ServiceAddress {
   id: string;
@@ -141,6 +173,14 @@ export class User extends Document {
   @Prop()
   city: string;
 
+  // ISO 3166-1 alpha-2 country code. Required for pros (where they
+  // physically work); optional/ignored for clients (clients are global
+  // and can book in any marketplace). Defaults to "GE" via migration
+  // for all existing pros - new pros set it at registration. Used to
+  // scope `/users/pros?country=XX` listing queries.
+  @Prop({ type: String, default: undefined, index: true })
+  country: string;
+
   @Prop()
   avatar: string;
 
@@ -211,6 +251,12 @@ export class User extends Document {
     priceMin?: number;
     priceMax?: number;
     notes?: string;
+    // ISO 4217 currency code (added 2026-05 for multi-country support).
+    // Defaults to "GEL" via migration for existing rows. New pros inherit
+    // currency from their `country` at registration. Prices are stored
+    // in their native currency - never auto-converted on write, since
+    // FX rates change and stored values must remain reproducible.
+    currency?: string;
   }[];
 
   @Prop({ type: Number, default: 0 })
@@ -312,6 +358,9 @@ export class User extends Document {
 
   @Prop({ default: 0 })
   profileViewCount: number;
+
+  @Prop({ default: 0 })
+  phoneViewCount: number;
 
   @Prop({ default: 0 })
   completedJobs: number;
@@ -473,11 +522,28 @@ export class User extends Document {
   @Prop({ default: false })
   isPremium: boolean;
 
+  // Editorially featured - hand-picked by an admin. Sorts to the top of
+  // browse and shows a "Featured" badge. The promotion lever for the best pros.
+  @Prop({ default: false })
+  isFeatured: boolean;
+
+  // Homico Partner - Homico has a signed contract with this pro. ONLY partners
+  // can be booked: the booking CTA is hidden on the card + profile and booking
+  // creation is rejected server-side for non-partners. Admin-set.
+  @Prop({ default: false })
+  isHomicoPartner: boolean;
+
   @Prop()
   premiumExpiresAt: Date;
 
   @Prop({ default: "none" })
   premiumTier: string;
+
+  // When we last sent the "premium expiring soon" renewal nudge for the
+  // CURRENT paid period. Cleared on every grant/renewal so the next period
+  // gets a fresh reminder; set once the reminder fires so we don't spam.
+  @Prop()
+  premiumRenewalRemindedAt: Date;
 
   // Availability (for home-care services)
   @Prop({ type: [String], default: [] })
@@ -550,6 +616,65 @@ export class User extends Document {
 
   @Prop()
   deactivationReason: string;
+
+  // === Pro payout fields (added 2026-05 with payment integration) ===
+  // Where Homico sends escrow money when a pro's bookings complete.
+  // Pros enter this via /settings/payouts. Admin can mark verifiedAt
+  // after eyeballing the IBAN matches the pro's verified ID name.
+  @Prop({
+    type: {
+      bankCode: { type: String },
+      accountNumber: { type: String },
+      holderName: { type: String },
+      verifiedAt: { type: Date },
+    },
+    default: undefined,
+  })
+  bankAccount?: {
+    bankCode: string;
+    accountNumber: string;
+    holderName: string;
+    verifiedAt?: Date;
+  };
+
+  // Cumulative count of admin-confirmed strikes (e.g. pro no-shows, last-min
+  // cancellations). Phase 1 increments manually via admin dispute resolution;
+  // Phase 3 automates a 3-strike suspension rule.
+  @Prop({ default: 0 })
+  disputeStrikes: number;
+
+  // SLA accountability state. `slaMisses` is a sliding log capped at
+  // the last 30 days (the cron prunes older entries on each write).
+  // The 14-day window inside this array drives the ladder evaluation
+  // in `SlaService.evaluateLadder()`. Existing pros default to []
+  // and slaPenaltyLevel='none' - no retroactive penalties.
+  @Prop({
+    type: [
+      {
+        type: { type: String, required: true },
+        eventModel: { type: String, required: true },
+        eventId: { type: String, required: true },
+        missedAt: { type: Date, required: true },
+        severityApplied: { type: String, required: true },
+      },
+    ],
+    default: [],
+  })
+  slaMisses: SlaMissEntry[];
+
+  @Prop({
+    type: String,
+    enum: Object.values(SlaPenaltyLevel),
+    default: SlaPenaltyLevel.NONE,
+  })
+  slaPenaltyLevel: SlaPenaltyLevel;
+
+  // Search-ranking demotion expiry. While `slaDemotedUntil > now`,
+  // the pros listing pushes this user to the bottom of results.
+  // Distinct from `deactivatedUntil` (which is the pause expiry) -
+  // a demoted pro is still visible, just buried.
+  @Prop()
+  slaDemotedUntil?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -647,6 +772,9 @@ UserSchema.index({ avgRating: -1 });
 UserSchema.index({ isAvailable: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
+// Drives the hourly premium-expiry sweep (isPremium + premiumExpiresAt < now).
+UserSchema.index({ isPremium: 1, premiumExpiresAt: 1 });
+UserSchema.index({ isHomicoPartner: 1, role: 1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });
 UserSchema.index({ verificationStatus: 1, role: 1 });
 UserSchema.index({ 'servicePricing.serviceKey': 1, 'servicePricing.price': 1 });

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { UsersModule } from "../users/users.module";
 import { CatalogSuggestionsController } from "./catalog-suggestions.controller";
@@ -10,6 +11,7 @@ import {
 
 @Module({
   imports: [
+    ConfigModule,
     MongooseModule.forFeature([
       { name: CatalogSuggestion.name, schema: CatalogSuggestionSchema },
     ]),

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf node_modules/sharp && npm install sharp@0.34.5 || true",
+    "postinstall": "npx playwright install --with-deps chromium || npx playwright install chromium || true",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
@@ -19,9 +20,11 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "seed": "node dist/seed/seed.js"
+    "seed": "node dist/seed/seed.js",
+    "seed:dev": "ts-node -r tsconfig-paths/register scripts/seed-dev.ts"
   },
   "dependencies": {
+    "@amplitude/analytics-node": "^1.5.57",
     "@fluidjs/multer-cloudinary": "^1.0.4",
     "@nestjs/cli": "^10.3.0",
     "@nestjs/common": "^10.3.0",
@@ -42,6 +45,7 @@
     "@types/multer": "^2.0.0",
     "@types/uuid": "^10.0.0",
     "bcrypt": "^5.1.1",
+    "cheerio": "^1.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "cloudinary": "^2.9.0",
@@ -53,6 +57,7 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
+    "playwright": "^1.49.1",
     "plivo": "^4.75.3",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
@@ -75,7 +80,6 @@
     "@types/passport-local": "^1.0.38",
     "@typescript-eslint/eslint-plugin": "^6.18.0",
     "@typescript-eslint/parser": "^6.18.0",
-    "cheerio": "^1.2.0",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.2",

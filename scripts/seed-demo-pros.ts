@@ -89,17 +89,17 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/32.jpg",
     title: "სანტექნიკი",
     bio: "პროფესიონალი სანტექნიკი 12 წლიანი გამოცდილებით. ვასრულებ მილების მონტაჟს, აბაზანის სრულ მოწყობას და გაჟონვის აღმოფხვრას. ვმუშაობ თანამედროვე მასალებით და ვიძლევი გარანტიას ყველა სამუშაოზე.",
-    selectedCategories: ["renovation"],
-    selectedSubcategories: ["plumbing"],
-    categories: ["renovation"],
-    subcategories: ["plumbing"],
+    selectedCategories: ["plumbing"],
+    selectedSubcategories: ["plumbing_install"],
+    categories: ["plumbing"],
+    subcategories: ["plumbing_install"],
     selectedServices: [
-      { key: "plumbing", categoryKey: "renovation", name: "Plumbing", nameKa: "სანტექნიკა", experience: "10+" },
+      { key: "plumbing_install", categoryKey: "plumbing", name: "Plumbing Installation", nameKa: "სანტექნიკის მონტაჟი", experience: "10+" },
     ],
     servicePricing: [
-      { serviceKey: "pipe-repair", categoryKey: "renovation", subcategoryKey: "plumbing", price: 50, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
-      { serviceKey: "bathroom-install", categoryKey: "renovation", subcategoryKey: "plumbing", price: 200, isActive: true, discountTiers: [] },
-      { serviceKey: "leak-fix", categoryKey: "renovation", subcategoryKey: "plumbing", price: 40, isActive: true, discountTiers: [] },
+      { serviceKey: "plumb_faucet_svc", categoryKey: "plumbing", subcategoryKey: "plumbing_install", price: 50, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
+      { serviceKey: "plumb_toilet_svc", categoryKey: "plumbing", subcategoryKey: "plumbing_install", price: 120, isActive: true, discountTiers: [] },
+      { serviceKey: "plumb_sink_svc", categoryKey: "plumbing", subcategoryKey: "plumbing_install", price: 200, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 40,
@@ -120,18 +120,19 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/45.jpg",
     title: "ელექტრიკი",
     bio: "სერტიფიცირებული ელექტრიკი, სპეციალიზაცია — საცხოვრებელი და კომერციული ობიექტების ელექტროგაყვანილობა. ვაკეთებ განათების სისტემების დაპროექტებას და მონტაჟს, ასევე ელექტრო პანელის განახლებას. უსაფრთხოება ჩემი პრიორიტეტია.",
-    selectedCategories: ["renovation"],
-    selectedSubcategories: ["electricity"],
-    categories: ["renovation"],
-    subcategories: ["electricity"],
+    selectedCategories: ["electrical"],
+    selectedSubcategories: ["wiring", "lighting"],
+    categories: ["electrical"],
+    subcategories: ["wiring", "lighting"],
     selectedServices: [
-      { key: "electricity", categoryKey: "renovation", name: "Electrical Works", nameKa: "ელექტრო სამუშაოები", experience: "5-10" },
+      { key: "wiring", categoryKey: "electrical", name: "Wiring", nameKa: "ელექტროგაყვანილობა", experience: "5-10" },
+      { key: "lighting", categoryKey: "electrical", name: "Lighting", nameKa: "განათება", experience: "5-10" },
     ],
     servicePricing: [
-      { serviceKey: "wiring", categoryKey: "renovation", subcategoryKey: "electricity", price: 80, isActive: true, discountTiers: [{ minQuantity: 5, percent: 15 }] },
-      { serviceKey: "lighting-install", categoryKey: "renovation", subcategoryKey: "electricity", price: 60, isActive: true, discountTiers: [] },
-      { serviceKey: "panel-upgrade", categoryKey: "renovation", subcategoryKey: "electricity", price: 250, isActive: true, discountTiers: [] },
-      { serviceKey: "outlet-install", categoryKey: "renovation", subcategoryKey: "electricity", price: 30, isActive: true, discountTiers: [] },
+      { serviceKey: "wiring_new_svc", categoryKey: "electrical", subcategoryKey: "wiring", price: 80, isActive: true, discountTiers: [{ minQuantity: 5, percent: 15 }] },
+      { serviceKey: "wiring_outlet_svc", categoryKey: "electrical", subcategoryKey: "wiring", price: 30, isActive: true, discountTiers: [] },
+      { serviceKey: "light_ceiling_svc", categoryKey: "electrical", subcategoryKey: "lighting", price: 60, isActive: true, discountTiers: [] },
+      { serviceKey: "light_spot_svc", categoryKey: "electrical", subcategoryKey: "lighting", price: 50, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 30,
@@ -152,17 +153,17 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/61.jpg",
     title: "მხატვარი-მალიარი",
     bio: "ინტერიერის მოხატვა და ტაპეტის დაკვრა — ჩემი სპეციალობაა. 7 წელია ვმუშაობ ბათუმსა და აჭარის რეგიონში. ვიყენებ მაღალი ხარისხის საღებავებს და ვიძლევი სისუფთავის გარანტიას სამუშაოს დასრულების შემდეგ.",
-    selectedCategories: ["renovation"],
-    selectedSubcategories: ["mural"],
-    categories: ["renovation"],
-    subcategories: ["mural"],
+    selectedCategories: ["painters"],
+    selectedSubcategories: ["painter"],
+    categories: ["painters"],
+    subcategories: ["painter"],
     selectedServices: [
-      { key: "mural", categoryKey: "renovation", name: "Painting", nameKa: "მოხატვა/მალიარობა", experience: "5-10" },
+      { key: "painter", categoryKey: "painters", name: "Painting", nameKa: "მოხატვა/მალიარობა", experience: "5-10" },
     ],
     servicePricing: [
-      { serviceKey: "interior-painting", categoryKey: "renovation", subcategoryKey: "mural", price: 25, isActive: true, discountTiers: [{ minQuantity: 4, percent: 10 }] },
-      { serviceKey: "wallpaper", categoryKey: "renovation", subcategoryKey: "mural", price: 35, isActive: true, discountTiers: [] },
-      { serviceKey: "ceiling-painting", categoryKey: "renovation", subcategoryKey: "mural", price: 20, isActive: true, discountTiers: [] },
+      { serviceKey: "paint_interior_svc", categoryKey: "painters", subcategoryKey: "painter", price: 25, isActive: true, discountTiers: [{ minQuantity: 4, percent: 10 }] },
+      { serviceKey: "paint_wallpaper_svc", categoryKey: "painters", subcategoryKey: "painter", price: 35, isActive: true, discountTiers: [] },
+      { serviceKey: "paint_ceiling_svc", categoryKey: "painters", subcategoryKey: "painter", price: 20, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 20,
@@ -183,19 +184,19 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/women/28.jpg",
     title: "დამლაგებელი",
     bio: "პროფესიონალური დასუფთავების სერვისი თბილისსა და რუსთავში. ვთავაზობ სტანდარტულ და ღრმა დასუფთავებას, ასევე რემონტის შემდგომ დალაგებას. ვიყენებ ეკოლოგიურად სუფთა საშუალებებს. გუნდში მყავს 4 გამოცდილი თანამშრომელი.",
-    selectedCategories: ["services"],
-    selectedSubcategories: ["cleaning"],
-    categories: ["services"],
-    subcategories: ["cleaning"],
+    selectedCategories: ["cleaning"],
+    selectedSubcategories: ["regular_clean", "deep_clean", "post_renovation_clean"],
+    categories: ["cleaning"],
+    subcategories: ["regular_clean", "deep_clean", "post_renovation_clean"],
     selectedServices: [
-      { key: "cleaning", categoryKey: "services", name: "Cleaning", nameKa: "დასუფთავება", experience: "3-5" },
-      { key: "deep-cleaning", categoryKey: "services", name: "Deep Cleaning", nameKa: "ღრმა დასუფთავება", experience: "3-5" },
-      { key: "after-renovation", categoryKey: "services", name: "After Renovation Cleaning", nameKa: "სარემონტო დასუფთავება", experience: "3-5" },
+      { key: "regular_clean", categoryKey: "cleaning", name: "Regular Cleaning", nameKa: "სტანდარტული დასუფთავება", experience: "3-5" },
+      { key: "deep_clean", categoryKey: "cleaning", name: "Deep Cleaning", nameKa: "ღრმა დასუფთავება", experience: "3-5" },
+      { key: "post_renovation_clean", categoryKey: "cleaning", name: "Post-renovation Cleaning", nameKa: "სარემონტო დასუფთავება", experience: "3-5" },
     ],
     servicePricing: [
-      { serviceKey: "standard-cleaning", categoryKey: "services", subcategoryKey: "cleaning", price: 60, isActive: true, discountTiers: [{ minQuantity: 4, percent: 15 }] },
-      { serviceKey: "deep-cleaning", categoryKey: "services", subcategoryKey: "cleaning", price: 120, isActive: true, discountTiers: [{ minQuantity: 2, percent: 10 }] },
-      { serviceKey: "after-renovation", categoryKey: "services", subcategoryKey: "cleaning", price: 150, isActive: true, discountTiers: [] },
+      { serviceKey: "regular_standard_svc", categoryKey: "cleaning", subcategoryKey: "regular_clean", price: 60, isActive: true, discountTiers: [{ minQuantity: 4, percent: 15 }] },
+      { serviceKey: "deep_full_svc", categoryKey: "cleaning", subcategoryKey: "deep_clean", price: 120, isActive: true, discountTiers: [{ minQuantity: 2, percent: 10 }] },
+      { serviceKey: "post_reno_full_svc", categoryKey: "cleaning", subcategoryKey: "post_renovation_clean", price: 150, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 60,
@@ -216,18 +217,18 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/55.jpg",
     title: "კონდიციონერის/გათბობის სპეციალისტი",
     bio: "კონდიციონერების მონტაჟი, მომსახურება და შეკეთება — ჩემი ძირითადი საქმიანობაა. ვმუშაობ ყველა ცნობილ ბრენდთან. ასევე ვაკეთებ ცენტრალური გათბობის სისტემების დაპროექტებასა და მონტაჟს. 10 წელზე მეტი გამოცდილება.",
-    selectedCategories: ["renovation"],
-    selectedSubcategories: ["hvac"],
-    categories: ["renovation"],
-    subcategories: ["hvac"],
+    selectedCategories: ["hvac"],
+    selectedSubcategories: ["ac_ventilation"],
+    categories: ["hvac"],
+    subcategories: ["ac_ventilation"],
     selectedServices: [
-      { key: "hvac", categoryKey: "renovation", name: "HVAC", nameKa: "კონდიციონირება/გათბობა", experience: "10+" },
+      { key: "ac_ventilation", categoryKey: "hvac", name: "AC & Ventilation", nameKa: "კონდიციონერი და ვენტილაცია", experience: "10+" },
     ],
     servicePricing: [
-      { serviceKey: "ac-install", categoryKey: "renovation", subcategoryKey: "hvac", price: 200, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
-      { serviceKey: "ac-service", categoryKey: "renovation", subcategoryKey: "hvac", price: 80, isActive: true, discountTiers: [] },
-      { serviceKey: "heating-install", categoryKey: "renovation", subcategoryKey: "hvac", price: 300, isActive: true, discountTiers: [] },
-      { serviceKey: "ac-repair", categoryKey: "renovation", subcategoryKey: "hvac", price: 100, isActive: true, discountTiers: [] },
+      { serviceKey: "ac_install_svc", categoryKey: "hvac", subcategoryKey: "ac_ventilation", price: 200, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
+      { serviceKey: "ac_service_svc", categoryKey: "hvac", subcategoryKey: "ac_ventilation", price: 80, isActive: true, discountTiers: [] },
+      { serviceKey: "ac_repair_svc", categoryKey: "hvac", subcategoryKey: "ac_ventilation", price: 100, isActive: true, discountTiers: [] },
+      { serviceKey: "ventilation_svc", categoryKey: "hvac", subcategoryKey: "ac_ventilation", price: 300, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 80,
@@ -248,17 +249,18 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/22.jpg",
     title: "ხელოსანი (ჰენდიმენი)",
     bio: "უნივერსალური ხელოსანი ქუთაისში. ვაკეთებ ავეჯის აწყობას, თაროების მონტაჟს, წვრილმანი შეკეთებებს და სხვა საყოფაცხოვრებო სამუშაოებს. სწრაფი, საიმედო და ხელმისაწვდომი ფასებით.",
-    selectedCategories: ["services"],
-    selectedSubcategories: ["appliance-repair"],
-    categories: ["services"],
-    subcategories: ["appliance-repair"],
+    selectedCategories: ["handyman"],
+    selectedSubcategories: ["assembly", "mounting"],
+    categories: ["handyman"],
+    subcategories: ["assembly", "mounting"],
     selectedServices: [
-      { key: "appliance-repair", categoryKey: "services", name: "Appliance Repair", nameKa: "ტექნიკის შეკეთება", experience: "3-5" },
+      { key: "assembly", categoryKey: "handyman", name: "Assembly", nameKa: "აწყობა", experience: "3-5" },
+      { key: "mounting", categoryKey: "handyman", name: "Mounting", nameKa: "მონტაჟი", experience: "3-5" },
     ],
     servicePricing: [
-      { serviceKey: "mounting", categoryKey: "services", subcategoryKey: "appliance-repair", price: 30, isActive: true, discountTiers: [] },
-      { serviceKey: "furniture-assembly", categoryKey: "services", subcategoryKey: "appliance-repair", price: 50, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
-      { serviceKey: "minor-repair", categoryKey: "services", subcategoryKey: "appliance-repair", price: 40, isActive: true, discountTiers: [] },
+      { serviceKey: "mount_tv_svc", categoryKey: "handyman", subcategoryKey: "mounting", price: 30, isActive: true, discountTiers: [] },
+      { serviceKey: "assembly_flatpack_svc", categoryKey: "handyman", subcategoryKey: "assembly", price: 50, isActive: true, discountTiers: [{ minQuantity: 3, percent: 10 }] },
+      { serviceKey: "mount_shelf_svc", categoryKey: "handyman", subcategoryKey: "mounting", price: 40, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 30,
@@ -279,19 +281,19 @@ const PROS = [
     avatar: "https://randomuser.me/api/portraits/men/36.jpg",
     title: "კარის/საკეტის სპეციალისტი",
     bio: "კარების მონტაჟი და საკეტების დაყენება — 9 წლიანი გამოცდილებით. ვმუშაობ შესასვლელ, ინტერიერულ და ლითონის კარებთან. ასევე ვაკეთებ საკეტების გამოცვლას, გასაღებების დამზადებას და საგანგებო გახსნას.",
-    selectedCategories: ["renovation", "services"],
-    selectedSubcategories: ["doors-windows", "locksmith"],
-    categories: ["renovation", "services"],
-    subcategories: ["doors-windows", "locksmith"],
+    selectedCategories: ["windows-doors"],
+    selectedSubcategories: ["windows", "glazing"],
+    categories: ["windows-doors"],
+    subcategories: ["windows", "glazing"],
     selectedServices: [
-      { key: "doors-windows", categoryKey: "renovation", name: "Doors & Windows", nameKa: "კარ-ფანჯარა", experience: "5-10" },
-      { key: "locksmith", categoryKey: "services", name: "Locksmith", nameKa: "საკეტების მომსახურება", experience: "5-10" },
+      { key: "windows", categoryKey: "windows-doors", name: "Windows", nameKa: "ფანჯრები", experience: "5-10" },
+      { key: "glazing", categoryKey: "windows-doors", name: "Glazing", nameKa: "შემინვა", experience: "5-10" },
     ],
     servicePricing: [
-      { serviceKey: "door-install", categoryKey: "renovation", subcategoryKey: "doors-windows", price: 150, isActive: true, discountTiers: [{ minQuantity: 3, percent: 12 }] },
-      { serviceKey: "lock-change", categoryKey: "services", subcategoryKey: "locksmith", price: 60, isActive: true, discountTiers: [] },
-      { serviceKey: "lock-emergency", categoryKey: "services", subcategoryKey: "locksmith", price: 80, isActive: true, discountTiers: [] },
-      { serviceKey: "key-making", categoryKey: "services", subcategoryKey: "locksmith", price: 25, isActive: true, discountTiers: [] },
+      { serviceKey: "wd_pvc_svc", categoryKey: "windows-doors", subcategoryKey: "windows", price: 150, isActive: true, discountTiers: [{ minQuantity: 3, percent: 12 }] },
+      { serviceKey: "wd_aluminum_svc", categoryKey: "windows-doors", subcategoryKey: "windows", price: 180, isActive: true, discountTiers: [] },
+      { serviceKey: "wd_balcony_svc", categoryKey: "windows-doors", subcategoryKey: "glazing", price: 80, isActive: true, discountTiers: [] },
+      { serviceKey: "wd_screen_svc", categoryKey: "windows-doors", subcategoryKey: "windows", price: 25, isActive: true, discountTiers: [] },
     ],
     pricingModel: "range",
     basePrice: 25,
@@ -310,31 +312,30 @@ const PROS = [
     email: "mariami.l@demo.ge",
     city: "tbilisi",
     avatar: "https://randomuser.me/api/portraits/women/44.jpg",
-    title: "IT სპეციალისტი",
-    bio: "კომპიუტერული მომსახურება და ქსელის ადმინისტრირება. ვაკეთებ კომპიუტერის შეკეთებას, ვირუსებისგან გაწმენდას, ქსელის გამართვას და Wi-Fi-ს კონფიგურაციას. ვემსახურები როგორც ფიზიკურ პირებს, ისე მცირე ბიზნესებს.",
-    selectedCategories: ["services"],
-    selectedSubcategories: ["it-support", "network-admin"],
-    categories: ["services"],
-    subcategories: ["it-support", "network-admin"],
+    title: "ინტერიერის დიზაინერი",
+    bio: "ბინების და ოფისების ინტერიერის დიზაინი - 3D ვიზუალიზაცია, მასალების შერჩევა, ფერთა გადაწყვეტა. თითოეულ პროექტს ვუდგები ინდივიდუალურად, კლიენტის სტილისა და ბიუჯეტის გათვალისწინებით. დიპლომი ხელოვნების აკადემიიდან.",
+    selectedCategories: ["designers"],
+    selectedSubcategories: ["interior_design", "commercial_design"],
+    categories: ["designers"],
+    subcategories: ["interior_design", "commercial_design"],
     selectedServices: [
-      { key: "it-support", categoryKey: "services", name: "IT Support", nameKa: "IT მომსახურება", experience: "3-5" },
-      { key: "network-admin", categoryKey: "services", name: "Network Administration", nameKa: "ქსელის ადმინისტრირება", experience: "3-5" },
+      { key: "interior_design", categoryKey: "designers", name: "Interior Design", nameKa: "ინტერიერის დიზაინი", experience: "3-5" },
+      { key: "commercial_design", categoryKey: "designers", name: "Commercial Design", nameKa: "კომერციული დიზაინი", experience: "3-5" },
     ],
     servicePricing: [
-      { serviceKey: "computer-repair", categoryKey: "services", subcategoryKey: "it-support", price: 50, isActive: true, discountTiers: [] },
-      { serviceKey: "virus-removal", categoryKey: "services", subcategoryKey: "it-support", price: 40, isActive: true, discountTiers: [] },
-      { serviceKey: "network-setup", categoryKey: "services", subcategoryKey: "network-admin", price: 100, isActive: true, discountTiers: [{ minQuantity: 2, percent: 15 }] },
-      { serviceKey: "wifi-config", categoryKey: "services", subcategoryKey: "network-admin", price: 60, isActive: true, discountTiers: [] },
+      { serviceKey: "design_apartment_svc", categoryKey: "designers", subcategoryKey: "interior_design", price: 1500, isActive: true, discountTiers: [] },
+      { serviceKey: "design_room_svc", categoryKey: "designers", subcategoryKey: "interior_design", price: 400, isActive: true, discountTiers: [] },
+      { serviceKey: "design_office_svc", categoryKey: "designers", subcategoryKey: "commercial_design", price: 2500, isActive: true, discountTiers: [{ minQuantity: 2, percent: 15 }] },
     ],
     pricingModel: "range",
-    basePrice: 40,
-    maxPrice: 100,
+    basePrice: 400,
+    maxPrice: 2500,
     serviceAreas: ["თბილისი"],
     yearsExperience: 6,
     avgRating: 4.8,
     totalReviews: 15,
     completedJobs: 12,
-    customServices: ["მონაცემთა აღდგენა", "ოპერაციული სისტემის ინსტალაცია", "პრინტერის გამართვა"],
+    customServices: ["3D ვიზუალიზაცია", "მასალების შერჩევა", "ფერთა გადაწყვეტა"],
     languages: ["ka", "en", "ru"],
   },
 ];
@@ -382,14 +383,35 @@ async function seed() {
   const hashedPassword = await bcrypt.hash(RAW_PASSWORD, 10);
   let nextUid = await getNextUid();
 
+  // Default working schedule for demo pros: Mon-Sat 9:00-19:00, Sun off.
+  // Without this, `getAvailability()` in bookings.service.ts returns
+  // "all slots unavailable" because the seeded pro has no
+  // `weeklySchedule` entries, which makes the booking modal show "no
+  // slots" on every date. dayOfWeek follows JS convention: Sun=0, Mon=1, ... Sat=6.
+  const DEMO_WEEKLY_SCHEDULE = [
+    { dayOfWeek: 0, isAvailable: false, startHour: 0, endHour: 0 },
+    { dayOfWeek: 1, isAvailable: true, startHour: 9, endHour: 19 },
+    { dayOfWeek: 2, isAvailable: true, startHour: 9, endHour: 19 },
+    { dayOfWeek: 3, isAvailable: true, startHour: 9, endHour: 19 },
+    { dayOfWeek: 4, isAvailable: true, startHour: 9, endHour: 19 },
+    { dayOfWeek: 5, isAvailable: true, startHour: 9, endHour: 19 },
+    { dayOfWeek: 6, isAvailable: true, startHour: 10, endHour: 17 },
+  ];
+
   const results: { name: string; phone: string; email: string; role: string }[] = [];
 
   // ── Upsert pros ──────────────────────────────────────────────────────────
+  //
+  // UID handling: split into `$set` (every-run mutable fields) and
+  // `$setOnInsert` (the uid + createdAt, which only apply on first
+  // insert). Existing users keep their original uid - critical because
+  // the uid index is unique, and re-running with a hardcoded `100001+i`
+  // collides whenever the DB already has rows at those slots from a
+  // prior seed or registration.
   for (let i = 0; i < PROS.length; i++) {
     const p = PROS[i];
-    const doc: any = {
+    const setDoc: any = {
       ...p,
-      uid: 100001 + i,
       password: hashedPassword,
       role: "pro",
       accountType: "individual",
@@ -404,12 +426,28 @@ async function seed() {
       isActive: true,
       status: "active",
       currency: "GEL",
-      createdAt: randomDateWithinMonths(6),
+      weeklySchedule: DEMO_WEEKLY_SCHEDULE,
+      // Demo bank account so admin payout flow works end-to-end without
+      // the pro having to set it up via /settings/payouts. BoG sandbox
+      // routing prefix `BG` + the pro's phone tail keeps account
+      // numbers unique across the seed.
+      bankAccount: {
+        bankCode: "BAGAGE22",
+        accountNumber: `GE00BG00000000${p.phone.slice(-7)}`,
+        holderName: p.name,
+        verifiedAt: new Date(),
+      },
     };
 
     await User.updateOne(
       { phone: p.phone },
-      { $set: doc },
+      {
+        $set: setDoc,
+        $setOnInsert: {
+          uid: nextUid++,
+          createdAt: randomDateWithinMonths(6),
+        },
+      },
       { upsert: true },
     );
     results.push({ name: p.name, phone: p.phone, email: p.email, role: "pro" });
@@ -419,9 +457,8 @@ async function seed() {
   // ── Upsert clients ────────────────────────────────────────────────────────
   for (let i = 0; i < CLIENTS.length; i++) {
     const c = CLIENTS[i];
-    const doc: any = {
+    const setDoc: any = {
       ...c,
-      uid: 100001 + PROS.length + i,
       password: hashedPassword,
       role: "client",
       accountType: "individual",
@@ -429,12 +466,17 @@ async function seed() {
       isEmailVerified: true,
       isActive: true,
       registrationStep: 5,
-      createdAt: randomDateWithinMonths(6),
     };
 
     await User.updateOne(
       { phone: c.phone },
-      { $set: doc },
+      {
+        $set: setDoc,
+        $setOnInsert: {
+          uid: nextUid++,
+          createdAt: randomDateWithinMonths(6),
+        },
+      },
       { upsert: true },
     );
     results.push({ name: c.name, phone: c.phone, email: c.email, role: "client" });

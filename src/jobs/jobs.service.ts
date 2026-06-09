@@ -10,7 +10,36 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/schemas/notification.schema";
 import { User, UserRole } from "../users/schemas/user.schema";
 import { SmsService } from "../verification/services/sms.service";
+import {
+  CURRENCY_BY_COUNTRY,
+  DEFAULT_COUNTRY,
+  resolveUserLocale,
+  type CountryCode,
+  type SupportedLocale,
+} from "../common/countries";
 import { CreateJobDto } from "./dto/create-job.dto";
+import { normalizeCategory } from "./category-normalize";
+
+// Localized SMS body for job-invitation notifications sent to pros.
+// The recipient's locale wins (we have the pro's User doc loaded);
+// the job's country drives the currency symbol so a USD job sent to a
+// Russian-speaking US pro reads as "$1,200" not "1,200 ₾".
+const JOB_INVITE_SMS_PREFIX: Record<
+  SupportedLocale,
+  (clientName: string, jobTitle: string) => string
+> = {
+  en: (client, title) => `${client || "A client"} invited you to a job: "${title}"`,
+  ka: (client, title) => `${client || "კლიენტი"} გეპატიჟებათ სამუშაოზე: "${title}"`,
+  ru: (client, title) => `${client || "Клиент"} приглашает вас на работу: "${title}"`,
+};
+
+const CURRENCY_SYMBOL_BY_CODE: Record<string, string> = {
+  GEL: "₾",
+  ILS: "₪",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+};
 import { CreateProposalDto } from "./dto/create-proposal.dto";
 import {
   Job,
@@ -25,6 +54,15 @@ import {
 } from "./schemas/project-tracking.schema";
 import { Proposal, ProposalStatus } from "./schemas/proposal.schema";
 import { SavedJob } from "./schemas/saved-job.schema";
+import { Poll } from "./schemas/poll.schema";
+import { JobComment } from "./schemas/job-comment.schema";
+import {
+  EngagementStatus,
+  ProjectRequest,
+} from "../project-request/schemas/project-request.schema";
+import { AmplitudeService } from "../analytics/amplitude.service";
+import { AnalyticsService } from "../analytics/analytics.service";
+import { PaymentsService } from "../payments/payments.service";
 
 @Injectable()
 export class JobsService {
@@ -35,9 +73,16 @@ export class JobsService {
     @InjectModel(SavedJob.name) private savedJobModel: Model<SavedJob>,
     @InjectModel(ProjectTracking.name)
     private projectTrackingModel: Model<ProjectTracking>,
+    @InjectModel(Poll.name) private pollModel: Model<Poll>,
+    @InjectModel(JobComment.name) private jobCommentModel: Model<JobComment>,
     @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(ProjectRequest.name)
+    private projectRequestModel: Model<ProjectRequest>,
     private notificationsService: NotificationsService,
     private smsService: SmsService,
+    private readonly amplitude: AmplitudeService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   // Jobs CRUD
@@ -46,6 +91,13 @@ export class JobsService {
 
     // Extract invitedPros before spreading DTO into job document
     const { invitedPros: invitedProIds, ...jobData } = createJobDto;
+
+    // Fold the category to its canonical Service-Catalog key so the job
+    // matches the pros listed under that key (e.g. "plumber" -> "plumbing").
+    if (jobData.category) {
+      jobData.category =
+        normalizeCategory(jobData.category) ?? jobData.category;
+    }
 
     // Prevent duplicate job creation within 30 seconds (same user, same title)
     const recentDuplicateCheck = new Date();
@@ -79,6 +131,11 @@ export class JobsService {
     const job = new this.jobModel({
       clientId: new Types.ObjectId(clientId),
       ...jobData,
+      // Stamp country onto the doc - explicit value from DTO if provided
+      // (multi-country frontend will pass the marketplace's code), else
+      // "GE" so today's single-marketplace clients still write the
+      // canonical value instead of leaving it null.
+      country: jobData.country ?? "GE",
       invitedPros: invitedProIds
         ? invitedProIds.map((id) => new Types.ObjectId(id))
         : [],
@@ -100,6 +157,23 @@ export class JobsService {
     this.notifyMatchingPros(savedJob).catch((err) =>
       console.error("Failed to notify matching pros:", err),
     );
+
+    // Server-side analytics event. Past-tense `job_posted` (vs the
+    // frontend's `job_post`) so the two don't collide in Amplitude
+    // funnels during the parallel-tracking period.
+    this.amplitude.track("job_posted", {
+      userId: clientId,
+      properties: {
+        jobId: savedJob._id.toString(),
+        jobNumber: savedJob.jobNumber,
+        category: savedJob.category,
+        subcategory: savedJob.subcategory,
+        country: savedJob.country,
+        propertyType: savedJob.propertyType,
+        invitedProCount: invitedProIds?.length ?? 0,
+        titleLength: savedJob.title?.length,
+      },
+    });
 
     return savedJob;
   }
@@ -130,26 +204,102 @@ export class JobsService {
       .lean()
       .exec();
 
-    if (matchingPros.length === 0) return;
+    // Supply gap: nobody can serve this job, so it would sit with zero bids
+    // and the client would churn. Don't fail silently - alert ops to source a
+    // pro or contact the client. (Best-effort; never blocks job creation.)
+    if (matchingPros.length === 0) {
+      this.alertSupplyGap(job).catch((err) =>
+        console.error("Failed to alert supply gap:", err),
+      );
+      return;
+    }
+
+    // Currency follows the job's marketplace (where the work happens)
+    const jobCurrencyCode =
+      CURRENCY_BY_COUNTRY[
+        ((job as any).country?.toUpperCase() || DEFAULT_COUNTRY) as CountryCode
+      ] || CURRENCY_BY_COUNTRY[DEFAULT_COUNTRY];
+    const jobCurrencySymbol = CURRENCY_SYMBOL_BY_CODE[jobCurrencyCode] || '';
+    const budget = (job as any).budgetMin
+      ? `${(job as any).budgetMin}${jobCurrencySymbol}`
+      : (job as any).budgetMax
+        ? `${(job as any).budgetMax}${jobCurrencySymbol}`
+        : '';
 
     // Send notification to each matching pro
+    const jobTitle = (job as any).title || "New job posted";
     for (const pro of matchingPros) {
       try {
         await this.notificationsService.notify(
           pro._id.toString(),
           NotificationType.JOB_MATCH,
-          (job as any).title || "New job posted",
-          `${(job as any).category || ""} — ${subcategory}${(job as any).budgetMin ? ` · ${(job as any).budgetMin}₾` : (job as any).budgetMax ? ` · ${(job as any).budgetMax}₾` : ''}`,
+          jobTitle,
+          `${(job as any).category || ""} - ${subcategory}${budget ? ` · ${budget}` : ''}`,
           {
             referenceId: (job as any)._id?.toString(),
             referenceModel: "Job",
             link: `/jobs/${(job as any)._id}`,
+            i18n: {
+              // Title is the pro's job title (user-authored) so we don't
+              // translate it - pass it through as a {jobTitle} param.
+              titleKey: "notifications.types.job_match.title",
+              messageKey: "notifications.types.job_match.message",
+              params: {
+                jobTitle,
+                category: (job as any).category || '',
+                subcategory: subcategory || '',
+                // Pre-format the budget chunk with its separator here
+                // so the template stays free of conditional logic.
+                budget: budget ? `· ${budget}` : '',
+              },
+            },
           },
         );
       } catch {
-        // Notification failed for this pro — continue with others
+        // Notification failed for this pro - continue with others
       }
     }
+  }
+
+  /**
+   * No pro matched a freshly-posted job. Alert every admin so ops can source a
+   * pro or contact the client before the job dies with zero bids. Localized so
+   * the bell feed renders in the admin's language.
+   */
+  private async alertSupplyGap(job: Job): Promise<void> {
+    const jobId = (job as any)._id?.toString();
+    const jobTitle = (job as any).title || "";
+    const category = (job as any).category || "";
+    const admins = await this.userModel
+      .find({ role: "admin", isDeactivated: { $ne: true } })
+      .select("_id")
+      .lean<{ _id: any }[]>()
+      .exec();
+    if (admins.length === 0) return;
+    await Promise.all(
+      admins.map((a) =>
+        this.notificationsService
+          .notify(
+            a._id.toString(),
+            NotificationType.SUPPLY_GAP,
+            "Supply gap",
+            `No available pros for "${jobTitle}" (${category}). Source a pro or contact the client.`,
+            {
+              referenceId: jobId,
+              referenceModel: "Job",
+              link: `/admin/jobs`,
+              i18n: {
+                titleKey: "notifications.types.supply_gap.title",
+                messageKey: "notifications.types.supply_gap.message",
+                params: { jobTitle, category },
+              },
+            },
+          )
+          .catch(() => {
+            /* best-effort per admin */
+          }),
+      ),
+    );
   }
 
   async findAllJobs(filters?: {
@@ -173,6 +323,12 @@ export class JobsService {
     deadline?: string;
     savedOnly?: boolean;
     userId?: string;
+    /**
+     * ISO 3166-1 alpha-2 country code. Scopes the listing to jobs in
+     * that marketplace. When omitted, returns jobs across every country
+     * (controller defaults non-admin callers to "GE" - see jobs.controller).
+     */
+    country?: string;
   }): Promise<{
     data: Job[];
     pagination: {
@@ -196,8 +352,24 @@ export class JobsService {
       query.status = JobStatus.OPEN;
     }
 
-    // Exclude direct_request jobs from public browse — they are only visible to invited pros
+    // Exclude direct_request jobs from public browse - they are only visible to invited pros
     query.jobType = { $ne: JobType.DIRECT_REQUEST };
+
+    // Country scoping (added 2026-05). Legacy rows pre-migration don't
+    // have `country`, so for GE (the default marketplace) we OR against
+    // missing/null so the backfill timing window can't drop them.
+    if (filters?.country) {
+      if (filters.country === "GE") {
+        query.$or = [
+          { country: "GE" },
+          { country: { $exists: false } },
+          { country: null },
+          { country: "" },
+        ];
+      } else {
+        query.country = filters.country;
+      }
+    }
 
     const andConditions: any[] = [];
 
@@ -875,14 +1047,21 @@ export class JobsService {
     if (Object.keys($set).length > 0) mongoUpdate.$set = $set;
     if (Object.keys($unset).length > 0) mongoUpdate.$unset = $unset;
 
-    // If nothing to update, return the current job
-    if (Object.keys(mongoUpdate).length === 0) {
-      return job.toObject() as any;
+    // Apply the update (if any) then return the same enriched shape
+    // GET /jobs/:id returns. The raw findByIdAndUpdate result drops the
+    // populated `clientId` (-> bare ObjectId) and skips the hiredPro /
+    // project-tracking enrichment, which caused the frontend's
+    // `setJob(res.data)` after save to blank out the client name +
+    // avatar in the sidebar. findJobById is safe to call here even on
+    // a no-op update: it does not increment view count when the caller
+    // is the job owner (which is always true on the edit path).
+    if (Object.keys(mongoUpdate).length > 0) {
+      await this.jobModel
+        .findByIdAndUpdate(id, mongoUpdate, { new: true })
+        .exec();
     }
 
-    return this.jobModel
-      .findByIdAndUpdate(id, mongoUpdate, { new: true })
-      .exec();
+    return this.findJobById(id, clientId);
   }
 
   async deleteJob(
@@ -903,8 +1082,18 @@ export class JobsService {
       );
     }
 
-    await this.jobModel.findByIdAndDelete(id);
-    await this.proposalModel.deleteMany({ jobId: id });
+    // Cascade-delete every collection that references this job so we
+    // don't leave orphan project tracking, workspace, polls, or comments
+    // taking up DB space and broken links from notifications. Previously
+    // only proposals were cleaned up.
+    const jobObjectId = new Types.ObjectId(id);
+    await Promise.all([
+      this.jobModel.findByIdAndDelete(id),
+      this.proposalModel.deleteMany({ jobId: id }),
+      this.projectTrackingModel.deleteMany({ jobId: jobObjectId }),
+      this.pollModel.deleteMany({ jobId: jobObjectId }),
+      this.jobCommentModel.deleteMany({ jobId: jobObjectId }),
+    ]);
   }
 
   // Proposals
@@ -961,18 +1150,42 @@ export class JobsService {
       $inc: { proposalCount: 1 },
     });
 
+    // Server-side analytics. Fires AFTER save so we only track real
+    // proposals - early throws (unverified pro, duplicate, self-bid) don't
+    // pollute the funnel.
+    this.amplitude.track("proposal_submitted", {
+      userId: proId,
+      properties: {
+        proposalId: proposal._id.toString(),
+        jobId,
+        jobCategory: job.category,
+        jobSubcategory: job.subcategory,
+        clientId: job.clientId.toString(),
+        proposedPrice: createProposalDto.proposedPrice,
+        estimatedDuration: createProposalDto.estimatedDuration,
+        estimatedDurationUnit: createProposalDto.estimatedDurationUnit,
+        coverLetterLength: createProposalDto.coverLetter?.length,
+      },
+    });
+
     // Send notification to job owner (client)
     try {
       const pro = await this.userModel.findById(proId).select("name").exec();
+      const proName = pro?.name || "A professional";
       await this.notificationsService.notify(
         job.clientId.toString(),
         NotificationType.NEW_PROPOSAL,
-        "ახალი შეთავაზება",
-        `${pro?.name || "სპეციალისტმა"} გამოგიგზავნათ შეთავაზება: "${job.title}"`,
+        "New Proposal",
+        `${proName} sent you a proposal for "${job.title}"`,
         {
           link: `/my-jobs/${jobId}/proposals`,
           referenceId: proposal._id.toString(),
           referenceModel: "Proposal",
+          i18n: {
+            titleKey: "notifications.types.new_proposal.title",
+            messageKey: "notifications.types.new_proposal.message",
+            params: { proName, jobTitle: job.title },
+          },
           metadata: {
             jobId,
             jobTitle: job.title,
@@ -1168,7 +1381,7 @@ export class JobsService {
   async acceptProposal(
     proposalId: string,
     clientId: string,
-  ): Promise<Proposal> {
+  ): Promise<{ proposal: Proposal; paymentRedirectUrl: string | null }> {
     const proposal = await this.proposalModel
       .findById(proposalId)
       .populate("jobId")
@@ -1185,6 +1398,106 @@ export class JobsService {
       );
     }
 
+    // Already hired (idempotent / double-click) - nothing more to do.
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      return { proposal, paymentRedirectUrl: null };
+    }
+
+    const amountMinor = Math.round((proposal.proposedPrice ?? 0) * 100);
+
+    // No agreed price -> nothing to charge; finalize immediately (preserves
+    // the legacy flow for quote-on-completion proposals).
+    if (amountMinor <= 0) {
+      const finalized = await this.finalizeHire(proposalId);
+      return { proposal: finalized, paymentRedirectUrl: null };
+    }
+
+    // Escrow-at-hire: create a payment intent and send the client to pay. The
+    // hire is finalized (job -> in_progress, pro notified) only once payment
+    // clears - mirrors the booking flow. On return, the client hits
+    // /jobs/proposals/:id/reconcile-payment which calls finalizeHire.
+    const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const intent = await this.paymentsService.createIntentForEntity({
+      entityType: "project_milestone",
+      entityId: proposalId,
+      amountMinor,
+      currency: "GEL",
+      description: `Homico hire: ${job.title}`,
+      payerUserId: clientId,
+      payeeUserId: proposal.proId.toString(),
+      returnUrl: `${appUrl}/hire/${job._id}/pay/return?proposal=${proposalId}`,
+      cancelUrl: `${appUrl}/hire/${job._id}/pay/cancelled?proposal=${proposalId}`,
+    });
+
+    proposal.paymentId = new Types.ObjectId(intent.paymentId);
+    await proposal.save();
+
+    return { proposal, paymentRedirectUrl: intent.redirectUrl };
+  }
+
+  // Finalize a hire once its escrow payment has cleared (or immediately for
+  // unpriced proposals). Idempotent: a no-op once the proposal is ACCEPTED.
+  async finalizeHire(proposalId: string): Promise<Proposal> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate("jobId")
+      .exec();
+    if (!proposal) {
+      throw new NotFoundException("Proposal not found");
+    }
+    if (proposal.status === ProposalStatus.ACCEPTED) {
+      return proposal;
+    }
+
+    const job = proposal.jobId as any;
+    const clientId = job.clientId.toString();
+
+    // Escrow created on payment success - lets completion release it later.
+    const escrow = await this.paymentsService.findEscrowForEntity(
+      "project_milestone",
+      proposalId,
+    );
+
+    // Create project tracking FIRST so a failure here can't leave the job
+    // marked in_progress with no workspace to render. Idempotent via the
+    // existence check: a retry after partial failure won't create a second
+    // record, and a double-click race resolves to one tracking row.
+    const now = new Date();
+    let tracking = await this.projectTrackingModel
+      .findOne({ jobId: new Types.ObjectId(job._id) })
+      .exec();
+    if (!tracking) {
+      tracking = await this.projectTrackingModel.create({
+        jobId: new Types.ObjectId(job._id),
+        clientId: new Types.ObjectId(clientId),
+        proId: proposal.proId,
+        proposalId: new Types.ObjectId(proposalId),
+        currentStage: ProjectStage.HIRED,
+        progress: 0,
+        hiredAt: now,
+        agreedPrice: proposal.proposedPrice,
+        estimatedDuration: proposal.estimatedDuration,
+        estimatedDurationUnit: proposal.estimatedDurationUnit,
+        // Stamp the parent project/engagement when this job was created to
+        // fill a Project role, so the dashboard can aggregate this worker.
+        projectId: job.projectId,
+        engagementId: job.engagementId,
+        paymentStatus: "paid",
+        paymentId: proposal.paymentId,
+        escrowId: escrow?._id,
+        stageHistory: [
+          {
+            stage: ProjectStage.HIRED,
+            enteredAt: now,
+          },
+        ],
+      });
+    } else if (escrow?._id && !tracking.escrowId) {
+      // Tracking already existed (e.g. a retry) - attach the escrow now.
+      tracking.escrowId = escrow._id as any;
+      await tracking.save();
+    }
+
     proposal.status = ProposalStatus.ACCEPTED;
     proposal.viewedByPro = false; // Mark as unviewed so pro sees the update
     await proposal.save();
@@ -1195,25 +1508,45 @@ export class JobsService {
       hiredProId: proposal.proId,
     });
 
-    // Create project tracking for this job
-    const now = new Date();
-    await this.projectTrackingModel.create({
-      jobId: new Types.ObjectId(job._id),
-      clientId: new Types.ObjectId(clientId),
-      proId: proposal.proId,
-      proposalId: new Types.ObjectId(proposalId),
-      currentStage: ProjectStage.HIRED,
-      progress: 0,
-      hiredAt: now,
-      agreedPrice: proposal.proposedPrice,
-      estimatedDuration: proposal.estimatedDuration,
-      estimatedDurationUnit: proposal.estimatedDurationUnit,
-      stageHistory: [
-        {
-          stage: ProjectStage.HIRED,
-          enteredAt: now,
-        },
-      ],
+    // If this job fills a Project engagement, mark that engagement hired
+    // and link the freshly-created workspace. Best-effort: a failure here
+    // must not roll back the hire (the standalone job flow is unaffected).
+    if (job.projectId && job.engagementId) {
+      try {
+        await this.projectRequestModel.updateOne(
+          { _id: job.projectId, "engagements.id": job.engagementId },
+          {
+            $set: {
+              "engagements.$.status": EngagementStatus.HIRED,
+              "engagements.$.assignedProId": proposal.proId,
+              "engagements.$.proposalId": new Types.ObjectId(proposalId),
+              "engagements.$.projectTrackingId": tracking._id,
+            },
+          },
+        );
+      } catch (error) {
+        console.error("Failed to backfill project engagement:", error);
+      }
+    }
+
+    // Founder analytics: this is the key marketplace conversion - a job
+    // posting just resulted in a hire. Target = proId so the admin
+    // dashboard can rank pros by hire count. Companion event to the
+    // frontend PROPOSAL_ACCEPT - both fire (frontend may be blocked, server
+    // is authoritative).
+    this.analyticsService.trackEvent(
+      "proposal_accepted",
+      proposal.proId.toString(),
+      String(proposal.proposedPrice ?? ""),
+    );
+    this.amplitude.track("proposal_accepted", {
+      userId: clientId,
+      properties: {
+        proposalId: proposal._id.toString(),
+        jobId: job._id.toString(),
+        proId: proposal.proId.toString(),
+        proposedPrice: proposal.proposedPrice,
+      },
     });
 
     // Send notification to pro that they are hired
@@ -1222,15 +1555,21 @@ export class JobsService {
         .findById(clientId)
         .select("name")
         .exec();
+      const clientName = client?.name || "A client";
       await this.notificationsService.notify(
         proposal.proId.toString(),
         NotificationType.PROPOSAL_ACCEPTED,
-        "თქვენ დაქირავებული ხართ!",
-        `${client?.name || "კლიენტმა"} დაგიქირავათ პროექტზე: "${job.title}"`,
+        "You're hired!",
+        `${clientName} hired you for the project: "${job.title}"`,
         {
           link: `/my-work`,
           referenceId: job._id.toString(),
           referenceModel: "Job",
+          i18n: {
+            titleKey: "notifications.types.proposal_accepted.title",
+            messageKey: "notifications.types.proposal_accepted.message",
+            params: { clientName, jobTitle: job.title },
+          },
           metadata: {
             jobId: job._id.toString(),
             jobTitle: job.title,
@@ -1243,6 +1582,52 @@ export class JobsService {
     }
 
     return proposal;
+  }
+
+  // Called when the client returns from the payment provider after accepting a
+  // proposal. Re-checks the provider and finalizes the hire if payment cleared.
+  async reconcileProjectPayment(
+    proposalId: string,
+    userId: string,
+  ): Promise<{ status: ProposalStatus; paid: boolean }> {
+    const proposal = await this.proposalModel
+      .findById(proposalId)
+      .populate("jobId")
+      .exec();
+    if (!proposal) {
+      throw new NotFoundException("Proposal not found");
+    }
+    const job = proposal.jobId as any;
+    if (job.clientId.toString() !== userId) {
+      throw new ForbiddenException("Only the client can reconcile this payment");
+    }
+
+    if (proposal.paymentId) {
+      await this.paymentsService
+        .reconcileFromReturnUrl(proposal.paymentId.toString())
+        .catch((err: Error) => {
+          console.error(
+            `Provider reconcile failed for proposal ${proposalId}: ${err.message}`,
+          );
+        });
+    }
+
+    const escrow = await this.paymentsService.findEscrowForEntity(
+      "project_milestone",
+      proposalId,
+    );
+    const paid = !!escrow;
+    if (paid && proposal.status !== ProposalStatus.ACCEPTED) {
+      await this.finalizeHire(proposalId);
+    }
+    const fresh = await this.proposalModel
+      .findById(proposalId)
+      .select("status")
+      .exec();
+    return {
+      status: (fresh?.status ?? proposal.status) as ProposalStatus,
+      paid,
+    };
   }
 
   async rejectProposal(
@@ -1283,15 +1668,21 @@ export class JobsService {
         .findById(clientId)
         .select("name")
         .exec();
+      const clientName = client?.name || "A client";
       await this.notificationsService.notify(
         proposal.proId.toString(),
         NotificationType.PROPOSAL_REJECTED,
-        "შეთავაზება უარყოფილია",
-        `${client?.name || "კლიენტმა"} უარყო თქვენი შეთავაზება: "${job.title}"`,
+        "Proposal Rejected",
+        `${clientName} declined your proposal: "${job.title}"`,
         {
           link: `/my-proposals`,
           referenceId: proposalId,
           referenceModel: "Proposal",
+          i18n: {
+            titleKey: "notifications.types.proposal_rejected.title",
+            messageKey: "notifications.types.proposal_rejected.message",
+            params: { clientName, jobTitle: job.title },
+          },
           metadata: {
             jobId: job._id.toString(),
             jobTitle: job.title,
@@ -1732,17 +2123,24 @@ export class JobsService {
       }
     }
 
-    // Get pro users for phone numbers and preferences
+    // Get pro users for phone numbers, preferences, and locale signals
+    // (country + languages drive `resolveUserLocale` for SMS copy).
     const proUsers = await this.userModel
       .find({ _id: { $in: newProIds.map((id) => new Types.ObjectId(id)) } })
-      .select("phone notificationPreferences")
+      .select("phone notificationPreferences country languages preferredLocale")
       .exec();
 
     // Create a map of proId -> user data
     const proUserMap = new Map(
       proUsers.map((u) => [
         u._id.toString(),
-        { phone: u.phone, prefs: u.notificationPreferences },
+        {
+          phone: u.phone,
+          prefs: u.notificationPreferences,
+          country: u.country,
+          languages: u.languages,
+          preferredLocale: (u as { preferredLocale?: string }).preferredLocale,
+        },
       ]),
     );
 
@@ -1754,17 +2152,23 @@ export class JobsService {
     });
 
     // Send notifications to each invited pro (using notify() for real-time push)
+    const inviteClientName = client?.name || "A client";
     for (const proId of newProIds) {
       // In-app notification
       await this.notificationsService.notify(
         proId,
         NotificationType.JOB_INVITATION,
         "You have been invited to a job",
-        `${client?.name || "A client"} has invited you to submit a proposal for "${job.title}"`,
+        `${inviteClientName} has invited you to submit a proposal for "${job.title}"`,
         {
           link: `/jobs/${job._id.toString()}`,
           referenceId: job._id.toString(),
           referenceModel: "Job",
+          i18n: {
+            titleKey: "notifications.types.job_invitation.title",
+            messageKey: "notifications.types.job_invitation.message",
+            params: { clientName: inviteClientName, jobTitle: job.title },
+          },
           metadata: {
             jobId: job._id.toString(),
             jobTitle: job.title,
@@ -1783,7 +2187,22 @@ export class JobsService {
         const smsProposals = proData.prefs?.sms?.proposals !== false;
 
         if (smsEnabled && smsProposals) {
-          const jobUrl = `https://www.homico.ge/jobs/${job._id.toString()}`;
+          // Job link goes to the marketplace the job is posted in
+          // (job.country, falling back to GE for legacy rows). APP_URL
+          // is the international root; the country prefix slots in.
+          const appUrl =
+            process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://homico.co";
+          const jobCountrySeg = (job.country || DEFAULT_COUNTRY).toLowerCase();
+          const jobUrl = `${appUrl}/${jobCountrySeg}/jobs/${job._id.toString()}`;
+
+          // Currency symbol matches the job's marketplace, not the
+          // pro's. A US pro looking at a GE job should still see the
+          // budget in GEL (the currency the client will actually pay).
+          const jobCurrency =
+            CURRENCY_BY_COUNTRY[
+              (job.country?.toUpperCase() || DEFAULT_COUNTRY) as CountryCode
+            ] || CURRENCY_BY_COUNTRY[DEFAULT_COUNTRY];
+          const sym = CURRENCY_SYMBOL_BY_CODE[jobCurrency] || "";
 
           // Build budget string
           let budgetStr = "";
@@ -1791,19 +2210,25 @@ export class JobsService {
             job.budgetType === "fixed" &&
             (job.budgetAmount || job.budgetMin)
           ) {
-            budgetStr = `${job.budgetAmount || job.budgetMin}₾`;
+            budgetStr = `${job.budgetAmount || job.budgetMin}${sym}`;
           } else if (
             job.budgetType === "range" &&
             job.budgetMin &&
             job.budgetMax
           ) {
-            budgetStr = `${job.budgetMin}-${job.budgetMax}₾`;
+            budgetStr = `${job.budgetMin}-${job.budgetMax}${sym}`;
           } else if (job.budgetType === "per_sqm" && job.pricePerUnit) {
-            budgetStr = `${job.pricePerUnit}₾/მ²`;
+            budgetStr = `${job.pricePerUnit}${sym}/m²`;
           }
 
-          // Build SMS message with details
-          let smsMessage = `${client?.name || "კლიენტი"} გეპატიჟებათ სამუშაოზე: "${job.title}"`;
+          // Build SMS message with details. The opening line follows
+          // the pro's locale (we have their User doc); fields after
+          // it are language-agnostic data.
+          const locale = resolveUserLocale(proData);
+          let smsMessage = JOB_INVITE_SMS_PREFIX[locale](
+            client?.name || "",
+            job.title,
+          );
           if (job.location) smsMessage += `, ${job.location}`;
           if (budgetStr) smsMessage += `, ${budgetStr}`;
           smsMessage += `. ${jobUrl}`;
@@ -1923,18 +2348,25 @@ export class JobsService {
       stageHistory: [{ stage: ProjectStage.HIRED, enteredAt: now }],
     });
 
-    // Notify client
+    // Notify client. This fires when a pro accepts a direct request
+    // (different code path from the proposal-accept flow above).
     try {
       const pro = await this.userModel.findById(proId).select("name").exec();
+      const proName = pro?.name || "A professional";
       await this.notificationsService.notify(
         updatedJob.clientId.toString(),
         NotificationType.PROPOSAL_ACCEPTED,
-        "მოთხოვნა მიღებულია!",
-        `${pro?.name || "სპეციალისტმა"} მიიღო თქვენი მოთხოვნა: "${updatedJob.title}"`,
+        "Request accepted!",
+        `${proName} accepted your request: "${updatedJob.title}"`,
         {
           link: `/my-jobs/${jobId}`,
           referenceId: jobId,
           referenceModel: "Job",
+          i18n: {
+            titleKey: "notifications.types.proposal_accepted.titleRequestAccepted",
+            messageKey: "notifications.types.proposal_accepted.messageRequestAccepted",
+            params: { proName, jobTitle: updatedJob.title },
+          },
           metadata: {
             jobId,
             jobTitle: updatedJob.title,
@@ -1963,11 +2395,16 @@ export class JobsService {
         await this.notificationsService.notifyMany(
           otherProIds,
           NotificationType.DIRECT_REQUEST_TAKEN,
-          "მოთხოვნა უკვე მიღებულია",
-          `მოთხოვნა "${updatedJob.title}" მიიღო სხვა სპეციალისტმა`,
+          "Request already taken",
+          `Another professional took the request "${updatedJob.title}"`,
           {
             referenceId: jobId,
             referenceModel: "Job",
+            i18n: {
+              titleKey: "notifications.types.direct_request_taken.title",
+              messageKey: "notifications.types.direct_request_taken.message",
+              params: { jobTitle: updatedJob.title },
+            },
             metadata: {
               jobId,
               jobTitle: updatedJob.title,
@@ -2020,12 +2457,17 @@ export class JobsService {
         await this.notificationsService.notify(
           job.clientId.toString(),
           NotificationType.PROPOSAL_REJECTED,
-          "ყველა სპეციალისტმა უარყო",
-          `ყველა მოწვეულმა სპეციალისტმა უარყო თქვენი მოთხოვნა: "${job.title}"`,
+          "All professionals declined",
+          `All invited professionals declined your request: "${job.title}"`,
           {
             link: `/my-jobs/${jobId}`,
             referenceId: jobId,
             referenceModel: "Job",
+            i18n: {
+              titleKey: "notifications.types.proposal_rejected.titleAllDeclined",
+              messageKey: "notifications.types.proposal_rejected.messageAllDeclined",
+              params: { jobTitle: job.title },
+            },
             metadata: { jobId, jobTitle: job.title },
           },
         );
@@ -2069,7 +2511,7 @@ export class JobsService {
         ];
         if (nonCancellableStages.includes(project.currentStage)) {
           throw new BadRequestException(
-            "Cannot cancel — professional is already on the way",
+            "Cannot cancel - professional is already on the way",
           );
         }
       }
@@ -2078,6 +2520,53 @@ export class JobsService {
     job.status = JobStatus.CANCELLED;
     const savedJob = await job.save();
 
+    // Refund the held hire escrow. Cancellation is only allowed at the HIRED
+    // stage (guarded above), i.e. before work starts - so refunding the full
+    // held amount to the client is the right default. The escrow is keyed by
+    // the accepted proposal, not the tracking (which is deleted just below).
+    // Best-effort: a payments hiccup must not block the cancellation.
+    try {
+      const accepted = await this.proposalModel
+        .findOne({
+          jobId: new Types.ObjectId(jobId),
+          status: ProposalStatus.ACCEPTED,
+        })
+        .select("_id")
+        .exec();
+      if (accepted) {
+        const proposalKey = accepted._id.toString();
+        const escrow = await this.paymentsService.findEscrowForEntity(
+          "project_milestone",
+          proposalKey,
+        );
+        if (escrow && escrow.status === "held") {
+          const remaining =
+            escrow.amountHeldMinor - (escrow.refundedAmountMinor ?? 0);
+          if (remaining > 0) {
+            await this.paymentsService.refundForEntity(
+              "project_milestone",
+              proposalKey,
+              remaining,
+              "Job cancelled by client before work started",
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[cancelJob] Failed to refund hire escrow:", err);
+    }
+
+    // Tear down the live workspace so neither side keeps interacting with
+    // a cancelled job (advancing stages, posting messages, voting on polls,
+    // adding materials). Cancel is only allowed at HIRED today, so the
+    // workspace has at most a chat thread and possibly an initial poll;
+    // nothing meaningful is lost.
+    const jobObjectId = new Types.ObjectId(jobId);
+    await Promise.all([
+      this.projectTrackingModel.deleteMany({ jobId: jobObjectId }),
+      this.pollModel.deleteMany({ jobId: jobObjectId }),
+    ]);
+
     // Notify hired pro about cancellation
     if (job.hiredProId) {
       try {
@@ -2085,15 +2574,21 @@ export class JobsService {
           .findById(clientId)
           .select("name")
           .exec();
+        const cancelClientName = client?.name || "A client";
         await this.notificationsService.notify(
           job.hiredProId.toString(),
           NotificationType.JOB_CANCELLED,
-          "შეკვეთა გაუქმდა",
-          `${client?.name || "კლიენტმა"} გააუქმა შეკვეთა: "${job.title}"`,
+          "Job Cancelled",
+          `${cancelClientName} cancelled the job: "${job.title}"`,
           {
             link: `/my-jobs/${jobId}`,
             referenceId: jobId,
             referenceModel: "Job",
+            i18n: {
+              titleKey: "notifications.types.job_cancelled.title",
+              messageKey: "notifications.types.job_cancelled.message",
+              params: { clientName: cancelClientName, jobTitle: job.title },
+            },
           },
         );
       } catch (error) {

@@ -12,6 +12,7 @@ import { ChatGateway } from "../chat/chat.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/schemas/notification.schema";
 import { PortfolioService } from "../portfolio/portfolio.service";
+import { PaymentsService } from "../payments/payments.service";
 import { User } from "../users/schemas/user.schema";
 import { Job } from "./schemas/job.schema";
 import {
@@ -37,6 +38,7 @@ export class ProjectTrackingService {
     private chatGateway: ChatGateway,
     private notificationsService: NotificationsService,
     private portfolioService: PortfolioService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   // Create project tracking when proposal is accepted
@@ -120,7 +122,22 @@ export class ProjectTrackingService {
     };
   }
 
-  // Update project stage
+  // Update project stage.
+  //
+  // The state machine is now strictly validated. Previously this method
+  // accepted ANY stage value from ANY participant (client or pro), with no
+  // ordering checks. That let pros jump directly from HIRED to COMPLETED,
+  // bounce back to REVIEW, fire duplicate notifications via double-click,
+  // and let clients change stages they shouldn't touch.
+  //
+  // Rules now enforced:
+  //   - Only the pro can advance forward (HIRED → STARTED → IN_PROGRESS →
+  //     REVIEW → COMPLETED).
+  //   - Only the client can move the project from COMPLETED back to REVIEW
+  //     (the "request changes" flow). They cannot touch other stages.
+  //   - Same-stage requests are a no-op (returns current project).
+  //   - EN_ROUTE in the enum is legacy/unused on the frontend; we silently
+  //     map any incoming EN_ROUTE to STARTED so old clients don't break.
   async updateStage(
     jobId: string,
     userId: string,
@@ -136,12 +153,62 @@ export class ProjectTrackingService {
       throw new NotFoundException("Project tracking not found");
     }
 
-    // Both client and pro can update stage
     const isClient = project.clientId.toString() === userId;
     const isPro = project.proId.toString() === userId;
 
     if (!isClient && !isPro) {
       throw new ForbiddenException("You are not part of this project");
+    }
+
+    // Legacy compat: EN_ROUTE is unused on the frontend. If an older client
+    // or admin tool sends it, coalesce to STARTED so we don't strand the
+    // project in a state the UI can't render.
+    if (newStage === ProjectStage.EN_ROUTE) {
+      newStage = ProjectStage.STARTED;
+    }
+
+    // Idempotency: re-clicking the same stage is a no-op. Avoids duplicate
+    // notifications, duplicate history entries, and WS event spam from a
+    // double-tap or a flaky network retry.
+    if (project.currentStage === newStage) {
+      return project;
+    }
+
+    // Linear forward order (EN_ROUTE intentionally excluded - see above).
+    const FORWARD_ORDER: ProjectStage[] = [
+      ProjectStage.HIRED,
+      ProjectStage.STARTED,
+      ProjectStage.IN_PROGRESS,
+      ProjectStage.REVIEW,
+      ProjectStage.COMPLETED,
+    ];
+    const currentIdx = FORWARD_ORDER.indexOf(project.currentStage);
+    const nextIdx = FORWARD_ORDER.indexOf(newStage);
+
+    if (nextIdx === -1) {
+      throw new BadRequestException(`Unknown project stage: ${newStage}`);
+    }
+
+    // Client-only transition: COMPLETED → REVIEW (request changes flow).
+    const isRequestChanges =
+      isClient &&
+      project.currentStage === ProjectStage.COMPLETED &&
+      newStage === ProjectStage.REVIEW;
+
+    if (isRequestChanges) {
+      // OK - explicit request-changes path.
+    } else if (!isPro) {
+      // Anything else is pro-only.
+      throw new ForbiddenException(
+        "Only the professional can advance the project stage",
+      );
+    } else if (currentIdx === -1) {
+      // Project in an unknown state - allow recovery by jumping to HIRED.
+      // Should never happen but defensive.
+    } else if (nextIdx !== currentIdx + 1) {
+      throw new BadRequestException(
+        `Invalid stage transition: ${project.currentStage} → ${newStage}. Stages must advance one step at a time.`,
+      );
     }
 
     const now = new Date();
@@ -172,20 +239,27 @@ export class ProjectTrackingService {
       if (portfolioImages && portfolioImages.length > 0 && isPro) {
         project.portfolioImages = portfolioImages;
       }
+    } else if (newStage === ProjectStage.REVIEW && isRequestChanges) {
+      // Client kicked the project back. Clear the prior completion marker
+      // so the pro has to formally re-complete (and so confirmCompletion's
+      // "already confirmed" guard doesn't fire on the second pass).
+      project.completedAt = undefined as unknown as Date;
+      project.clientConfirmedAt = undefined as unknown as Date;
     }
 
-    // Auto-update progress based on stage
-    const stageProgress: Record<ProjectStage, number> = {
+    // Auto-update progress based on stage. Drops EN_ROUTE (unused) to keep
+    // the table aligned with the forward order above.
+    const stageProgress: Partial<Record<ProjectStage, number>> = {
       [ProjectStage.HIRED]: 0,
-      [ProjectStage.EN_ROUTE]: 5,
       [ProjectStage.STARTED]: 10,
       [ProjectStage.IN_PROGRESS]: 50,
       [ProjectStage.REVIEW]: 85,
       [ProjectStage.COMPLETED]: 100,
     };
 
-    if (stageProgress[newStage] > project.progress) {
-      project.progress = stageProgress[newStage];
+    const targetProgress = stageProgress[newStage];
+    if (targetProgress !== undefined && targetProgress > project.progress) {
+      project.progress = targetProgress;
     }
 
     const savedProject = await project.save();
@@ -275,12 +349,32 @@ export class ProjectTrackingService {
       const msg = stageMessages[newStage];
       // Client sees project at /jobs/{id}, Pro sees project at /my-jobs/{id}
       const notificationLink = isPro ? `/jobs/${jobId}` : `/my-jobs/${jobId}`;
+      // Map stage to its i18n key so each stage gets a distinct
+      // localized title/message instead of all sharing PROFILE_UPDATE.
+      const stageI18nKey: Record<ProjectStage, string> = {
+        [ProjectStage.HIRED]: 'project_stage_hired',
+        [ProjectStage.EN_ROUTE]: 'project_stage_en_route',
+        [ProjectStage.STARTED]: 'project_stage_started',
+        [ProjectStage.IN_PROGRESS]: 'project_stage_in_progress',
+        [ProjectStage.REVIEW]: 'project_stage_review',
+        [ProjectStage.COMPLETED]: 'project_stage_completed',
+      };
+      const i18nBase = stageI18nKey[newStage];
       await this.notificationsService.notify(
         recipientId,
         NotificationType.PROFILE_UPDATE, // Using profile_update as a generic notification type
-        msg.titleKa,
-        msg.messageKa,
-        { link: notificationLink, referenceId: jobId, referenceModel: "Job" },
+        msg.title,
+        msg.message,
+        {
+          link: notificationLink,
+          referenceId: jobId,
+          referenceModel: "Job",
+          i18n: {
+            titleKey: `notifications.types.${i18nBase}.title`,
+            messageKey: `notifications.types.${i18nBase}.message`,
+            params: { proName: user?.name || '', jobTitle: job?.title || '' },
+          },
+        },
       );
     } catch (error) {
       console.error(
@@ -353,12 +447,17 @@ export class ProjectTrackingService {
       await this.notificationsService.notify(
         project.proId.toString(),
         NotificationType.JOB_COMPLETED,
-        "გადახდა მოხდება მალე",
-        `კლიენტმა დაადასტურა "${job?.title}" პროექტის დასრულება. გადახდა მოხდება მალე.`,
+        "Payment coming soon",
+        `Client confirmed completion of "${job?.title}". Payment will be processed soon.`,
         {
           link: `/my-jobs/${jobId}`,
           referenceId: jobId,
           referenceModel: "Job",
+          i18n: {
+            titleKey: 'notifications.types.job_completed.title',
+            messageKey: 'notifications.types.job_completed.message',
+            params: { jobTitle: job?.title || '' },
+          },
         },
       );
     } catch (error) {
@@ -368,8 +467,22 @@ export class ProjectTrackingService {
       );
     }
 
-    // TODO: Trigger actual payment process here
-    // await this.paymentService.processPayment(project);
+    // Release the escrow held at hire: mark it payout-eligible now that the
+    // client confirmed completion. The admin payout flow + the pro's earnings
+    // page take it from here. Best-effort so a payments hiccup can't block
+    // the completion itself.
+    if (project.escrowId) {
+      try {
+        await this.paymentsService.markEscrowPendingRelease(
+          project.escrowId.toString(),
+        );
+      } catch (error) {
+        console.error(
+          "[ProjectTracking] Failed to mark escrow pending release:",
+          error,
+        );
+      }
+    }
 
     // Create portfolio item from completed job if there are portfolio images
     if (project.portfolioImages && project.portfolioImages.length > 0) {
@@ -481,6 +594,19 @@ export class ProjectTrackingService {
     userId: string,
     content: string,
   ): Promise<ProjectTracking> {
+    // Match the validation we apply to `addMessage` so the two
+    // sibling endpoints behave consistently: empty content rejected,
+    // and a hard cap so a pasted document doesn't bloat the document.
+    const trimmed = (content || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment content cannot be empty');
+    }
+    if (trimmed.length > 4000) {
+      throw new BadRequestException(
+        'Comment is too long (max 4000 characters)',
+      );
+    }
+
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
@@ -507,7 +633,7 @@ export class ProjectTrackingService {
       userName: user?.name || "Unknown",
       userAvatar: user?.avatar,
       userRole: isClient ? "client" : "pro",
-      content,
+      content: trimmed,
       createdAt: new Date(),
     } as ProjectComment;
 
@@ -631,43 +757,11 @@ export class ProjectTrackingService {
     return { success: true };
   }
 
-  // Mark materials as viewed
-  async markMaterialsAsViewed(
-    jobId: string,
-    userId: string,
-  ): Promise<{ success: boolean }> {
-    const project = await this.projectTrackingModel.findOne({
-      jobId: new Types.ObjectId(jobId),
-    });
-
-    if (!project) {
-      throw new NotFoundException("Project tracking not found");
-    }
-
-    const isClient = project.clientId.toString() === userId;
-    const isPro = project.proId.toString() === userId;
-
-    if (!isClient && !isPro) {
-      throw new ForbiddenException("You are not part of this project");
-    }
-
-    const now = new Date();
-    if (isClient) {
-      project.clientLastViewedMaterialsAt = now;
-    } else {
-      project.proLastViewedMaterialsAt = now;
-    }
-
-    await project.save();
-
-    return { success: true };
-  }
-
-  // Get unread counts for chat, polls, materials
+  // Get unread counts for chat + polls (the job's live surfaces).
   async getUnreadCounts(
     jobId: string,
     userId: string,
-  ): Promise<{ chat: number; polls: number; materials: number }> {
+  ): Promise<{ chat: number; polls: number }> {
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
@@ -690,9 +784,6 @@ export class ProjectTrackingService {
     const lastViewedPollsAt = isClient
       ? project.clientLastViewedPollsAt
       : project.proLastViewedPollsAt;
-    const lastViewedMaterialsAt = isClient
-      ? project.clientLastViewedMaterialsAt
-      : project.proLastViewedMaterialsAt;
 
     // Count unread messages (from the other party)
     const userRole = isClient ? "client" : "pro";
@@ -724,27 +815,9 @@ export class ProjectTrackingService {
       // Poll model might not exist or other error, ignore
     }
 
-    // For materials, count items/sections created after lastViewedMaterialsAt
-    // This would require accessing workspace data - for now we track based on history
-    let unreadMaterials = 0;
-    if (project.history) {
-      unreadMaterials = project.history.filter((event: any) => {
-        const isResourceEvent = [
-          "resource_added",
-          "resource_item_added",
-        ].includes(event.eventType);
-        const isFromOther = event.userRole !== userRole;
-        const isAfterLastViewed =
-          !lastViewedMaterialsAt ||
-          new Date(event.createdAt) > lastViewedMaterialsAt;
-        return isResourceEvent && isFromOther && isAfterLastViewed;
-      }).length;
-    }
-
     return {
       chat: unreadMessages,
       polls: unreadPolls,
-      materials: unreadMaterials,
     };
   }
 
@@ -760,6 +833,22 @@ export class ProjectTrackingService {
 
     if (!hasContent && !hasAttachments) {
       throw new BadRequestException("Message must have content or attachments");
+    }
+    // Hard cap message length so a pasted document doesn't blow up the
+    // project document size or break the chat layout. 4000 chars is
+    // comfortably long for a chat message (anything longer should be
+    // an attachment or split across multiple messages).
+    if (content && content.length > 4000) {
+      throw new BadRequestException(
+        "Message is too long (max 4000 characters)",
+      );
+    }
+    // Limit attachments per message so a single send can't bloat the
+    // project tracking document with an arbitrary array.
+    if (hasAttachments && attachments!.length > 10) {
+      throw new BadRequestException(
+        "Too many attachments (max 10 per message)",
+      );
     }
 
     const project = await this.projectTrackingModel.findOne({
@@ -832,12 +921,17 @@ export class ProjectTrackingService {
       await this.notificationsService.notify(
         recipientId,
         NotificationType.PROJECT_MESSAGE,
-        "ახალი შეტყობინება",
+        "New message",
         `${senderName}: ${messagePreview}`,
         {
           link,
           referenceId: jobId,
           referenceModel: "Job",
+          i18n: {
+            titleKey: 'notifications.types.project_message.title',
+            messageKey: 'notifications.types.project_message.message',
+            params: { senderName, snippet: messagePreview },
+          },
           metadata: { jobTitle: job?.title },
         },
       );
@@ -863,6 +957,25 @@ export class ProjectTrackingService {
       description?: string;
     },
   ): Promise<ProjectTracking> {
+    // Validate required fields and reject pathological payloads before
+    // touching the DB. Without these checks a direct API call could
+    // submit empty strings or a 100KB filename that bloats the project
+    // document and breaks the rendered attachment list.
+    const fileName = (attachmentData.fileName || '').trim();
+    const fileUrl = (attachmentData.fileUrl || '').trim();
+    if (!fileName) {
+      throw new BadRequestException('Attachment fileName is required');
+    }
+    if (!fileUrl) {
+      throw new BadRequestException('Attachment fileUrl is required');
+    }
+    if (fileName.length > 255) {
+      throw new BadRequestException('Attachment fileName is too long (max 255 characters)');
+    }
+    if (attachmentData.description && attachmentData.description.length > 1000) {
+      throw new BadRequestException('Attachment description is too long (max 1000 characters)');
+    }
+
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
@@ -878,14 +991,22 @@ export class ProjectTrackingService {
       throw new ForbiddenException("You are not part of this project");
     }
 
+    // Cap attachments per project so a malicious client can't keep
+    // appending until the document hits Mongo's 16MB limit.
+    if (project.attachments.length >= 100) {
+      throw new BadRequestException(
+        'Maximum number of attachments reached (100 per project)',
+      );
+    }
+
     // Get user info
     const user = await this.userModel.findById(userId).select("name").exec();
 
     const attachment: ProjectAttachment = {
       uploadedBy: new Types.ObjectId(userId),
       uploaderName: user?.name || "Unknown",
-      fileName: attachmentData.fileName,
-      fileUrl: attachmentData.fileUrl,
+      fileName,
+      fileUrl,
       fileType: attachmentData.fileType,
       fileSize: attachmentData.fileSize,
       description: attachmentData.description,
@@ -902,6 +1023,16 @@ export class ProjectTrackingService {
     userId: string,
     attachmentIndex: number,
   ): Promise<ProjectTracking> {
+    // Validate the index up front. Previously a non-numeric path
+    // segment (`/attachments/abc`) parsed to NaN, both `NaN < 0` and
+    // `NaN >= length` returned false, so the index check let NaN
+    // through. The subsequent `project.attachments[NaN]` was undefined
+    // and crashed at `.toString()` with a 500 instead of returning a
+    // clean 400/404.
+    if (!Number.isInteger(attachmentIndex) || attachmentIndex < 0) {
+      throw new BadRequestException('Invalid attachment index');
+    }
+
     const project = await this.projectTrackingModel.findOne({
       jobId: new Types.ObjectId(jobId),
     });
@@ -910,7 +1041,7 @@ export class ProjectTrackingService {
       throw new NotFoundException("Project tracking not found");
     }
 
-    if (attachmentIndex < 0 || attachmentIndex >= project.attachments.length) {
+    if (attachmentIndex >= project.attachments.length) {
       throw new NotFoundException("Attachment not found");
     }
 

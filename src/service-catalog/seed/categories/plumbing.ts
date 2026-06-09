@@ -35,14 +35,24 @@ export const plumbingCategory = cat(
       svc("V219", "plumb_builtin_hygiene_svc", [U.unit(200, 400)]),
       svc("V220", "plumb_builtin_bath_svc", [U.unit(220, 450)]),
       svc("V221", "plumb_builtin_toilet_svc", [U.unit(200, 380)]),
-    ], 0),
+    ], 0, {
+      keywords: [
+        { en: "plumbing plumber install faucet sink toilet shower", ka: "სანტექნიკა სანტექნიკოსი ონკანი ნიჟარა უნიტაზი შხაპი", ru: "сантехник сантехника установка кран раковина унитаз душ" },
+        // Latin transliteration users type on Tbilisi sites
+        { en: "santech santechnika", ka: "სანტექ", ru: "сантех" },
+      ],
+    }),
     sub("S022", "plumbing_repair", "Wrench", [
       svc("V074", "plumb_leak_svc", [U.job(30, 120)]),
       svc("V075", "plumb_clog_svc", [U.job(40, 150)]),
       svc("V076", "plumb_pipe_svc", [U.job(40, 200)]),
       svc("V077", "plumb_pressure_svc", [U.job(40, 150)]),
       svc("V078", "plumb_emergency_svc", [U.hour(30, 80)]),
-    ], 1),
+    ], 1, {
+      keywords: [
+        { en: "leak fix burst pipe clog drain emergency", ka: "გაჟონვა გასკდომა მილი ჩაკეტვა გადაუდებელი", ru: "протечка прорыв труба засор аварийный" },
+      ],
+    }),
     sub("S023", "drainage", "ArrowDownToLine", [
       svc("V079", "drainage_install_svc", [U.meter(10, 40)]),
       svc("V080", "drainage_sewage_svc", [U.job(100, 500)]),

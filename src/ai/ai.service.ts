@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import {
+  getMarketContext,
+  marketHeader,
+  currencyHint,
+  type MarketContext,
+} from './market-context';
 
 export interface EstimateAnalysisResult {
   summary: string;
@@ -128,6 +134,7 @@ export class AiService {
   async analyzeEstimate(
     estimateText: string,
     locale: string = 'en',
+    country?: string,
   ): Promise<EstimateAnalysisResult> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
@@ -139,77 +146,29 @@ export class AiService {
       ? 'Отвечай на русском языке.'
       : 'Respond in English.';
 
-    const systemPrompt = `You are an expert renovation cost analyst specializing in Tbilisi, Georgia market.
-You analyze contractor estimates (ხარჯთაღრიცხვა/смета) with deep knowledge of 2024-2025 local prices.
+    const market = getMarketContext(country);
+    // Tbilisi gets the detailed labor-rate block because we have curated
+    // 2024-2025 data for it. Other markets get the marketplace header
+    // and let the model draw on its general training for the region;
+    // claiming hard numbers we can't back up would be worse than letting
+    // the model say "I don't have precise local data" when relevant.
+    const referenceBlock = market.referencePrices
+      ? `${market.referencePrices}\n\nNote: Prices vary by ±20% based on quality, complexity, and contractor experience.`
+      : `${marketHeader(market)} Use your general knowledge of ${market.city} renovation costs; if you don't have confident local data for an item, say so rather than fabricating numbers.`;
+
+    const systemPrompt = `You are an expert renovation cost analyst specializing in the ${market.city}, ${market.country} market.
+You analyze contractor estimates with deep knowledge of 2024-2025 local prices.
 ${langInstruction}
 
 IMPORTANT PARSING INSTRUCTIONS:
 - The input may be from Excel files with various column formats (item, quantity, unit price, total)
 - Look for patterns like: item name - quantity - unit price - total price
 - Georgian text may include: კვ.მ (m²), ცალი (pieces), გრძ.მ (linear m), კომპლექტი (set)
-- Prices are in GEL (₾/ლარი). Parse numbers even if formatted with spaces or commas
+- Prices are in ${market.currencyName} (${market.currencyCode}, symbol ${market.currencySymbol}). Parse numbers even if formatted with spaces or commas
 - Sum up all line items to calculate total if not explicitly stated
-- Identify work categories: ელექტრო (electrical), სანტექნიკა (plumbing), შელესვა (plastering), etc.
+- Identify work categories like electrical, plumbing, plastering, painting, etc.
 
-TBILISI MARKET REFERENCE PRICES (2024-2025, Labor + Basic Materials):
-
-DEMOLITION & PREPARATION:
-- დემონტაჟი/Demolition (per m²): 8-20 ₾
-- Debris removal: 150-400 ₾ per load
-
-ELECTRICAL (ელექტრიკა):
-- ელექტრო წერტილი/Electrical point: 50-90 ₾
-- Electrical panel installation: 350-600 ₾
-- Chandelier installation: 40-80 ₾
-- Floor heating cable (per m²): 35-60 ₾
-
-PLUMBING (სანტექნიკა):
-- სანტექნიკის წერტილი/Plumbing point: 80-150 ₾
-- Toilet installation: 80-150 ₾
-- Sink installation: 60-120 ₾
-- Bathtub/shower installation: 150-350 ₾
-- Water heater installation: 100-200 ₾
-- Radiator installation: 100-180 ₾
-
-WALLS (კედლები):
-- შელესვა/Plastering (per m²): 25-45 ₾
-- შპაკლი/Putty work (per m²): 12-22 ₾
-- Primer application (per m²): 3-6 ₾
-- თაბაშირმუყაოს კედელი/Drywall partition (per m²): 45-75 ₾
-
-CEILING (ჭერი):
-- თაბაშირმუყაოს ჭერი/Drywall ceiling (per m²): 40-70 ₾
-- Multi-level ceiling (per m²): 80-150 ₾
-- Stretch ceiling (per m²): 35-60 ₾
-
-FLOORING (იატაკი):
-- სტიაჟკა/Floor screed (per m²): 25-45 ₾
-- ლამინატის დაგება/Laminate installation (per m²): 18-35 ₾
-- Parquet installation (per m²): 30-55 ₾
-- Self-leveling floor (per m²): 20-40 ₾
-
-TILING (კაფელი):
-- Floor tiles (per m²): 35-65 ₾
-- Wall tiles (per m²): 35-70 ₾
-- Mosaic work (per m²): 70-120 ₾
-
-PAINTING (შეღებვა):
-- კედლის შეღებვა/Wall painting (per m²): 8-18 ₾
-- Ceiling painting (per m²): 10-20 ₾
-- Decorative painting (per m²): 25-50 ₾
-
-DOORS & WINDOWS (კარები და ფანჯრები):
-- Interior door installation: 120-250 ₾
-- Entrance door installation: 200-400 ₾
-- Window installation: 80-150 ₾
-- Windowsill installation: 40-80 ₾
-
-OTHER:
-- პლინტუსი/Baseboard installation (per linear m): 8-18 ₾
-- Balcony glazing (per m²): 150-350 ₾
-- კონდიციონერის მონტაჟი/AC installation: 200-400 ₾
-
-Note: Prices vary by ±20% based on quality, complexity, and contractor experience.`;
+${referenceBlock}`;
 
     const userPrompt = `Carefully analyze this contractor estimate/ხარჯთაღრიცხვა:
 
@@ -281,20 +240,26 @@ Important: Extract ALL line items from the estimate. If quantities are specified
       propertyType: 'apartment' | 'house';
     },
     locale: string = 'en',
+    country?: string,
   ): Promise<RenovationCalculatorResult> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
     }
 
-    const systemPrompt = `You are an expert renovation cost estimator in Tbilisi, Georgia.
-Provide accurate cost estimates based on 2024 market prices in GEL (Georgian Lari).
+    const market = getMarketContext(country);
+    const tierBlock = market.tierRanges
+      ? `Price ranges per m² in ${market.city} (2024):
+- Cosmetic renovation: ${market.tierRanges.cosmetic}
+- Standard renovation: ${market.tierRanges.standard}
+- Full renovation: ${market.tierRanges.full}
+- Luxury renovation: ${market.tierRanges.luxury}`
+      : `Use your general knowledge of ${market.city} renovation tier pricing.`;
+
+    const systemPrompt = `You are an expert renovation cost estimator in ${market.city}, ${market.country}.
+Provide accurate cost estimates based on 2024 market prices in ${market.currencyName} (${market.currencyCode}).
 Always respond in ${locale === 'ka' ? 'Georgian' : locale === 'ru' ? 'Russian' : 'English'}.
 
-Price ranges per m² in Tbilisi (2024):
-- Cosmetic renovation: 150-300 GEL/m²
-- Standard renovation: 350-550 GEL/m²
-- Full renovation: 600-900 GEL/m²
-- Luxury renovation: 1000-2000+ GEL/m²`;
+${tierBlock}`;
 
     const userPrompt = `Calculate renovation estimate for:
 - Area: ${params.area} m²
@@ -307,7 +272,7 @@ Price ranges per m² in Tbilisi (2024):
 
 Respond with JSON:
 {
-  "totalEstimate": <average total in GEL>,
+  "totalEstimate": <average total in ${market.currencyCode}>,
   "breakdown": [
     {
       "category": "category name",
@@ -350,6 +315,7 @@ Respond with JSON:
   async compareEstimates(
     estimates: { name: string; content: string }[],
     locale: string = 'en',
+    country?: string,
   ): Promise<CompareEstimatesResult> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
@@ -361,8 +327,9 @@ Respond with JSON:
       ? 'Отвечай на русском языке.'
       : 'Respond in English.';
 
-    const systemPrompt = `You are an expert renovation cost analyst specializing in Tbilisi, Georgia market.
-You compare contractor estimates (ხარჯთაღრიცხვა) objectively and provide actionable insights.
+    const market = getMarketContext(country);
+    const systemPrompt = `You are an expert renovation cost analyst specializing in the ${market.city}, ${market.country} market.
+You compare contractor estimates objectively and provide actionable insights.
 ${langInstruction}
 
 COMPARISON CRITERIA:
@@ -373,7 +340,7 @@ COMPARISON CRITERIA:
 5. Hidden Costs - are there likely additional costs not mentioned?
 
 IMPORTANT:
-- Parse prices in GEL (₾/ლარი), handle various number formats
+- Parse prices in ${market.currencyName} (${market.currencyCode}, symbol ${market.currencySymbol}), handle various number formats
 - Consider that cheaper isn't always better - check for missing items
 - Flag estimates that seem incomplete or suspiciously cheap`;
 
@@ -401,7 +368,7 @@ Respond ONLY with valid JSON:
   "comparison": [
     {
       "name": "estimate name",
-      "totalPrice": <calculated total in GEL as number>,
+      "totalPrice": <calculated total in ${market.currencyCode} as number>,
       "priceScore": <1-10, where 10 is most competitive>,
       "valueScore": <1-10, considering completeness and fairness>,
       "pros": ["specific advantage 1", "specific advantage 2", ...],
@@ -441,16 +408,18 @@ Respond ONLY with valid JSON:
   async getPriceInfo(
     item: string,
     locale: string = 'en',
+    country?: string,
   ): Promise<PriceCheckResult> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
     }
 
-    const systemPrompt = `You are an expert on renovation costs in Tbilisi, Georgia.
-Provide accurate 2024 market prices in GEL (Georgian Lari).
+    const market = getMarketContext(country);
+    const systemPrompt = `You are an expert on renovation costs in ${market.city}, ${market.country}.
+Provide accurate 2024 market prices in ${market.currencyName} (${market.currencyCode}).
 Always respond in ${locale === 'ka' ? 'Georgian' : locale === 'ru' ? 'Russian' : 'English'}.`;
 
-    const userPrompt = `What is the market price for "${item}" in Tbilisi renovation market?
+    const userPrompt = `What is the market price for "${item}" in the ${market.city} renovation market?
 
 Respond with JSON:
 {
@@ -495,6 +464,7 @@ Respond with JSON:
     locale: string = 'en',
     imageBase64?: string,
     imageMimeType?: string,
+    country?: string,
   ): Promise<ProjectAnalysisResult> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
@@ -506,17 +476,18 @@ Respond with JSON:
       ? 'CRITICAL: The "notes" array MUST be written in Russian language. Example: ["Используйте влагостойкие материалы в ванной", "Обеспечьте хорошую вентиляцию"]'
       : 'Write notes in English.';
 
-    const systemPrompt = `You are an expert at analyzing apartment/house project documents and floor plans.
+    const market = getMarketContext(country);
+    const systemPrompt = `You are an expert at analyzing apartment/house project documents and floor plans for the ${market.city}, ${market.country} renovation market.
 Extract room information and suggest renovation work configurations.
 ${langInstruction}
 
 ROOM TYPE MAPPING:
-- მისაღები/гостиная/living room/salon → "living"
-- საძინებელი/спальня/bedroom → "bedroom"
-- სააბაზანო/აბაზანა/ванная/bathroom/WC/toilet → "bathroom"
-- სამზარეულო/кухня/kitchen → "kitchen"
-- დერეფანი/коридор/hallway/corridor → "hallway"
-- აივანი/балкон/balcony/terrace → "balcony"
+- მისაღები/гостиная/living room/salon -> "living"
+- საძინებელი/спальня/bedroom -> "bedroom"
+- სააბაზანო/აბაზანა/ванная/bathroom/WC/toilet -> "bathroom"
+- სამზარეულო/кухня/kitchen -> "kitchen"
+- დერეფანი/коридор/hallway/corridor -> "hallway"
+- აივანი/балкон/balcony/terrace -> "balcony"
 
 MATERIAL SUGGESTIONS based on room type:
 - Bathroom/Kitchen: tile flooring, tile/paint walls
@@ -525,7 +496,7 @@ MATERIAL SUGGESTIONS based on room type:
 - Balcony: tile flooring, paint walls
 
 STANDARD DIMENSIONS if not specified:
-- Ceiling height: 2.7-3.0m (typical Tbilisi apartments)
+- Ceiling height: ${market.typicalCeilingHeight ?? '2.7-3.0m'}
 - Doors: 1 per room (2 for living room), Windows: 1-2 per room
 
 ELECTRICAL ESTIMATES per room type:
@@ -713,14 +684,16 @@ Rules:
   async chat(
     messages: { role: 'user' | 'assistant'; content: string }[],
     locale: string = 'en',
+    country?: string,
   ): Promise<string> {
     if (!this.isConfigured()) {
       throw new Error('OpenAI API key not configured');
     }
 
-    const systemPrompt = `You are a helpful renovation assistant for homeowners in Tbilisi, Georgia.
+    const market = getMarketContext(country);
+    const systemPrompt = `You are a helpful renovation assistant for homeowners in ${market.city}, ${market.country}.
 You help with renovation planning, cost estimates, contractor selection, and general advice.
-Be friendly, practical, and always consider local market conditions.
+Be friendly, practical, and always consider local market conditions. ${currencyHint(market)}
 Always respond in ${locale === 'ka' ? 'Georgian' : locale === 'ru' ? 'Russian' : 'English'}.
 Keep responses concise but helpful.`;
 
