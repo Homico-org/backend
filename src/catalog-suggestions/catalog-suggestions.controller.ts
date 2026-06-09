@@ -33,10 +33,10 @@ export class CatalogSuggestionsController {
   @Roles(UserRole.PRO)
   @ApiOperation({ summary: "Submit a catalog suggestion (pro only)" })
   async create(
-    @Request() req: { user: { sub: string } },
+    @Request() req: { user: { userId: string } },
     @Body() dto: CreateCatalogSuggestionDto,
   ) {
-    const doc = await this.service.create(req.user.sub, dto);
+    const doc = await this.service.create(req.user.userId, dto);
     return {
       id: String(doc._id),
       status: doc.status,
@@ -75,13 +75,13 @@ export class CatalogSuggestionsController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: "[admin] Approve or reject a suggestion" })
   async updateStatus(
-    @Request() req: { user: { sub: string } },
+    @Request() req: { user: { userId: string } },
     @Param("id") id: string,
     @Body() dto: UpdateCatalogSuggestionStatusDto,
   ) {
     return this.service.updateStatus(
       id,
-      req.user.sub,
+      req.user.userId,
       dto.status,
       dto.reviewerNote,
     );

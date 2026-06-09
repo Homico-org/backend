@@ -32,7 +32,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
     return {
+      // `userId` is the canonical field every controller now uses. `sub` is
+      // kept as a defensive alias (same value) so that if a controller is ever
+      // written with `req.user.sub` again it can't silently `findById(undefined)`
+      // -> 404 "User not found" (the bug this guards against).
       userId: payload.sub,
+      sub: payload.sub,
       email: payload.email,
       role: payload.role,
     };
