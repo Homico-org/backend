@@ -11,7 +11,15 @@
  * they expect major units (e.g. Stripe wants cents, BoG wants tetri).
  */
 
-export type PaymentProviderName = "mock" | "bog" | "tbc" | "pay-ge" | "stripe";
+export type PaymentProviderName =
+  | "mock"
+  | "bog"
+  | "tbc"
+  | "pay-ge"
+  | "stripe"
+  // Payments intentionally off for this environment (boots, but refuses every
+  // operation). See DisabledPaymentProvider.
+  | "disabled";
 
 export interface CreateIntentParams {
   amountMinor: number;
