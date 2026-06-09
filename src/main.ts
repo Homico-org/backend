@@ -47,6 +47,8 @@ async function bootstrap() {
       // homico.co domain added 2026-05 as an alternate brand TLD.
       'https://homico.co',
       'https://www.homico.co',
+      'https://dev.homico.co',
+      'https://app.dev.homico.co',
       process.env.FRONTEND_URL,
     ].filter(Boolean),
     credentials: true,
