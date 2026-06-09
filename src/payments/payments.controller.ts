@@ -74,12 +74,12 @@ export class PaymentsController {
   @ApiOperation({ summary: "Force-refresh payment status from the provider" })
   async reconcile(
     @Param("id") paymentId: string,
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { userId: string } },
   ) {
     const payment = await this.paymentsService.reconcileFromReturnUrl(paymentId);
     // Defensive ownership check - reconcile is read-only but still
     // shouldn't leak status of someone else's payment.
-    if (String(payment.userId) !== req.user.sub) {
+    if (String(payment.userId) !== req.user.userId) {
       return { status: "forbidden" };
     }
     return {
@@ -107,26 +107,26 @@ export class PaymentsController {
     summary:
       "Authenticated pro: count + total of their escrows waiting for payout",
   })
-  async myPendingPayoutSummary(@Req() req: { user: { sub: string } }) {
-    return this.paymentsService.getPendingPayoutSummaryForPro(req.user.sub);
+  async myPendingPayoutSummary(@Req() req: { user: { userId: string } }) {
+    return this.paymentsService.getPendingPayoutSummaryForPro(req.user.userId);
   }
 
   @Get("me")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Authenticated user: their payment history" })
-  async myPayments(@Req() req: { user: { sub: string } }) {
-    return this.paymentsService.getMyPayments(req.user.sub);
+  async myPayments(@Req() req: { user: { userId: string } }) {
+    return this.paymentsService.getMyPayments(req.user.userId);
   }
 
   @Post("premium/checkout")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Start a premium subscription payment" })
   async premiumCheckout(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { userId: string } },
     @Body() body: { tier: string; period: "monthly" | "yearly" },
   ) {
     return this.paymentsService.createPremiumIntent(
-      req.user.sub,
+      req.user.userId,
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
     );
@@ -217,7 +217,7 @@ export class PaymentsController {
     summary: "[admin] Process a batch payout (marks escrows as released)",
   })
   async processPayout(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { userId: string } },
     @Body()
     body: {
       proUserId: string;
@@ -227,7 +227,7 @@ export class PaymentsController {
     },
   ) {
     return this.paymentsService.processPayout({
-      adminUserId: req.user.sub,
+      adminUserId: req.user.userId,
       proUserId: body.proUserId,
       escrowIds: body.escrowIds,
       transferReference: body.transferReference,
@@ -253,7 +253,7 @@ export class PaymentsController {
   @ApiOperation({ summary: "[admin] Resolve a dispute (moves the money)" })
   async resolveDispute(
     @Param("id") id: string,
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { userId: string } },
     @Body()
     body: {
       resolution: "resolved_for_client" | "resolved_for_pro" | "split" | "rejected";
@@ -264,7 +264,7 @@ export class PaymentsController {
   ) {
     return this.paymentsService.resolveDispute({
       disputeId: id,
-      adminUserId: req.user.sub,
+      adminUserId: req.user.userId,
       resolution: body.resolution,
       refundAmountMinor: body.refundAmountMinor,
       payoutAmountMinor: body.payoutAmountMinor,

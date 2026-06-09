@@ -24,11 +24,11 @@ export class AdminController {
   @Post('users')
   @ApiOperation({ summary: 'Create a new user (any role, including admin)' })
   @ApiResponse({ status: 201, description: 'Created user' })
-  async createUser(@Body() dto: AdminCreateUserDto, @Req() req: { user: { sub: string } }) {
+  async createUser(@Body() dto: AdminCreateUserDto, @Req() req: { user: { userId: string } }) {
     const created = await this.adminService.createUser(dto);
     await this.loggerService.logActivity({
       type: ActivityType.ADMIN_USER_CREATE,
-      userId: req.user.sub,
+      userId: req.user.userId,
       targetId: String(created._id),
       targetType: 'user',
       details: {
@@ -354,7 +354,7 @@ export class AdminController {
     @Param('id') proId: string,
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.approvePro(proId, adminId);
   }
 
@@ -367,7 +367,7 @@ export class AdminController {
     @Body('reason') reason: string,
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.rejectPro(proId, adminId, reason);
   }
 
@@ -380,7 +380,7 @@ export class AdminController {
     @Body() body: { status: string; notes?: string; notifyUser?: boolean },
     @Req() req: any,
   ) {
-    const adminId = req.user?.id || req.user?._id;
+    const adminId = req.user?.userId;
     return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
   }
 

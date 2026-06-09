@@ -21,7 +21,7 @@ export class LikesController {
   @UseGuards(JwtAuthGuard)
   async toggleLike(@Request() req, @Body() dto: ToggleLikeDto) {
     const result = await this.likesService.toggleLike(
-      req.user.sub,
+      req.user.userId,
       dto.targetType,
       dto.targetId,
     );
@@ -46,7 +46,7 @@ export class LikesController {
     @Query('limit') limit: string = '20',
   ) {
     const result = await this.likesService.getUserLikedItems(
-      req.user.sub,
+      req.user.userId,
       targetType,
       parseInt(page, 10),
       parseInt(limit, 10),
@@ -62,7 +62,7 @@ export class LikesController {
     @Param('targetId') targetId: string,
   ) {
     const isLiked = await this.likesService.isLikedByUser(
-      req.user.sub,
+      req.user.userId,
       targetType,
       targetId,
     );
@@ -74,7 +74,7 @@ export class LikesController {
   async checkIfLikedBatch(@Request() req, @Body() dto: CheckLikedBatchDto) {
     const [likedMap, countsMap] = await Promise.all([
       this.likesService.isLikedByUserBatch(
-        req.user.sub,
+        req.user.userId,
         dto.targetType,
         dto.targetIds,
       ),
