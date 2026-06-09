@@ -783,6 +783,12 @@ export class BookingsService {
     if (!pro) {
       throw new NotFoundException('Professional not found');
     }
+    // Only Homico Partners are bookable, so their calendar isn't queryable either.
+    if (!(pro as { isHomicoPartner?: boolean }).isHomicoPartner) {
+      throw new ForbiddenException(
+        'This professional is not a Homico Partner and cannot be booked',
+      );
+    }
 
     const start = new Date(from);
     const end = new Date(to);
@@ -865,6 +871,12 @@ export class BookingsService {
     const pro = await this.userModel.findById(proId).lean();
     if (!pro) {
       throw new NotFoundException('Professional not found');
+    }
+    // Only Homico Partners are bookable, so their calendar isn't queryable either.
+    if (!(pro as { isHomicoPartner?: boolean }).isHomicoPartner) {
+      throw new ForbiddenException(
+        'This professional is not a Homico Partner and cannot be booked',
+      );
     }
 
     const dayOfWeek = this.getDayOfWeek(date);

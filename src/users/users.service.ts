@@ -1435,6 +1435,8 @@ export class UsersService {
      * consumers (admin, AI search) keep the full set; the browse page sets it.
      */
     completeOnly?: boolean;
+    /** When true, return only Homico Partners (the bookable pros). */
+    partnersOnly?: boolean;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1650,6 +1652,10 @@ export class UsersService {
 
     if (filters?.minRating) {
       query.avgRating = { $gte: filters.minRating };
+    }
+
+    if (filters?.partnersOnly) {
+      query.isHomicoPartner = true;
     }
 
     if (filters?.languages && filters.languages.length > 0) {

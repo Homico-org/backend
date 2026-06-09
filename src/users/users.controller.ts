@@ -661,6 +661,8 @@ export class UsersController {
     @Query("serviceMinPrice") serviceMinPrice?: string,
     @Query("serviceMaxPrice") serviceMaxPrice?: string,
     @Query("country") country?: string,
+    @Query("completeOnly") completeOnly?: string,
+    @Query("partnersOnly") partnersOnly?: string,
   ) {
     // Country scoping: an unauthenticated or non-admin caller MUST be
     // scoped to a country. We accept whatever they pass (validated by
@@ -692,6 +694,8 @@ export class UsersController {
       serviceMinPrice: serviceMinPrice ? parseFloat(serviceMinPrice) : undefined,
       serviceMaxPrice: serviceMaxPrice ? parseFloat(serviceMaxPrice) : undefined,
       country: effectiveCountry,
+      completeOnly: completeOnly === "true",
+      partnersOnly: partnersOnly === "true",
     });
   }
 
