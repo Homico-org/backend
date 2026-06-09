@@ -14,11 +14,22 @@ import { PaymentsService } from '../payments/payments.service';
 import { Dispute } from '../payments/schemas/dispute.schema';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { SmsService } from '../verification/services/sms.service';
+import { resolveUserLocale, type SupportedLocale } from '../common/countries';
 import {
   EngagementMode,
   EngagementStatus,
   ProjectRequest,
 } from '../project-request/schemas/project-request.schema';
+
+// Localized SMS the pro receives the moment a booking is paid. Kept short
+// (one SMS segment) - it's a "you got paid, go accept" page, the detail
+// lives in the app. English is the fallback for unsupported locales.
+const BOOKING_SMS_COPY: Record<SupportedLocale, string> = {
+  en: 'New paid booking on Homico - {date} at {time}. Open the app to accept. homico.co',
+  ka: 'ახალი გადახდილი ჯავშანი Homico-ზე - {date}, {time}. დასადასტურებლად შედით აპლიკაციაში. homico.co',
+  ru: 'Новое оплаченное бронирование на Homico - {date} в {time}. Откройте приложение, чтобы принять. homico.co',
+};
 
 /**
  * Result of `create()` after the payments rework. Returns BOTH the booking
@@ -49,6 +60,7 @@ export class BookingsService {
     private configService: ConfigService,
     private portfolioService: PortfolioService,
     private analyticsService: AnalyticsService,
+    private smsService: SmsService,
   ) {}
 
   async create(clientId: string, dto: CreateBookingDto): Promise<CreateBookingResult> {
@@ -294,6 +306,27 @@ export class BookingsService {
           },
         },
       );
+
+      // SMS the pro on their phone too - a paid booking starts a 30-min accept
+      // SLA, so an in-app notification alone risks the pro missing it. Best-
+      // effort: an SMS failure must never block the booking/payment flow.
+      try {
+        const proDoc = await this.userModel
+          .findById(booking.professional)
+          .select('phone languages country')
+          .lean();
+        if (proDoc?.phone) {
+          const locale = resolveUserLocale(proDoc);
+          const smsBody = BOOKING_SMS_COPY[locale]
+            .replace('{date}', booking.date)
+            .replace('{time}', `${booking.startHour}:00`);
+          await this.smsService.sendNotificationSms(proDoc.phone, smsBody);
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Booking-paid SMS to pro failed (booking ${bookingId}): ${(e as Error).message}`,
+        );
+      }
     } else if (
       (payment.status === 'failed' || payment.status === 'cancelled') &&
       booking.status === BookingStatus.AWAITING_PAYMENT

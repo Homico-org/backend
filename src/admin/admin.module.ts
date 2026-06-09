@@ -10,6 +10,7 @@ import { Notification, NotificationSchema } from '../notifications/schemas/notif
 import { InviteToken, InviteTokenSchema } from '../invite/schemas/invite-token.schema';
 import { ProjectRequest, ProjectRequestSchema } from '../project-request/schemas/project-request.schema';
 import { Order, OrderSchema } from '../product-orders/schemas/order.schema';
+import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
 import { VerificationModule } from '../verification/verification.module';
 import { UsersModule } from '../users/users.module';
 
@@ -24,6 +25,7 @@ import { UsersModule } from '../users/users.module';
       { name: InviteToken.name, schema: InviteTokenSchema },
       { name: ProjectRequest.name, schema: ProjectRequestSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: Booking.name, schema: BookingSchema },
     ]),
     VerificationModule,
     UsersModule,

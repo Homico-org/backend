@@ -95,6 +95,34 @@ export class AdminController {
     });
   }
 
+  @Get('bookings')
+  @ApiOperation({ summary: 'Get all bookings with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by client/pro name or phone' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by booking status' })
+  @ApiResponse({ status: 200, description: 'Paginated bookings list' })
+  getAllBookings(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllBookings({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Get('bookings/stats')
+  @ApiOperation({ summary: 'Booking status + paid-GMV counters' })
+  @ApiResponse({ status: 200, description: 'Booking statistics' })
+  getBookingStats() {
+    return this.adminService.getBookingStats();
+  }
+
   @Get('reports')
   @ApiOperation({ summary: 'Get all reports with pagination and filters' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })

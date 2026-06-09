@@ -11,6 +11,7 @@ import { CreateUserDto } from "../users/dto/create-user.dto";
 import { InviteToken } from "../invite/schemas/invite-token.schema";
 import { ProjectRequest } from "../project-request/schemas/project-request.schema";
 import { Order } from "../product-orders/schemas/order.schema";
+import { Booking } from "../bookings/schemas/booking.schema";
 import { SmsService } from "../verification/services/sms.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
 import { resolveUserLocale, type SupportedLocale } from "../common/countries";
@@ -87,9 +88,88 @@ export class AdminService {
     @InjectModel(ProjectRequest.name)
     private projectModel: Model<ProjectRequest>,
     @InjectModel(Order.name) private orderModel: Model<Order>,
+    @InjectModel(Booking.name) private bookingModel: Model<Booking>,
     private readonly smsService: SmsService,
     private readonly usersService: UsersService,
   ) {}
+
+  // ============== BOOKINGS OVERSIGHT ==============
+
+  /**
+   * Paginated bookings list for the admin panel - full marketplace visibility
+   * (every booking, both parties, money + status). Filters by status; search
+   * matches the client/pro name via a pre-resolved id set so the page query
+   * stays a single round-trip.
+   */
+  async getAllBookings(options: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }) {
+    const { page, limit, status, search } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<Booking> = {};
+    if (status && status !== "all") query.status = status;
+    if (search) {
+      const rx = { $regex: search, $options: "i" };
+      const ids = await this.userModel
+        .find({ $or: [{ name: rx }, { phone: rx }] })
+        .select("_id")
+        .lean();
+      const idList = ids.map((u) => u._id);
+      query.$or = [{ professional: { $in: idList } }, { client: { $in: idList } }];
+    }
+
+    const [bookings, total] = await Promise.all([
+      this.bookingModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("professional", "name avatar phone")
+        .populate("client", "name avatar phone")
+        .lean(),
+      this.bookingModel.countDocuments(query),
+    ]);
+
+    return {
+      bookings,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /** Status + paid-GMV counters for the bookings page header. */
+  async getBookingStats() {
+    const [total, awaitingPayment, pending, confirmed, completed, cancelled, disputed, gmvAgg] =
+      await Promise.all([
+        this.bookingModel.countDocuments(),
+        this.bookingModel.countDocuments({ status: "awaiting_payment" }),
+        this.bookingModel.countDocuments({ status: "pending" }),
+        this.bookingModel.countDocuments({ status: "confirmed" }),
+        this.bookingModel.countDocuments({ status: "completed" }),
+        this.bookingModel.countDocuments({ status: "cancelled" }),
+        this.bookingModel.countDocuments({ status: "disputed" }),
+        this.bookingModel.aggregate([
+          { $match: { paymentStatus: { $in: ["paid", "partially_refunded"] } } },
+          { $group: { _id: null, total: { $sum: "$totalAmountMinor" } } },
+        ]),
+      ]);
+    return {
+      total,
+      awaitingPayment,
+      pending,
+      confirmed,
+      completed,
+      cancelled,
+      disputed,
+      gmvMinor: gmvAgg?.[0]?.total ?? 0,
+    };
+  }
 
   /**
    * Founder traction dashboard - the pre-launch 0->10 view. North star is

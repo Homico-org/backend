@@ -1083,6 +1083,90 @@ export class ProjectRequestService {
     return project.save();
   }
 
+  /**
+   * Bulk-import an estimate / bill of works (parsed + service-matched on the
+   * client) into a project: creates the referenced steps (deduped by name,
+   * case-insensitive) and appends one scope item per line - all in a single
+   * save. Lines carry a `serviceKey` when matched to the catalog, or are kept
+   * as free-text scope items when no match was accepted.
+   */
+  async importEstimate(
+    id: string,
+    clientId: string,
+    dto: {
+      steps?: string[];
+      items: Array<{
+        name: string;
+        stepName?: string;
+        serviceKey?: string;
+        categoryKey?: string;
+        quantity?: number;
+        unit?: string;
+        unitLabel?: string;
+        unitPrice?: number;
+      }>;
+    },
+  ): Promise<{ stepsCreated: number; itemsCreated: number }> {
+    const project = await this.findOwned(id, clientId);
+    if (!Array.isArray(project.steps)) project.steps = [];
+    if (!Array.isArray(project.scopeItems)) project.scopeItems = [];
+
+    // Existing step names -> id (case-insensitive) so re-imports reuse steps.
+    const stepIdByName = new Map<string, string>();
+    for (const s of project.steps) {
+      stepIdByName.set((s.name || '').trim().toLowerCase(), s.id);
+    }
+
+    // Distinct, order-preserving list of step names referenced by the import.
+    const orderedNames: string[] = [];
+    const seen = new Set<string>();
+    const pushName = (raw?: string) => {
+      const name = (raw || '').trim();
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) return;
+      seen.add(key);
+      orderedNames.push(name);
+    };
+    (dto.steps || []).forEach(pushName);
+    dto.items.forEach((it) => pushName(it.stepName));
+
+    let stepsCreated = 0;
+    let order = project.steps.length;
+    for (const name of orderedNames) {
+      const key = name.toLowerCase();
+      if (stepIdByName.has(key)) continue;
+      const sid = this.shortId('S');
+      project.steps.push({ id: sid, name, order: order++ } as any);
+      stepIdByName.set(key, sid);
+      stepsCreated += 1;
+    }
+
+    let itemsCreated = 0;
+    for (const it of dto.items) {
+      const name = (it.name || '').trim();
+      if (!name) continue;
+      const stepId = it.stepName
+        ? stepIdByName.get(it.stepName.trim().toLowerCase())
+        : undefined;
+      project.scopeItems.push({
+        id: this.shortId('SC'),
+        stepId,
+        categoryKey: it.categoryKey,
+        serviceKey: it.serviceKey,
+        name,
+        quantity: it.quantity,
+        unit: it.unit,
+        unitLabel: it.unitLabel,
+        unitPrice: it.unitPrice,
+        createdAt: new Date(),
+      } as any);
+      itemsCreated += 1;
+    }
+
+    await project.save();
+    return { stepsCreated, itemsCreated };
+  }
+
   async updateScopeItem(
     id: string,
     clientId: string,

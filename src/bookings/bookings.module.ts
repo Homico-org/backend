@@ -9,6 +9,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Dispute, DisputeSchema } from '../payments/schemas/dispute.schema';
 import { PortfolioModule } from '../portfolio/portfolio.module';
+import { VerificationModule } from '../verification/verification.module';
 import {
   ProjectRequest,
   ProjectRequestSchema,
@@ -31,6 +32,7 @@ import {
     ]),
     NotificationsModule,
     PortfolioModule,
+    VerificationModule,
   ],
   controllers: [BookingsController],
   providers: [BookingsService, BookingsCronService],

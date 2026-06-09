@@ -29,6 +29,7 @@ import {
   CreateScopeItemDto,
   CreateSelectionDto,
   DesignPhaseDto,
+  ImportEstimateDto,
   ReorderStepsDto,
   ReviewSelectionDto,
   SelectionOptionDto,
@@ -559,6 +560,16 @@ export class ProjectRequestController {
     @Body() dto: CreateScopeItemDto,
   ) {
     return this.projectRequestService.addScopeItem(id, user.userId, dto);
+  }
+
+  // Bulk-import a parsed + service-matched estimate (steps + scope items).
+  @Post(':id/import-estimate')
+  importEstimate(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: ImportEstimateDto,
+  ) {
+    return this.projectRequestService.importEstimate(id, user.userId, dto);
   }
 
   @Patch(':id/scope-items/:itemId')
