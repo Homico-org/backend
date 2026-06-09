@@ -1479,32 +1479,34 @@ export class UsersService {
     let sortObj: any = {};
     switch (filters?.sort) {
       case "rating":
-        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
       case "badges":
         // Sort by standing/badges: editor's-pick (featured) first, then paid
         // premium, then the top-rated badge (rating + review volume), then
         // portfolio. All listed pros are already verified, so that badge is a
         // constant rather than a differentiator here.
-        sortObj = { isFeatured: -1, isPremium: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
         break;
       default:
         // "recommended" - portfolio-having pros at the top of each
         // premium tier, then profileScore, then reviews/rating as
         // tiebreakers within identical-portfolio bands.
         sortObj = {
+          // Homico Partners (bookable, contracted) lead every list.
+          isHomicoPartner: -1,
           isFeatured: -1,
           isPremium: -1,
           hasVisiblePortfolio: -1,
