@@ -202,6 +202,9 @@ export class PaymentsService {
       isPremium: true,
       premiumTier: tier,
       premiumExpiresAt,
+      // New paid period - clear the "expiring soon" nudge flag so the
+      // renewal cron can remind again as THIS period nears its end.
+      $unset: { premiumRenewalRemindedAt: "" },
     });
     this.logger.log(
       `Granted premium (${tier}/${period}) to user ${userId} until ${premiumExpiresAt.toISOString()}`,

@@ -11,6 +11,8 @@ import { Escrow, EscrowSchema } from "./schemas/escrow.schema";
 import { Payment, PaymentSchema } from "./schemas/payment.schema";
 import { Payout, PayoutSchema } from "./schemas/payout.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
+import { NotificationsModule } from "../notifications/notifications.module";
+import { PremiumCronService } from "./premium-cron.service";
 
 /**
  * Global so feature modules (BookingsModule, JobsModule) can inject
@@ -27,6 +29,7 @@ import { User, UserSchema } from "../users/schemas/user.schema";
 @Module({
   imports: [
     ConfigModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: Payment.name, schema: PaymentSchema },
       { name: Escrow.name, schema: EscrowSchema },
@@ -44,6 +47,7 @@ import { User, UserSchema } from "../users/schemas/user.schema";
     PaymentProviderFactory,
     MockPaymentProvider,
     BogPaymentProvider,
+    PremiumCronService,
   ],
   exports: [PaymentsService, PaymentProviderFactory],
 })

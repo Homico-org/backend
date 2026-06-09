@@ -539,6 +539,12 @@ export class User extends Document {
   @Prop({ default: "none" })
   premiumTier: string;
 
+  // When we last sent the "premium expiring soon" renewal nudge for the
+  // CURRENT paid period. Cleared on every grant/renewal so the next period
+  // gets a fresh reminder; set once the reminder fires so we don't spam.
+  @Prop()
+  premiumRenewalRemindedAt: Date;
+
   // Availability (for home-care services)
   @Prop({ type: [String], default: [] })
   availability: string[];
@@ -766,6 +772,8 @@ UserSchema.index({ avgRating: -1 });
 UserSchema.index({ isAvailable: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
+// Drives the hourly premium-expiry sweep (isPremium + premiumExpiresAt < now).
+UserSchema.index({ isPremium: 1, premiumExpiresAt: 1 });
 UserSchema.index({ isHomicoPartner: 1, role: 1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });
 UserSchema.index({ verificationStatus: 1, role: 1 });

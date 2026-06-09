@@ -30,6 +30,10 @@ export enum NotificationType {
   ACCOUNT_VERIFIED = 'account_verified',
   PROFILE_UPDATE = 'profile_update',
   SYSTEM_ANNOUNCEMENT = 'system_announcement',
+
+  // Premium subscription lifecycle
+  PREMIUM_EXPIRING = 'premium_expiring',
+  PREMIUM_EXPIRED = 'premium_expired',
   
   // Admin actions
   PROFILE_APPROVED = 'profile_approved',

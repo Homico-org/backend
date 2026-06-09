@@ -2137,6 +2137,18 @@ export class UsersService {
         .catch(() => {});
     }
 
+    // Read-time guard: never present an expired premium as active. The hourly
+    // cron flips the stored flag, but this makes the profile correct the moment
+    // it lapses. In-memory only - not persisted (the cron owns the write).
+    if (
+      user.isPremium &&
+      user.premiumExpiresAt &&
+      new Date(user.premiumExpiresAt) < new Date()
+    ) {
+      user.isPremium = false;
+      user.premiumTier = "none";
+    }
+
     return user;
   }
 
