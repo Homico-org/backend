@@ -1401,6 +1401,23 @@ export class AdminService {
     return { id: String(user._id), isFeatured: Boolean(user.isFeatured) };
   }
 
+  async setHomicoPartner(
+    proId: string,
+    partner: boolean,
+  ): Promise<{ id: string; isHomicoPartner: boolean }> {
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, { isHomicoPartner: partner }, { new: true })
+      .select("_id isHomicoPartner role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return {
+      id: String(user._id),
+      isHomicoPartner: Boolean(user.isHomicoPartner),
+    };
+  }
+
   // ============== JOB MANAGEMENT ==============
 
   async getJobById(jobId: string) {

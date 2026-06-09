@@ -524,6 +524,12 @@ export class User extends Document {
   @Prop({ default: false })
   isFeatured: boolean;
 
+  // Homico Partner - Homico has a signed contract with this pro. ONLY partners
+  // can be booked: the booking CTA is hidden on the card + profile and booking
+  // creation is rejected server-side for non-partners. Admin-set.
+  @Prop({ default: false })
+  isHomicoPartner: boolean;
+
   @Prop()
   premiumExpiresAt: Date;
 
@@ -757,6 +763,7 @@ UserSchema.index({ avgRating: -1 });
 UserSchema.index({ isAvailable: 1 });
 UserSchema.index({ status: 1, avgRating: -1 });
 UserSchema.index({ isPremium: -1, avgRating: -1 });
+UserSchema.index({ isHomicoPartner: 1, role: 1 });
 UserSchema.index({ isAdminApproved: 1, role: 1 });
 UserSchema.index({ verificationStatus: 1, role: 1 });
 UserSchema.index({ 'servicePricing.serviceKey': 1, 'servicePricing.price': 1 });

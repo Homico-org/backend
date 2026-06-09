@@ -74,6 +74,15 @@ export class BookingsService {
       throw new NotFoundException('Professional not found');
     }
 
+    // Only Homico Partners (signed contract) are bookable. The frontend hides
+    // the booking CTA for non-partners; this is the hard server-side gate so a
+    // crafted request can't book a non-partner.
+    if (!(pro as { isHomicoPartner?: boolean }).isHomicoPartner) {
+      throw new ForbiddenException(
+        'This professional is not a Homico Partner and cannot be booked',
+      );
+    }
+
     // Validate the requested slot is within pro's schedule. The slot is
     // reserved at this step even though payment hasn't happened yet -
     // AWAITING_PAYMENT bookings count toward conflict checks so the slot

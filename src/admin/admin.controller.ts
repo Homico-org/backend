@@ -367,6 +367,19 @@ export class AdminController {
     return this.adminService.setFeatured(proId, !!featured);
   }
 
+  @Patch('pros/:id/homico-partner')
+  @ApiOperation({
+    summary: 'Toggle a professional as a Homico Partner (bookable)',
+  })
+  @ApiResponse({ status: 200, description: 'Partner flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setHomicoPartner(
+    @Param('id') proId: string,
+    @Body('partner') partner: boolean,
+  ) {
+    return this.adminService.setHomicoPartner(proId, !!partner);
+  }
+
   // ============== JOB MANAGEMENT ==============
 
   @Get('jobs/:id')
