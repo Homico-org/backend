@@ -5,6 +5,7 @@ import { PaymentsController } from "./payments.controller";
 import { PaymentsService } from "./payments.service";
 import { BogPaymentProvider } from "./providers/bog-payment.provider";
 import { MockPaymentProvider } from "./providers/mock-payment.provider";
+import { DisabledPaymentProvider } from "./providers/disabled-payment.provider";
 import { PaymentProviderFactory } from "./providers/payment-provider.factory";
 import { Dispute, DisputeSchema } from "./schemas/dispute.schema";
 import { Escrow, EscrowSchema } from "./schemas/escrow.schema";
@@ -47,6 +48,7 @@ import { PremiumCronService } from "./premium-cron.service";
     PaymentProviderFactory,
     MockPaymentProvider,
     BogPaymentProvider,
+    DisabledPaymentProvider,
     PremiumCronService,
   ],
   exports: [PaymentsService, PaymentProviderFactory],

@@ -118,11 +118,21 @@ payments broadly.
 - Watch backend logs for `BoG createOrder failed` and `signature verification
   failed`.
 
+## Payments OFF on prod (before BoG is live)
+
+Production boots with payments **disabled** by default: leave `PAYMENT_PROVIDER`
+unset (or set it to `disabled`) and the app starts normally with a
+`DisabledPaymentProvider` that refuses every payment op with a 503 - so nothing
+can be faked and the backend never crashes for lack of a real provider. The
+frontend additionally hides all payment UI via `NEXT_PUBLIC_FEATURE_PAYMENTS`
+(unset on prod). When BoG is live, set `PAYMENT_PROVIDER=bog` + the `BOG_*` env.
+
 ## Rollback
 
-Flip `PAYMENT_PROVIDER` back to a safe state and redeploy. Note: `mock` is
-forbidden in production by design - if you must halt payments, take the checkout
-entry points offline rather than switching to mock, or run a maintenance flag.
+To halt payments after going live, set `PAYMENT_PROVIDER=disabled` and redeploy
+(the backend stays up; payment ops 503). `mock` remains forbidden in production
+(it fakes instant success). Per-feature, also flip `NEXT_PUBLIC_FEATURE_PAYMENTS`
+off on the frontend.
 
 ---
 
