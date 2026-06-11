@@ -95,16 +95,24 @@ import { APP_GUARD } from '@nestjs/core';
     }),
     // Global rate limiting (abuse protection)
     // Note: ttl is in milliseconds in current Nest throttler docs.
+    // The ThrottlerGuard enforces EVERY throttler listed here on EVERY route
+    // (keyed per route + IP), and a route's @Throttle({ name }) only overrides
+    // the limit for that same name - it can't scope a global throttler to a
+    // subset of routes. So `default` + `burst` are the real all-route limits;
+    // `ai-cost` is left effectively unlimited here and tightened to 200/day
+    // ONLY on the AI controllers (@Throttle({ 'ai-cost': { limit: 200 } })).
+    // It must stay in this list, because @nestjs/throttler ignores a named
+    // throttler at the route level unless it also exists in forRoot.
     ThrottlerModule.forRoot([
       // General API traffic
       { name: 'default', ttl: 60_000, limit: 120 },
       // Extra protection against burst traffic
       { name: 'burst', ttl: 10_000, limit: 40 },
-      // AI cost ceiling: caps any single IP at ~200 OpenAI-billable
-      // requests per day. Cost math: 200 * ~$0.001 = ~$0.20/IP/day, so
-      // worst case (1000 attackers) = $200/day cap. Layered on top of
-      // the per-route limits, not instead of.
-      { name: 'ai-cost', ttl: 24 * 60 * 60_000, limit: 200 },
+      // AI cost ceiling - NON-constraining globally (so normal endpoints are
+      // never capped at the daily figure). The AI controllers override this to
+      // ~200 OpenAI-billable requests per IP per day. Cost math there:
+      // 200 * ~$0.001 = ~$0.20/IP/day.
+      { name: 'ai-cost', ttl: 24 * 60 * 60_000, limit: 1_000_000 },
     ]),
     AuthModule,
     UsersModule,
