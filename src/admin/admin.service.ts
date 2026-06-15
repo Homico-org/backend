@@ -12,6 +12,8 @@ import { InviteToken } from "../invite/schemas/invite-token.schema";
 import { ProjectRequest } from "../project-request/schemas/project-request.schema";
 import { Order } from "../product-orders/schemas/order.schema";
 import { Booking } from "../bookings/schemas/booking.schema";
+import { ViewLog } from "../users/schemas/view-log.schema";
+import { ProfileViewType } from "../users/schemas/profile-view.schema";
 import { SmsService } from "../verification/services/sms.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
 import { resolveUserLocale, type SupportedLocale } from "../common/countries";
@@ -89,9 +91,105 @@ export class AdminService {
     private projectModel: Model<ProjectRequest>,
     @InjectModel(Order.name) private orderModel: Model<Order>,
     @InjectModel(Booking.name) private bookingModel: Model<Booking>,
+    @InjectModel(ViewLog.name) private viewLogModel: Model<ViewLog>,
     private readonly smsService: SmsService,
     private readonly usersService: UsersService,
   ) {}
+
+  // ── View tracking (admin analytics) ──────────────────────────────────────
+  // Leaderboard: rank pros by how many times their profile (or phone) was
+  // opened, most-viewed first. Counts every open from the persistent view_logs.
+  async getViewStats(options: {
+    type: ProfileViewType;
+    page: number;
+    limit: number;
+  }) {
+    const { type, page, limit } = options;
+    const skip = (page - 1) * limit;
+
+    const [grouped, totalAgg] = await Promise.all([
+      this.viewLogModel.aggregate([
+        { $match: { type } },
+        {
+          $group: {
+            _id: "$proId",
+            count: { $sum: 1 },
+            lastViewedAt: { $max: "$createdAt" },
+          },
+        },
+        { $sort: { count: -1, lastViewedAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ]),
+      this.viewLogModel.aggregate([
+        { $match: { type } },
+        { $group: { _id: "$proId" } },
+        { $count: "total" },
+      ]),
+    ]);
+
+    // Resolve the pros in one query and merge in JS. More reliable than a
+    // $lookup inside the pipeline and reuses the same model the journal uses.
+    const proIds = grouped.map((g) => g._id);
+    const pros = await this.userModel
+      .find({ _id: { $in: proIds } })
+      .select("name avatar uid phone")
+      .lean();
+    const proMap = new Map(pros.map((p) => [String(p._id), p]));
+
+    const items = grouped.map((g) => {
+      const pro = proMap.get(String(g._id)) as any;
+      return {
+        proId: g._id,
+        count: g.count,
+        lastViewedAt: g.lastViewedAt,
+        proName: pro?.name ?? null,
+        proAvatar: pro?.avatar ?? null,
+        proUid: pro?.uid ?? null,
+        proPhone: pro?.phone ?? null,
+      };
+    });
+
+    const total = totalAgg[0]?.total || 0;
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  // Audit journal: every individual open, newest first, with the pro and (when
+  // the visitor was logged in) the viewer resolved to their current name.
+  async getViewLogs(options: {
+    type: ProfileViewType;
+    page: number;
+    limit: number;
+  }) {
+    const { type, page, limit } = options;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.viewLogModel
+        .find({ type })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("proId", "name avatar uid phone")
+        .populate("viewerId", "name avatar uid")
+        .lean(),
+      this.viewLogModel.countDocuments({ type }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
 
   // ============== BOOKINGS OVERSIGHT ==============
 
