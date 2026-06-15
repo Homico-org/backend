@@ -11,6 +11,7 @@ import { InviteToken, InviteTokenSchema } from '../invite/schemas/invite-token.s
 import { ProjectRequest, ProjectRequestSchema } from '../project-request/schemas/project-request.schema';
 import { Order, OrderSchema } from '../product-orders/schemas/order.schema';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
+import { ViewLog, ViewLogSchema } from '../users/schemas/view-log.schema';
 import { VerificationModule } from '../verification/verification.module';
 import { UsersModule } from '../users/users.module';
 
@@ -26,6 +27,7 @@ import { UsersModule } from '../users/users.module';
       { name: ProjectRequest.name, schema: ProjectRequestSchema },
       { name: Order.name, schema: OrderSchema },
       { name: Booking.name, schema: BookingSchema },
+      { name: ViewLog.name, schema: ViewLogSchema },
     ]),
     VerificationModule,
     UsersModule,
