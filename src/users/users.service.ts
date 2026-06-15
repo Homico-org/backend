@@ -1906,6 +1906,21 @@ export class UsersService {
           },
         },
       },
+      // Normalize the premium-tier flags before sorting. New registrations
+      // get an explicit `false` from the schema defaults, while pros created
+      // before these fields existed carry no field at all - and Mongo's
+      // descending sort places `false` ABOVE a missing field. Without this,
+      // a brand-new empty profile outranked every legacy pro on the very
+      // first sort key, so portfolio/score/rating were never even compared.
+      // Coalescing to `false` makes both shapes compare equal and lets the
+      // rest of `sortObj` do its job.
+      {
+        $addFields: {
+          isHomicoPartner: { $ifNull: ["$isHomicoPartner", false] },
+          isFeatured: { $ifNull: ["$isFeatured", false] },
+          isPremium: { $ifNull: ["$isPremium", false] },
+        },
+      },
       // Drop the temporary lookup array - keeps the response payload tight.
       { $project: { linkedPortfolio: 0, password: 0 } },
       { $sort: sortObj },

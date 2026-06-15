@@ -41,6 +41,7 @@ import { BookingsModule } from './bookings/bookings.module';
 import { MilestonePaymentsModule } from './milestone-payments/milestone-payments.module';
 import { InviteModule } from './invite/invite.module';
 import { SlaModule } from './sla/sla.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -149,6 +150,7 @@ import { APP_GUARD } from '@nestjs/core';
     CatalogSuggestionsModule,
     PaymentsModule,
     SlaModule,
+    MetricsModule,
   ],
   providers: [
     // Apply rate limiting across the whole API by default
