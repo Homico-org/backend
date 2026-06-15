@@ -700,23 +700,34 @@ export class UsersController {
     });
   }
 
+  // OptionalJwtAuthGuard: public endpoint, but if the visitor is logged in we
+  // capture who they are (req.user) for the admin view-tracking log. Anonymous
+  // visitors still pass through and are logged by IP only.
   @Get("pros/:id")
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: "Get pro user by ID or UID" })
   @ApiResponse({ status: 200, description: "Pro user profile" })
   @ApiResponse({ status: 404, description: "Pro not found" })
   findProById(@Param("id") id: string, @Req() req: any) {
     const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
-    return this.usersService.findProById(id, ip);
+    const actor = req.user
+      ? { id: req.user.userId, name: req.user.name }
+      : undefined;
+    return this.usersService.findProById(id, ip, actor);
   }
 
   @Post("pros/:id/phone-view")
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: "Track a phone-number reveal on a pro profile (public, deduped by IP)",
   })
   @ApiResponse({ status: 201, description: "Phone view tracked" })
   async trackPhoneView(@Param("id") id: string, @Req() req: any) {
     const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
-    const phoneViewCount = await this.usersService.trackPhoneView(id, ip);
+    const actor = req.user
+      ? { id: req.user.userId, name: req.user.name }
+      : undefined;
+    const phoneViewCount = await this.usersService.trackPhoneView(id, ip, actor);
     return { success: true, phoneViewCount };
   }
 
