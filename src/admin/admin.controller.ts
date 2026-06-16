@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ActivityType, LoggerService } from '../common/logger';
 import { UserRole } from '../users/schemas/user.schema';
+import { ProfileViewType } from '../users/schemas/profile-view.schema';
 import { AdminService } from './admin.service';
 import { AdminCreateUserDto } from './dto/admin-create-user.dto';
 
@@ -71,6 +72,42 @@ export class AdminController {
       limit: limit ? parseInt(limit, 10) : 20,
       search,
       role,
+    });
+  }
+
+  @Get('view-stats')
+  @ApiOperation({ summary: 'Leaderboard of pros ranked by profile/phone opens' })
+  @ApiQuery({ name: 'type', required: false, description: 'profile | phone (default: phone)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiResponse({ status: 200, description: 'Ranked pros with open counts' })
+  getViewStats(
+    @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getViewStats({
+      type: type === 'profile' ? ProfileViewType.PROFILE : ProfileViewType.PHONE,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  @Get('view-logs')
+  @ApiOperation({ summary: 'Audit journal of every profile/phone open' })
+  @ApiQuery({ name: 'type', required: false, description: 'profile | phone (default: phone)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 50)' })
+  @ApiResponse({ status: 200, description: 'Paginated open journal, newest first' })
+  getViewLogs(
+    @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getViewLogs({
+      type: type === 'profile' ? ProfileViewType.PROFILE : ProfileViewType.PHONE,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
     });
   }
 

@@ -28,6 +28,13 @@ import {
   ProfileView,
   ProfileViewType,
 } from "./schemas/profile-view.schema";
+import { ViewLog } from "./schemas/view-log.schema";
+
+// A visitor opening a profile/phone, when authenticated. Null fields => anonymous.
+export interface ViewActor {
+  id?: string;
+  name?: string;
+}
 
 @Injectable()
 export class UsersService {
@@ -52,6 +59,8 @@ export class UsersService {
     private supportTicketModel: Model<SupportTicket>,
     @InjectModel(ProfileView.name)
     private profileViewModel: Model<ProfileView>,
+    @InjectModel(ViewLog.name)
+    private viewLogModel: Model<ViewLog>,
     private readonly logger: LoggerService,
     // Used by findAllPros to expand the user's search term against the
     // service-catalog labels in all three locales, so "ავეჯი" matches pros
@@ -2132,7 +2141,7 @@ export class UsersService {
     };
   }
 
-  async findProById(id: string, ip?: string): Promise<User> {
+  async findProById(id: string, ip?: string, actor?: ViewActor): Promise<User> {
     const { Types } = require("mongoose");
 
     // Check if id is a numeric UID (6-digit number starting with 1)
@@ -2196,7 +2205,7 @@ export class UsersService {
     // a refresh doesn't re-count. Without an IP (internal callers), fall back to
     // the legacy unconditional increment.
     if (ip) {
-      this.trackProfileView(user._id, ip).catch(() => {});
+      this.trackProfileView(user._id, ip, actor).catch(() => {});
     } else {
       this.userModel
         .updateOne({ _id: user._id }, { $inc: { profileViewCount: 1 } })
@@ -2222,7 +2231,15 @@ export class UsersService {
   // Dedupe profile views by IP within a 24h window (the ProfileView unique
   // index + TTL handle both), so a page refresh from the same IP never inflates
   // profileViewCount. Mirrors the upsert/$setOnInsert dedup used in analytics.
-  private async trackProfileView(proId: any, ip: string): Promise<void> {
+  private async trackProfileView(
+    proId: any,
+    ip: string,
+    actor?: ViewActor,
+  ): Promise<void> {
+    // Append-only audit log: every open is recorded (no dedup) so admins get
+    // full traceability and can rank pros by views. Best-effort, never blocks.
+    this.recordViewLog(proId, ProfileViewType.PROFILE, ip, actor);
+
     const result = await this.profileViewModel
       .updateOne(
         { proId, ip, type: ProfileViewType.PROFILE },
@@ -2240,12 +2257,41 @@ export class UsersService {
     }
   }
 
+  // Persist one row per open into the long-term view_logs collection. Separate
+  // from the deduped/TTL'd counter path above. Best-effort: a logging failure
+  // must never break a public profile read or phone reveal.
+  private recordViewLog(
+    proId: any,
+    type: ProfileViewType,
+    ip: string,
+    actor?: ViewActor,
+  ): void {
+    const { Types } = require("mongoose");
+    if (!Types.ObjectId.isValid(proId)) return;
+    this.viewLogModel
+      .create({
+        proId,
+        type,
+        viewerId: actor?.id && Types.ObjectId.isValid(actor.id) ? actor.id : null,
+        viewerName: actor?.name || null,
+        ip,
+      })
+      .catch(() => {});
+  }
+
   // Count how many unique visitors revealed a pro's phone number. Deduped by IP
   // within a 24h window (the ProfileView unique index + TTL handle both), so a
   // page refresh from the same IP never inflates the count.
-  async trackPhoneView(proId: string, ip: string): Promise<number> {
+  async trackPhoneView(
+    proId: string,
+    ip: string,
+    actor?: ViewActor,
+  ): Promise<number> {
     const { Types } = require("mongoose");
     if (!Types.ObjectId.isValid(proId)) return 0;
+
+    // Append-only audit log: record every reveal (no dedup) for admin tracking.
+    this.recordViewLog(proId, ProfileViewType.PHONE, ip, actor);
 
     // Upsert the dedup row; only a genuinely new (IP, pro) row reports an
     // upsertedCount > 0. Refreshes match the existing row and are no-ops.
