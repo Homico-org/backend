@@ -18,6 +18,10 @@ import { Offer, OfferSchema } from '../offer/schemas/offer.schema';
 import { SupportTicket, SupportTicketSchema } from '../support/schemas/support-ticket.schema';
 import { ProfileView, ProfileViewSchema } from './schemas/profile-view.schema';
 import { ViewLog, ViewLogSchema } from './schemas/view-log.schema';
+import {
+  ProfileChangeRequest,
+  ProfileChangeRequestSchema,
+} from './schemas/profile-change-request.schema';
 import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
 
 @Module({
@@ -38,6 +42,10 @@ import { ServiceCatalogModule } from '../service-catalog/service-catalog.module'
       { name: SupportTicket.name, schema: SupportTicketSchema },
       { name: ProfileView.name, schema: ProfileViewSchema },
       { name: ViewLog.name, schema: ViewLogSchema },
+      {
+        name: ProfileChangeRequest.name,
+        schema: ProfileChangeRequestSchema,
+      },
     ]),
     forwardRef(() => AuthModule),
     // ServiceCatalogService is used in findAllPros() to expand the search

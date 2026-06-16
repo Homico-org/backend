@@ -70,6 +70,62 @@ const RESET_COPY: Record<SupportedLocale, ResetCopy> = {
   },
 };
 
+// Copy for the profile-change moderation decision emails. One block per
+// outcome (approved / rejected); the rejected block also labels the reason.
+type ProfileChangeCopy = {
+  subject: string;
+  heading: string;
+  body: string;
+  reasonLabel: string;
+};
+const PROFILE_CHANGE_COPY: Record<
+  SupportedLocale,
+  { approved: ProfileChangeCopy; rejected: ProfileChangeCopy }
+> = {
+  en: {
+    approved: {
+      subject: 'Homico - Your profile changes were approved',
+      heading: 'Profile changes approved',
+      body: 'The changes you requested to your profile have been approved and are now live.',
+      reasonLabel: 'Note',
+    },
+    rejected: {
+      subject: 'Homico - Your profile changes were not approved',
+      heading: 'Profile changes not approved',
+      body: 'The changes you requested to your profile were not approved. Please review and submit again.',
+      reasonLabel: 'Reason',
+    },
+  },
+  ka: {
+    approved: {
+      subject: 'Homico - თქვენი პროფილის ცვლილებები დამტკიცდა',
+      heading: 'პროფილის ცვლილებები დამტკიცდა',
+      body: 'თქვენ მიერ მოთხოვნილი ცვლილებები დამტკიცდა და უკვე აქტიურია.',
+      reasonLabel: 'შენიშვნა',
+    },
+    rejected: {
+      subject: 'Homico - თქვენი პროფილის ცვლილებები არ დამტკიცდა',
+      heading: 'პროფილის ცვლილებები არ დამტკიცდა',
+      body: 'თქვენ მიერ მოთხოვნილი ცვლილებები არ დამტკიცდა. გთხოვთ გადახედოთ და ხელახლა გააგზავნოთ.',
+      reasonLabel: 'მიზეზი',
+    },
+  },
+  ru: {
+    approved: {
+      subject: 'Homico - Изменения вашего профиля одобрены',
+      heading: 'Изменения профиля одобрены',
+      body: 'Запрошенные вами изменения профиля одобрены и теперь активны.',
+      reasonLabel: 'Примечание',
+    },
+    rejected: {
+      subject: 'Homico - Изменения вашего профиля не одобрены',
+      heading: 'Изменения профиля не одобрены',
+      body: 'Запрошенные вами изменения профиля не одобрены. Пожалуйста, проверьте и отправьте снова.',
+      reasonLabel: 'Причина',
+    },
+  },
+};
+
 function normalizeLocale(input?: string | null): SupportedLocale {
   const v = (input || '').toLowerCase();
   if (v === 'ka' || v === 'ru') return v;
@@ -252,6 +308,66 @@ export class EmailService {
       <p style="color:#64748b;">Your order status is now <strong>${status}</strong>.</p>
       ${this.itemsHtml(order)}
     `);
+  }
+
+  /**
+   * Notify a pro that an admin reviewed their requested profile changes.
+   * `approved=false` includes the rejection reason so they know what to fix.
+   * Localized to the pro's stored locale (en/ka/ru), English fallback.
+   */
+  async sendProfileChangeDecision(
+    email: string,
+    approved: boolean,
+    locale?: string,
+    reason?: string,
+  ): Promise<boolean> {
+    const fromEmail =
+      this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+      'noreply@homico.ge';
+    const appName = 'Homico';
+    const loc = normalizeLocale(locale);
+    const copy = PROFILE_CHANGE_COPY[loc][approved ? 'approved' : 'rejected'];
+    const accent = approved ? '#16A34A' : '#EF4E24';
+
+    if (!this.isConfigured) {
+      this.logger.log(
+        `[DEV MODE] Profile-change ${approved ? 'approved' : 'rejected'} email for ${email} (${loc})${reason ? ` reason: ${reason}` : ''}`,
+      );
+      return true;
+    }
+
+    const reasonBlock =
+      !approved && reason
+        ? `<p style="color:#475569;margin-top:16px;"><strong>${copy.reasonLabel}:</strong> ${reason}</p>`
+        : '';
+
+    try {
+      await sgMail.send({
+        to: email,
+        from: { email: fromEmail, name: appName },
+        subject: copy.subject,
+        text: `${copy.heading}\n\n${copy.body}${!approved && reason ? `\n\n${copy.reasonLabel}: ${reason}` : ''}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+            <div style="text-align:center;margin-bottom:24px;"><h1 style="color:${accent};margin:0;">${appName}</h1></div>
+            <div style="background-color:#f8fafc;border-radius:12px;padding:24px;">
+              <h2 style="color:#1e293b;margin-bottom:10px;">${copy.heading}</h2>
+              <p style="color:#64748b;">${copy.body}</p>
+              ${reasonBlock}
+            </div>
+          </div>`,
+      });
+      this.logger.log(
+        `Profile-change decision email sent to ${email} (${loc}, approved=${approved})`,
+      );
+      return true;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to send profile-change email to ${email}:`,
+        error?.response?.body || error?.message || error,
+      );
+      return false;
+    }
   }
 
   private itemsHtml(order: any): string {

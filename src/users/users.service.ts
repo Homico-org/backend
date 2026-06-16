@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import * as bcrypt from "bcrypt";
-import { Model, PipelineStage } from "mongoose";
+import { Model, PipelineStage, Types } from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityType, LoggerService } from "../common/logger";
 import { ServiceCatalogService } from "../service-catalog/service-catalog.service";
@@ -29,11 +29,24 @@ import {
   ProfileViewType,
 } from "./schemas/profile-view.schema";
 import { ViewLog } from "./schemas/view-log.schema";
+import {
+  ChangeRequestSource,
+  ChangeRequestStatus,
+  FieldChange,
+  ProfileChangeRequest,
+} from "./schemas/profile-change-request.schema";
 
 // A visitor opening a profile/phone, when authenticated. Null fields => anonymous.
 export interface ViewActor {
   id?: string;
   name?: string;
+}
+
+// Options shared by the moderated update paths. `bypassModeration` is set by
+// admin edits and by the approval replay so those changes apply directly
+// instead of being staged for review again.
+export interface UpdateOptions {
+  bypassModeration?: boolean;
 }
 
 @Injectable()
@@ -61,6 +74,8 @@ export class UsersService {
     private profileViewModel: Model<ProfileView>,
     @InjectModel(ViewLog.name)
     private viewLogModel: Model<ViewLog>,
+    @InjectModel(ProfileChangeRequest.name)
+    private profileChangeRequestModel: Model<ProfileChangeRequest>,
     private readonly logger: LoggerService,
     // Used by findAllPros to expand the user's search term against the
     // service-catalog labels in all three locales, so "ავეჯი" matches pros
@@ -405,7 +420,207 @@ export class UsersService {
     });
   }
 
-  async update(userId: string, updateData: Partial<User>): Promise<User> {
+  // Read-side for the pro: what's the state of their last profile edit? Only
+  // the most recent request matters — a pending one means "awaiting review",
+  // a rejected one (with no newer edit) means "fix and resubmit". An approved
+  // latest means nothing to surface. Drives the pro-facing banner.
+  async getMyModerationStatus(userId: string): Promise<{
+    pending: ProfileChangeRequest | null;
+    lastRejected: ProfileChangeRequest | null;
+  }> {
+    if (!Types.ObjectId.isValid(userId)) {
+      return { pending: null, lastRejected: null };
+    }
+    const latest = await this.profileChangeRequestModel
+      .findOne({
+        proId: new Types.ObjectId(userId),
+        status: {
+          $in: [
+            ChangeRequestStatus.PENDING,
+            ChangeRequestStatus.APPROVED,
+            ChangeRequestStatus.REJECTED,
+          ],
+        },
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return {
+      pending:
+        latest && latest.status === ChangeRequestStatus.PENDING
+          ? (latest as any)
+          : null,
+      lastRejected:
+        latest && latest.status === ChangeRequestStatus.REJECTED
+          ? (latest as any)
+          : null,
+    };
+  }
+
+  // ============== PROFILE MODERATION ==============
+  // Public-facing profile fields. When a *verified* pro edits any of these,
+  // the change is not applied directly — it is staged as a ProfileChangeRequest
+  // for admin approval. Everything NOT in this set (private account settings:
+  // notification prefs, addresses, payment methods, bank account, schedule,
+  // availability, verification flags, password, push tokens, KYC docs, …)
+  // keeps applying instantly. Keys cover both the PATCH /me payload and the
+  // pro-profile payload shapes.
+  private static readonly MODERATED_FIELDS = new Set<string>([
+    "name",
+    "firstName",
+    "lastName",
+    "avatar",
+    "coverImage",
+    "title",
+    "tagline",
+    "bio",
+    "description",
+    "categories",
+    "subcategories",
+    "selectedCategories",
+    "selectedSubcategories",
+    "selectedServices",
+    "customServices",
+    "servicePricing",
+    "yearsExperience",
+    "serviceAreas",
+    "pricingModel",
+    "basePrice",
+    "maxPrice",
+    "phone",
+    "whatsapp",
+    "telegram",
+    "facebookUrl",
+    "instagramUrl",
+    "linkedinUrl",
+    "tiktokUrl",
+    "websiteUrl",
+    "portfolioProjects",
+    "portfolioImages",
+    "designStyles",
+    "pinterestLinks",
+    "certifications",
+    "languages",
+    "profileType",
+    "architectLicenseNumber",
+    "cadastralId",
+    "completedProjects",
+    "city",
+  ]);
+
+  // A change is moderated only for a live (verified) pro, and never when an
+  // admin is acting or the approval replay explicitly bypasses it.
+  private shouldModerateProfile(user: User, opts?: UpdateOptions): boolean {
+    return (
+      !opts?.bypassModeration &&
+      user.role === "pro" &&
+      user.verificationStatus === "verified"
+    );
+  }
+
+  // Partition an incoming payload into moderated (public-profile) keys and
+  // instant (private) keys, preserving values verbatim.
+  private splitModeratedPayload(payload: Record<string, any>): {
+    moderated: Record<string, any>;
+    instant: Record<string, any>;
+  } {
+    const moderated: Record<string, any> = {};
+    const instant: Record<string, any> = {};
+    for (const [key, value] of Object.entries(payload || {})) {
+      if (UsersService.MODERATED_FIELDS.has(key)) moderated[key] = value;
+      else instant[key] = value;
+    }
+    return { moderated, instant };
+  }
+
+  // Shallow-ish equality good enough to skip no-op fields (a user re-saving
+  // a form without changing a field shouldn't create a review item).
+  private valuesEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (a == null && b == null) return true;
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+
+  // Stage the moderated portion of an edit as a pending change request.
+  // Only fields that actually differ from the live profile are recorded;
+  // if nothing changed, no request is created. Any existing pending request
+  // for the same pro is marked SUPERSEDED (last edit wins).
+  private async stageProfileChange(
+    user: User,
+    source: ChangeRequestSource,
+    moderatedPayload: Record<string, any>,
+  ): Promise<boolean> {
+    const changes: FieldChange[] = [];
+    for (const [field, newValue] of Object.entries(moderatedPayload)) {
+      const oldValue = (user as any)[field];
+      if (!this.valuesEqual(oldValue, newValue)) {
+        changes.push({ field, oldValue, newValue });
+      }
+    }
+
+    if (changes.length === 0) return false;
+
+    await this.profileChangeRequestModel
+      .updateMany(
+        { proId: user._id, status: ChangeRequestStatus.PENDING },
+        { $set: { status: ChangeRequestStatus.SUPERSEDED } },
+      )
+      .exec()
+      .catch(() => {});
+
+    await this.profileChangeRequestModel.create({
+      proId: user._id,
+      source,
+      status: ChangeRequestStatus.PENDING,
+      // Replay the full submitted moderated payload (not just the diff) so
+      // cross-field derivations run exactly as in a normal save.
+      payload: moderatedPayload,
+      changes,
+      proName: user.name ?? null,
+      proAvatar: user.avatar ?? null,
+      proUid: (user as any).uid ?? null,
+    });
+
+    return true;
+  }
+
+  async update(
+    userId: string,
+    updateData: Partial<User>,
+    opts?: UpdateOptions,
+  ): Promise<User> {
+    // Moderation gate: a verified pro's edits to public fields are staged
+    // for admin review instead of applied. Private fields still apply now.
+    const existing = await this.userModel.findById(userId).exec();
+    if (!existing) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (this.shouldModerateProfile(existing, opts)) {
+      const { moderated, instant } = this.splitModeratedPayload(
+        updateData as Record<string, any>,
+      );
+      await this.stageProfileChange(
+        existing,
+        ChangeRequestSource.PROFILE,
+        moderated,
+      );
+
+      if (Object.keys(instant).length === 0) {
+        // Nothing applies instantly; the live profile is unchanged while the
+        // staged edit awaits approval.
+        return existing;
+      }
+      const updatedInstant = await this.userModel
+        .findByIdAndUpdate(userId, instant, { new: true })
+        .exec();
+      return updatedInstant ?? existing;
+    }
+
     const user = await this.userModel
       .findByIdAndUpdate(userId, updateData, { new: true })
       .exec();
@@ -2294,7 +2509,11 @@ export class UsersService {
     });
   }
 
-  async updateProProfile(userId: string, proData: any): Promise<User> {
+  async updateProProfile(
+    userId: string,
+    proData: any,
+    opts?: UpdateOptions,
+  ): Promise<User> {
     const user = await this.findById(userId);
 
     // Allow admins to set pro fields on any account (including their own).
@@ -2304,6 +2523,32 @@ export class UsersService {
       throw new BadRequestException(
         "Only pro users can update their pro profile",
       );
+    }
+
+    // Moderation gate: a verified pro's edits to public fields are staged for
+    // admin review. Private fields (availability, etc.) are re-applied through
+    // this same method with moderation bypassed. Admin edits and the approval
+    // replay set bypassModeration and skip this entirely.
+    if (this.shouldModerateProfile(user, opts)) {
+      const { moderated, instant } = this.splitModeratedPayload(proData);
+      await this.stageProfileChange(
+        user,
+        ChangeRequestSource.PRO_PROFILE,
+        moderated,
+      );
+
+      if (Object.keys(instant).length > 0) {
+        return this.updateProProfile(userId, instant, {
+          bypassModeration: true,
+        });
+      }
+      // Nothing applies instantly; return the (unchanged) live profile.
+      const current = await this.userModel
+        .findById(userId)
+        .select("-password")
+        .exec();
+      if (!current) throw new NotFoundException("User not found");
+      return current;
     }
 
     // Update the pro-specific fields on the user document
