@@ -72,6 +72,53 @@ export class UsersService {
   private catalogSearchIndexBuiltAt = 0;
   private static readonly CATALOG_SEARCH_TTL_MS = 5 * 60 * 1000;
 
+  // Lazily-built map from any city spelling (English or Georgian, lowercased)
+  // to every stored form to match against. Pros store `serviceAreas` in
+  // Georgian (e.g. "თბილისი"), but the browse UI always sends the lowercased
+  // English city name (e.g. "tbilisi") - so the old exact-match filter never
+  // hit and city filtering returned zero results in every locale. Built once
+  // from LOCATIONS_DATA (cities ↔ citiesEn).
+  private cityAliasIndex: Map<string, string[]> | null = null;
+
+  private getCityAliasIndex(): Map<string, string[]> {
+    if (this.cityAliasIndex) return this.cityAliasIndex;
+    const index = new Map<string, string[]>();
+    const register = (key: string, forms: string[]) => {
+      const k = (key || "").trim().toLowerCase();
+      if (!k) return;
+      index.set(k, Array.from(new Set(forms.filter(Boolean))));
+    };
+    for (const country of Object.values(this.LOCATIONS_DATA)) {
+      const regions = (country as { regions?: Record<string, unknown> }).regions || {};
+      for (const region of Object.values(regions) as Array<{
+        cities?: string[];
+        citiesEn?: string[];
+      }>) {
+        const ka = region.cities || [];
+        const en = region.citiesEn || [];
+        for (let i = 0; i < ka.length; i++) {
+          const forms = [ka[i], en[i]].filter(Boolean) as string[];
+          if (en[i]) register(en[i], forms);
+          if (ka[i]) register(ka[i], forms);
+        }
+      }
+    }
+    this.cityAliasIndex = index;
+    return index;
+  }
+
+  // Every stored spelling a serviceArea filter value should match: the value
+  // itself plus its known translations. Unknown values fall back to the input
+  // alone, so the filter never silently widens for non-city inputs.
+  private serviceAreaCandidates(input: string): string[] {
+    const raw = (input || "").trim();
+    if (!raw) return [];
+    const aliases = this.getCityAliasIndex().get(raw.toLowerCase());
+    return aliases && aliases.length
+      ? Array.from(new Set([raw, ...aliases]))
+      : [raw];
+  }
+
   /**
    * Build (or reuse) a flat list of every searchable catalog key (categories,
    * subcategories, and services) with their en/ka/ru labels. Cached for
@@ -1639,7 +1686,12 @@ export class UsersService {
     }
 
     if (filters?.serviceArea) {
-      query.serviceAreas = filters.serviceArea;
+      // Match against all known spellings of the city (the UI sends the
+      // lowercased English name; pros store the Georgian one). Falls back to
+      // an exact match for unknown values.
+      const candidates = this.serviceAreaCandidates(filters.serviceArea);
+      query.serviceAreas =
+        candidates.length > 1 ? { $in: candidates } : candidates[0];
     }
 
     // Service-level filters on servicePricing array
