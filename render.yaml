@@ -25,6 +25,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Supplier-catalog scrapers use Playwright/Chromium. "0" installs the
+      # browser INTO node_modules (part of the build artifact) so it's found at
+      # runtime - the default ~/.cache path isn't present on the Render runner,
+      # which caused "browserType.launch: Executable doesn't exist".
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: PORT
         value: 10000
       - key: MONGODB_URI            # homi_prod
@@ -106,6 +112,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: development
+      # See prod note: installs Chromium into node_modules so the scrapers find
+      # it at runtime on the Render runner.
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: PORT
         value: 10000
       - key: MONGODB_URI            # homi_dev - NEVER point dev at homi_prod
