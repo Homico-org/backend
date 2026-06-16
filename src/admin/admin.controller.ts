@@ -421,6 +421,63 @@ export class AdminController {
     return this.adminService.updateVerificationStatus(proId, adminId, body.status, body.notes, body.notifyUser);
   }
 
+  // ── Profile change moderation ────────────────────────────────────────────
+
+  @Get('profile-changes')
+  @ApiOperation({ summary: 'List profile change requests awaiting review' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by pro name' })
+  @ApiQuery({ name: 'status', required: false, description: 'pending | approved | rejected | all (default: pending)' })
+  @ApiResponse({ status: 200, description: 'Paginated profile change requests' })
+  getProfileChanges(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: 'pending' | 'approved' | 'rejected' | 'all',
+  ) {
+    return this.adminService.getProfileChangeRequests({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Get('profile-changes/stats')
+  @ApiOperation({ summary: 'Profile change request counts by status' })
+  @ApiResponse({ status: 200, description: 'Profile change stats' })
+  getProfileChangesStats() {
+    return this.adminService.getProfileChangeRequestsStats();
+  }
+
+  @Get('profile-changes/:id')
+  @ApiOperation({ summary: 'Get a single profile change request (full diff)' })
+  @ApiResponse({ status: 200, description: 'Profile change request' })
+  getProfileChange(@Param('id') id: string) {
+    return this.adminService.getProfileChangeRequest(id);
+  }
+
+  @Patch('profile-changes/:id/approve')
+  @ApiOperation({ summary: 'Approve a profile change request (applies the change)' })
+  @ApiResponse({ status: 200, description: 'Change approved and applied' })
+  async approveProfileChange(@Param('id') id: string, @Req() req: any) {
+    const adminId = req.user?.userId;
+    return this.adminService.approveProfileChange(id, adminId);
+  }
+
+  @Patch('profile-changes/:id/reject')
+  @ApiOperation({ summary: 'Reject a profile change request with a reason' })
+  @ApiResponse({ status: 200, description: 'Change rejected' })
+  async rejectProfileChange(
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Req() req: any,
+  ) {
+    const adminId = req.user?.userId;
+    return this.adminService.rejectProfileChange(id, adminId, reason);
+  }
+
   @Patch('pros/:id/featured')
   @ApiOperation({ summary: 'Toggle a professional as editorially featured' })
   @ApiResponse({ status: 200, description: 'Featured flag updated successfully' })

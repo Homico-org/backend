@@ -20,6 +20,6 @@ import { SmsService } from './services/sms.service';
   ],
   providers: [VerificationService, EmailService, SmsService],
   controllers: [VerificationController],
-  exports: [VerificationService, SmsService],
+  exports: [VerificationService, SmsService, EmailService],
 })
 export class VerificationModule {}

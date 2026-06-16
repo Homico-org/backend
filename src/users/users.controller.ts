@@ -532,6 +532,18 @@ export class UsersController {
     return this.usersService.findProById(user.userId);
   }
 
+  @Get("me/pending-changes")
+  @ApiOperation({
+    summary:
+      "Current pro's profile-moderation status (pending edit / last rejection)",
+  })
+  @ApiBearerAuth("JWT-auth")
+  @ApiResponse({ status: 200, description: "Moderation status" })
+  @UseGuards(JwtAuthGuard)
+  async getMyPendingChanges(@CurrentUser() user: any) {
+    return this.usersService.getMyModerationStatus(user.userId);
+  }
+
   @Post("me/pro-profile")
   @ApiOperation({ summary: "Create or update pro profile for current user" })
   @ApiBearerAuth("JWT-auth")
@@ -564,7 +576,10 @@ export class UsersController {
     if (user.role !== "admin") {
       throw new ForbiddenException("Admin access required");
     }
-    return this.usersService.updateProProfile(proId, body);
+    // Admin edits apply directly — they are the moderators, not the moderated.
+    return this.usersService.updateProProfile(proId, body, {
+      bypassModeration: true,
+    });
   }
 
   @Get("pros/locations")
