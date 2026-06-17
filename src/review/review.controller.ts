@@ -17,6 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { getClientIp } from '../common/utils/client-ip';
 
 @ApiTags('Reviews')
 @Controller('reviews')
@@ -94,7 +95,7 @@ export class ReviewController {
     @Param('token') token: string,
     @Req() req: any,
   ) {
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const ip = getClientIp(req);
     return this.reviewService.getReviewRequestByToken(token, ip);
   }
 
@@ -137,7 +138,7 @@ export class ReviewController {
     },
     @Req() req: any,
   ) {
-    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const ip = getClientIp(req);
     return this.reviewService.submitExternalReview(token, data, ip);
   }
 

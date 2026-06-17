@@ -37,6 +37,7 @@ import {
 } from "./dto/service-address.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { UsersService } from "./users.service";
+import { getClientIp } from "../common/utils/client-ip";
 @ApiTags("Users")
 @Controller("users")
 export class UsersController {
@@ -724,7 +725,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: "Pro user profile" })
   @ApiResponse({ status: 404, description: "Pro not found" })
   findProById(@Param("id") id: string, @Req() req: any) {
-    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const ip = getClientIp(req);
     const actor = req.user
       ? { id: req.user.userId, name: req.user.name }
       : undefined;
@@ -738,7 +739,7 @@ export class UsersController {
   })
   @ApiResponse({ status: 201, description: "Phone view tracked" })
   async trackPhoneView(@Param("id") id: string, @Req() req: any) {
-    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const ip = getClientIp(req);
     const actor = req.user
       ? { id: req.user.userId, name: req.user.name }
       : undefined;

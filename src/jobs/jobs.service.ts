@@ -641,6 +641,9 @@ export class JobsService {
             await this.jobModel.findByIdAndUpdate(id, {
               $inc: { viewCount: 1 },
             });
+            // Reflect the just-recorded view in the response (the `job` above
+            // was read before the increment, so it'd otherwise be stale by one).
+            (job as any).viewCount = ((job as any).viewCount || 0) + 1;
           }
         } else if (visitorId) {
           // Anonymous user - check by visitorId (IP hash)
@@ -657,6 +660,8 @@ export class JobsService {
             await this.jobModel.findByIdAndUpdate(id, {
               $inc: { viewCount: 1 },
             });
+            // Reflect the just-recorded view in the response (see note above).
+            (job as any).viewCount = ((job as any).viewCount || 0) + 1;
           }
         }
       } catch (error) {
