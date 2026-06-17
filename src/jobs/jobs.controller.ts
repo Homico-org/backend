@@ -610,6 +610,20 @@ export class JobsController {
     return this.jobsService.cancelJob(id, user.userId);
   }
 
+  // TEMPORARY debug endpoint — inspect which header carries the real client IP
+  // behind the Cloudflare->Render chain. REMOVE after diagnosing view tracking.
+  @Get('_debug/client-ip')
+  debugClientIp(@Req() req: any) {
+    return {
+      'cf-connecting-ip': req.headers['cf-connecting-ip'] ?? null,
+      'true-client-ip': req.headers['true-client-ip'] ?? null,
+      'x-real-ip': req.headers['x-real-ip'] ?? null,
+      'x-forwarded-for': req.headers['x-forwarded-for'] ?? null,
+      'req.ip': req.ip ?? null,
+      'getClientIp()': getClientIp(req),
+    };
+  }
+
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============
 
   @Get(':id')
