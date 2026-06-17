@@ -624,6 +624,11 @@ export class JobsController {
     };
   }
 
+  @Get('_debug/try-record/:jobId')
+  debugTryRecord(@Param('jobId') jobId: string, @Req() req: any) {
+    return this.jobsService.debugTryRecordView(jobId, getClientIp(req));
+  }
+
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============
 
   @Get(':id')

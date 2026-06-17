@@ -599,6 +599,32 @@ export class JobsService {
     };
   }
 
+  // TEMPORARY debug — attempt a JobView write and surface the real error.
+  // REMOVE after diagnosing view tracking.
+  async debugTryRecordView(jobId: string, visitorId: string): Promise<any> {
+    try {
+      const jobObjectId = new Types.ObjectId(jobId);
+      const existing = await this.jobViewModel.findOne({
+        jobId: jobObjectId,
+        visitorId,
+      });
+      if (existing) return { ok: false, reason: "already-exists" };
+      const created = await this.jobViewModel.create({
+        jobId: jobObjectId,
+        visitorId,
+      });
+      await this.jobModel.findByIdAndUpdate(jobId, { $inc: { viewCount: 1 } });
+      return { ok: true, id: created._id.toString() };
+    } catch (e: any) {
+      return {
+        ok: false,
+        name: e?.name ?? null,
+        code: e?.code ?? null,
+        message: e?.message ?? String(e),
+      };
+    }
+  }
+
   async findJobById(
     id: string,
     userId?: string,
