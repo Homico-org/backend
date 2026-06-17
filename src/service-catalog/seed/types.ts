@@ -53,6 +53,22 @@ export interface SeedService {
   imageUrl?: string;
 }
 
+/**
+ * Optional priced add-on / option attached to a subcategory (e.g. "ironing
+ * +5₾", or a yes/no "bring cleaning supplies +12₾"). Mirrors CatalogAddon in
+ * the schema. `promptLabel` is the question shown to the user.
+ */
+export interface SeedAddon {
+  key: string;
+  label: SeedLocalizedText;
+  promptLabel: SeedLocalizedText;
+  basePrice: number;
+  maxPrice?: number;
+  unit: string; // ServiceUnit enum value
+  unitLabel: SeedLocalizedText;
+  iconName?: string;
+}
+
 export interface SeedSubcategory {
   id: string; // stable, e.g. "S001"
   key: string;
@@ -62,10 +78,11 @@ export interface SeedSubcategory {
   sortOrder: number;
   isActive: boolean;
   services: SeedService[];
-  addons: never[]; // reserved for future
-  additionalServices: never[]; // reserved for future
+  addons: SeedAddon[]; // priced extras / yes-no options for this subcategory
+  additionalServices: SeedService[]; // reserved (separate from addons)
 
   // Optional flexibility fields
+  description?: SeedLocalizedText;
   imageUrl?: string;
   tags?: string[];
   keywords?: SeedLocalizedText[];

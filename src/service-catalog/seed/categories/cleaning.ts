@@ -3,7 +3,7 @@
  * Translations live in seed/translations.ts keyed by id.
  */
 
-import { cat, sub, svc } from '../helpers';
+import { addon, cat, sub, svc } from '../helpers';
 import { U } from '../units';
 
 export const cleaningCategory = cat(
@@ -14,10 +14,28 @@ export const cleaningCategory = cat(
   3,
   0,
   [
+    // S001 — რეგულარული დალაგება (Regular cleaning). Per-room pricing: the
+    // client picks the rooms they want (each a flat price), veranda is per m².
     sub("S001", "regular_clean", "Sparkles", [
-      svc("V001", "regular_standard_svc", [U.sqm(3, 10), U.hour(15, 40), U.studio(40, 120), U.oneBr(60, 180), U.twoBr(90, 250), U.threeBr(130, 350)]),
-      svc("V002", "regular_recurring_svc", [U.sqm(2, 8), U.hour(15, 35), U.studio(35, 100), U.oneBr(50, 140), U.twoBr(70, 200)]),
+      svc("V251", "regular_kitchen", [U.job(20)], { label: { en: "Kitchen", ka: "სამზარეულო", ru: "Кухня" } }),
+      svc("V252", "regular_bathroom", [U.job(22)], { label: { en: "Bathroom", ka: "აბაზანა", ru: "Ванная" } }),
+      svc("V253", "regular_living", [U.job(10)], { label: { en: "Living room", ka: "მისაღები", ru: "Гостиная" } }),
+      svc("V254", "regular_bedroom", [U.job(13)], { label: { en: "Bedroom", ka: "საძინებელი", ru: "Спальня" } }),
+      svc("V255", "regular_office", [U.job(7)], { label: { en: "Office", ka: "კაბინეტი", ru: "Кабинет" } }),
+      svc("V256", "regular_veranda", [U.sqm(1)], { label: { en: "Veranda", ka: "ვერანდა", ru: "Веранда" } }),
     ], 0, {
+      description: {
+        en: "The service includes:\n\nSurface dust removal\nCleaning floors, doors and handles\nRemoving marks and stains from mirrors\nSurface cleaning of bathroom tiles\nInside and outside cleaning of windows and sills in reachable areas (max. 20 m²)\nWashing dishes in the sink\nWashing up to 5 kg of laundry (as an add-on)\nIroning up to 5 kg of laundry (as an add-on)\n\nNote: the cleaner will not bring a broom, dustpan or vacuum cleaner.",
+        ka: "მომსახურება მოიცავს:\n\nმტვრის ზედაპირულ მოცილებას\nიატაკის, კარებისა და სახელურების გაწმენდას\nსარკიდან ანაბეჭდებისა და ლაქების მოშორებას\nსააბაზანოს კაფელის ზედაპირული ნადების გაწმენდას\nფანჯრებისა და რაფების შიდა და გარე დასუფთავებას ხელმისაწვდომ ადგილებში (მაქს. 20 მ²)\nნიჟარაში ჭურჭლის გარეცხვას\n5 კგ-მდე სარეცხის გარეცხვას (დამატებითი სერვისით)\n5 კგ-მდე სარეცხის დაუთავებას (დამატებითი სერვისით)\n\nგაითვალისწინეთ: დამლაგებელს თან არ ექნება ცოცხი, აქანდაზი და მტვერსასრუტი.",
+        ru: "В услугу входит:\n\nПоверхностное удаление пыли\nЧистка полов, дверей и ручек\nУдаление следов и пятен с зеркал\nПоверхностная чистка плитки в ванной\nМытьё окон и подоконников внутри и снаружи в доступных местах (макс. 20 м²)\nМытьё посуды в раковине\nСтирка до 5 кг белья (доп. услуга)\nГлажка до 5 кг белья (доп. услуга)\n\nОбратите внимание: у уборщика не будет веника, совка и пылесоса.",
+      },
+      addons: [
+        addon("regular_ironing", { en: "Ironing", ka: "გაუთოება", ru: "Глажка" }, { en: "Add ironing?", ka: "დაამატოთ გაუთოება?", ru: "Добавить глажку?" }, 5, U.job(5)),
+        addon("regular_fridge", { en: "Fridge", ka: "მაცივარი", ru: "Холодильник" }, { en: "Add fridge cleaning?", ka: "დაამატოთ მაცივრის წმენდა?", ru: "Добавить чистку холодильника?" }, 5, U.job(5)),
+        addon("regular_cabinet", { en: "Kitchen cabinet", ka: "სამზარეულოს კარადა", ru: "Кухонный шкаф" }, { en: "Add kitchen cabinet cleaning?", ka: "დაამატოთ სამზარეულოს კარადის წმენდა?", ru: "Добавить чистку кухонного шкафа?" }, 10, U.job(10)),
+        addon("regular_laundry", { en: "Laundry wash", ka: "სარეცხის გარეცხვა", ru: "Стирка" }, { en: "Add laundry wash?", ka: "დაამატოთ სარეცხის გარეცხვა?", ru: "Добавить стирку?" }, 5, U.job(5)),
+        addon("regular_supplies", { en: "Cleaning supplies", ka: "საწმენდი ხსნარები", ru: "Чистящие средства" }, { en: "Should the professional bring the needed cleaning supplies?", ka: "გსურთ, რომ პროფესიონალმა მოიტანოს საჭირო საწმენდი საშუალებები?", ru: "Чтобы профессионал принёс необходимые чистящие средства?" }, 12, U.job(12)),
+      ],
       keywords: [
         { en: "cleaning clean housekeeping maid", ka: "დასუფთავება დალაგება დამლაგებელი", ru: "уборка клининг" },
         { en: "daltageba", ka: "დასუფ დალაგ", ru: "" },
