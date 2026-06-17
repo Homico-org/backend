@@ -357,6 +357,17 @@ export class JobView extends Document {
 
 export const JobViewSchema = SchemaFactory.createForClass(JobView);
 
-// Compound index for unique views
-JobViewSchema.index({ jobId: 1, userId: 1 }, { unique: true, sparse: true });
-JobViewSchema.index({ jobId: 1, visitorId: 1 }, { unique: true, sparse: true });
+// Unique view per (job, user) and per (job, visitor). These MUST be partial,
+// not sparse: a sparse COMPOUND index still indexes a doc that has only one of
+// the keys (e.g. an anonymous view has jobId but no userId), storing the missing
+// key as null — so the 2nd anonymous view collides on {jobId, userId: null} and
+// the write is silently dropped (the bug that capped every job at ~2 views).
+// partialFilterExpression with $exists truly excludes docs missing the field.
+JobViewSchema.index(
+  { jobId: 1, userId: 1 },
+  { unique: true, partialFilterExpression: { userId: { $exists: true } } },
+);
+JobViewSchema.index(
+  { jobId: 1, visitorId: 1 },
+  { unique: true, partialFilterExpression: { visitorId: { $exists: true } } },
+);
