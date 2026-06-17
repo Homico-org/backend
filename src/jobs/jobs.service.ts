@@ -714,6 +714,45 @@ export class JobsService {
       });
     }
 
+    // Owner-only: for ANY job that has invited pros, expose which of those
+    // invited pros have opened the job (cross-referenced against JobView).
+    // Lets the client see if the craftsmen they invited have seen the request.
+    // Gated to the owner so a viewer can't see who else was invited / who saw.
+    if (isOwner && (job as any).invitedPros?.length > 0) {
+      const invitedIds = (job as any).invitedPros.map((pid: any) =>
+        new Types.ObjectId(pid.toString ? pid.toString() : pid),
+      );
+      const [invitedUsers, views] = await Promise.all([
+        this.userModel
+          .find({ _id: { $in: invitedIds } })
+          .select("_id name avatar title")
+          .lean()
+          .exec(),
+        this.jobViewModel
+          .find({
+            jobId: new Types.ObjectId(id),
+            userId: { $in: invitedIds },
+          })
+          .select("userId viewedAt")
+          .lean()
+          .exec(),
+      ]);
+      const viewedMap = new Map(
+        views.map((v: any) => [v.userId.toString(), v.viewedAt]),
+      );
+      jobWithSubcategory.invitedProsViews = invitedUsers.map((pro: any) => {
+        const pid = pro._id.toString();
+        return {
+          _id: pid,
+          name: pro.name,
+          avatar: pro.avatar,
+          title: pro.title,
+          viewed: viewedMap.has(pid),
+          viewedAt: viewedMap.get(pid) || null,
+        };
+      });
+    }
+
     // For in_progress or completed jobs, get hired pro info + project tracking
     if (job.status === "in_progress" || job.status === "completed") {
       // Fetch project tracking for stage progress
