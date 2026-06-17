@@ -12,6 +12,10 @@ import { ProjectRequest, ProjectRequestSchema } from '../project-request/schemas
 import { Order, OrderSchema } from '../product-orders/schemas/order.schema';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
 import { ViewLog, ViewLogSchema } from '../users/schemas/view-log.schema';
+import {
+  ProfileChangeRequest,
+  ProfileChangeRequestSchema,
+} from '../users/schemas/profile-change-request.schema';
 import { VerificationModule } from '../verification/verification.module';
 import { UsersModule } from '../users/users.module';
 
@@ -28,6 +32,10 @@ import { UsersModule } from '../users/users.module';
       { name: Order.name, schema: OrderSchema },
       { name: Booking.name, schema: BookingSchema },
       { name: ViewLog.name, schema: ViewLogSchema },
+      {
+        name: ProfileChangeRequest.name,
+        schema: ProfileChangeRequestSchema,
+      },
     ]),
     VerificationModule,
     UsersModule,

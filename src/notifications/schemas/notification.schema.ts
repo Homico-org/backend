@@ -38,6 +38,10 @@ export enum NotificationType {
   // Admin actions
   PROFILE_APPROVED = 'profile_approved',
   PROFILE_REJECTED = 'profile_rejected',
+  // Moderation of edits to an already-live pro profile (distinct from the
+  // new-pro verification above).
+  PROFILE_CHANGES_APPROVED = 'profile_changes_approved',
+  PROFILE_CHANGES_REJECTED = 'profile_changes_rejected',
 
   // Booking related
   NEW_BOOKING = 'new_booking',

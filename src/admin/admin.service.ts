@@ -14,7 +14,13 @@ import { Order } from "../product-orders/schemas/order.schema";
 import { Booking } from "../bookings/schemas/booking.schema";
 import { ViewLog } from "../users/schemas/view-log.schema";
 import { ProfileViewType } from "../users/schemas/profile-view.schema";
+import {
+  ChangeRequestStatus,
+  ChangeRequestSource,
+  ProfileChangeRequest,
+} from "../users/schemas/profile-change-request.schema";
 import { SmsService } from "../verification/services/sms.service";
+import { EmailService } from "../verification/services/email.service";
 import { AdminCreateUserDto } from "./dto/admin-create-user.dto";
 import { resolveUserLocale, type SupportedLocale } from "../common/countries";
 
@@ -92,7 +98,10 @@ export class AdminService {
     @InjectModel(Order.name) private orderModel: Model<Order>,
     @InjectModel(Booking.name) private bookingModel: Model<Booking>,
     @InjectModel(ViewLog.name) private viewLogModel: Model<ViewLog>,
+    @InjectModel(ProfileChangeRequest.name)
+    private profileChangeRequestModel: Model<ProfileChangeRequest>,
     private readonly smsService: SmsService,
+    private readonly emailService: EmailService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -1378,6 +1387,172 @@ export class AdminService {
     ]);
 
     return { pending, approved, rejected, total };
+  }
+
+  // ── Profile change moderation ────────────────────────────────────────────
+  // Verified pros' edits to public fields land here as pending requests. The
+  // admin reviews the diff and approves (applies the change) or rejects (with
+  // a reason). The pro is notified in-app and by email on every decision.
+
+  // Paginated queue. `status` defaults to pending (the actionable list).
+  async getProfileChangeRequests(options: {
+    status?: "pending" | "approved" | "rejected" | "all";
+    page: number;
+    limit: number;
+    search?: string;
+  }) {
+    const { status = "pending", page, limit, search } = options;
+    const skip = (page - 1) * limit;
+
+    const query: FilterQuery<ProfileChangeRequest> = {};
+    if (status !== "all") {
+      query.status = status as ChangeRequestStatus;
+    }
+    if (search && search.trim()) {
+      query.proName = { $regex: search.trim(), $options: "i" };
+    }
+
+    const [items, total] = await Promise.all([
+      this.profileChangeRequestModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.profileChangeRequestModel.countDocuments(query),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async getProfileChangeRequestsStats() {
+    const [pending, approved, rejected, total] = await Promise.all([
+      this.profileChangeRequestModel.countDocuments({
+        status: ChangeRequestStatus.PENDING,
+      }),
+      this.profileChangeRequestModel.countDocuments({
+        status: ChangeRequestStatus.APPROVED,
+      }),
+      this.profileChangeRequestModel.countDocuments({
+        status: ChangeRequestStatus.REJECTED,
+      }),
+      this.profileChangeRequestModel.countDocuments({}),
+    ]);
+    return { pending, approved, rejected, total };
+  }
+
+  async getProfileChangeRequest(id: string) {
+    const req = await this.profileChangeRequestModel.findById(id).lean();
+    if (!req) {
+      throw new BadRequestException("Change request not found");
+    }
+    return req;
+  }
+
+  async approveProfileChange(requestId: string, adminId: string) {
+    const req = await this.profileChangeRequestModel.findById(requestId);
+    if (!req) {
+      throw new BadRequestException("Change request not found");
+    }
+    if (req.status !== ChangeRequestStatus.PENDING) {
+      throw new BadRequestException(
+        `Change request already ${req.status}`,
+      );
+    }
+
+    // Replay the original submission through the same service path with
+    // moderation bypassed, so the applied result is identical to a normal save
+    // (including every cross-field derivation).
+    const proId = String(req.proId);
+    if (req.source === ChangeRequestSource.PRO_PROFILE) {
+      await this.usersService.updateProProfile(proId, req.payload, {
+        bypassModeration: true,
+      });
+    } else {
+      await this.usersService.update(proId, req.payload as any, {
+        bypassModeration: true,
+      });
+    }
+
+    req.status = ChangeRequestStatus.APPROVED;
+    req.reviewedBy = adminId as any;
+    req.reviewedAt = new Date();
+    await req.save();
+
+    await this.notifyProfileChangeDecision(proId, true);
+    return req;
+  }
+
+  async rejectProfileChange(
+    requestId: string,
+    adminId: string,
+    reason: string,
+  ) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException("A rejection reason is required");
+    }
+    const req = await this.profileChangeRequestModel.findById(requestId);
+    if (!req) {
+      throw new BadRequestException("Change request not found");
+    }
+    if (req.status !== ChangeRequestStatus.PENDING) {
+      throw new BadRequestException(
+        `Change request already ${req.status}`,
+      );
+    }
+
+    // Nothing is applied — the live profile keeps its current values.
+    req.status = ChangeRequestStatus.REJECTED;
+    req.reviewedBy = adminId as any;
+    req.reviewedAt = new Date();
+    req.reason = reason.trim();
+    await req.save();
+
+    await this.notifyProfileChangeDecision(String(req.proId), false, reason.trim());
+    return req;
+  }
+
+  // In-app notification + email on each decision. Best-effort: a notification
+  // failure must never roll back the recorded decision.
+  private async notifyProfileChangeDecision(
+    proId: string,
+    approved: boolean,
+    reason?: string,
+  ): Promise<void> {
+    const user = await this.userModel.findById(proId).catch(() => null);
+    if (!user) return;
+
+    const type = approved ? "profile_changes_approved" : "profile_changes_rejected";
+    await this.notificationModel
+      .create({
+        // Use the fetched doc's _id (ObjectId) so the user's notification feed,
+        // which queries by ObjectId, actually matches this row.
+        userId: user._id,
+        type,
+        title: approved ? "Profile changes approved" : "Profile changes not approved",
+        message: approved
+          ? "The changes you requested to your profile have been approved and are now live."
+          : `Your requested profile changes were not approved. Reason: ${reason ?? ""}`,
+        titleKey: `notifications.types.${type}.title`,
+        messageKey: `notifications.types.${type}.message`,
+        ...(approved ? {} : { i18nParams: { reason: reason ?? "" } }),
+        isRead: false,
+        createdAt: new Date(),
+      })
+      .catch(() => {});
+
+    if (user.email) {
+      const locale = resolveUserLocale(user);
+      await this.emailService
+        .sendProfileChangeDecision(user.email, approved, locale, reason)
+        .catch(() => {});
+    }
   }
 
   async approvePro(proId: string, adminId: string): Promise<User> {
