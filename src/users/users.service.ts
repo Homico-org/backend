@@ -1800,15 +1800,14 @@ export class UsersService {
         break;
       default:
         if (useRandomOrder) {
-          // "recommended" + seed: keep the priority tiers, but shuffle
-          // randomly within each tier via the seeded `rnd` field (added to
-          // the pipeline below). Equal-tier pros now rotate on every refresh
-          // instead of the same score/review order forever.
+          // "recommended" + seed: group pros into ONE priority tier each
+          // (their BEST qualification) and shuffle randomly within each tier.
+          // tierRank: 0=partner, 1=badge(featured/premium), 2=has-portfolio,
+          // 3=rest (computed in the pipeline below). This way ALL partners
+          // rotate among themselves, all badged among themselves, etc. — no
+          // single pro stays pinned #1 just because they cumulate flags.
           sortObj = {
-            isHomicoPartner: -1,
-            isFeatured: -1,
-            isPremium: -1,
-            hasVisiblePortfolio: -1,
+            tierRank: 1,
             rnd: 1,
           };
         } else {
@@ -2246,18 +2245,32 @@ export class UsersService {
                     ],
                   },
                 },
+                // Single priority tier per pro = their BEST qualification.
+                // 0 partner → 1 badge → 2 has-portfolio → 3 rest. Sorting by
+                // this (then rnd) shuffles WITHIN each group, so all partners
+                // rotate among themselves, etc.
+                tierRank: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: [{ $ifNull: ["$isHomicoPartner", false] }, true] }, then: 0 },
+                      { case: { $or: [{ $eq: [{ $ifNull: ["$isFeatured", false] }, true] }, { $eq: [{ $ifNull: ["$isPremium", false] }, true] }] }, then: 1 },
+                      { case: { $eq: ["$hasVisiblePortfolio", true] }, then: 2 },
+                    ],
+                    default: 3,
+                  },
+                },
               }
             : {}),
         },
       },
       // Drop the temporary lookup array - keeps the response payload tight.
-      // (`rnd` is kept here so $sort can use it, then dropped after $limit.)
+      // (`rnd`/`tierRank` are kept here so $sort can use them, dropped after.)
       { $project: { linkedPortfolio: 0, password: 0 } },
       { $sort: sortObj },
       { $skip: fetchSkip },
       { $limit: fetchLimit },
-      // Drop the seeded random helper from the response.
-      { $project: { rnd: 0 } },
+      // Drop the grouped-random sort helpers from the response.
+      { $project: { rnd: 0, tierRank: 0 } },
     ];
 
     let total = await this.userModel.countDocuments(query).exec();
