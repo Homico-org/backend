@@ -1714,6 +1714,15 @@ export class UsersService {
     completeOnly?: boolean;
     /** When true, return only Homico Partners (the bookable pros). */
     partnersOnly?: boolean;
+    /**
+     * Per-browse random seed. When set (and sort is the default
+     * "recommended"), pros are shuffled RANDOMLY within each priority tier
+     * (partner → featured → premium → has-portfolio) instead of the static
+     * score/reviews order — so the same pros don't always sit on top. The
+     * seed is stable for a browse session (passed on every page) so
+     * pagination stays consistent; a refresh sends a new seed → new order.
+     */
+    seed?: number;
   }): Promise<{
     data: User[];
     pagination: {
@@ -1727,6 +1736,18 @@ export class UsersService {
     const page = filters?.page || 1;
     const limit = filters?.limit || 6;
     const skip = (page - 1) * limit;
+
+    // Grouped-random ordering: only for the default "recommended" view and only
+    // when the client passes a seed. Keeps the priority tiers (partner →
+    // featured → premium → has-portfolio) but shuffles RANDOMLY within each
+    // tier instead of the static score order, so the same pros don't always
+    // sit on top. Seeded so pagination stays consistent across pages; the
+    // client sends a fresh seed on refresh → a new order.
+    const useRandomOrder =
+      (!filters?.sort || filters.sort === "recommended") &&
+      typeof filters?.seed === "number" &&
+      Number.isFinite(filters.seed);
+    const randomSeed = useRandomOrder ? Math.trunc(filters!.seed as number) : 0;
 
     // Build sort object - always sort premium first.
     //
@@ -1778,20 +1799,33 @@ export class UsersService {
         sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
         break;
       default:
-        // "recommended" - portfolio-having pros at the top of each
-        // premium tier, then profileScore, then reviews/rating as
-        // tiebreakers within identical-portfolio bands.
-        sortObj = {
-          // Homico Partners (bookable, contracted) lead every list.
-          isHomicoPartner: -1,
-          isFeatured: -1,
-          isPremium: -1,
-          hasVisiblePortfolio: -1,
-          profileScore: -1,
-          totalReviews: -1,
-          avgRating: -1,
-          _id: -1,
-        };
+        if (useRandomOrder) {
+          // "recommended" + seed: group pros into ONE priority tier each
+          // (their BEST qualification) and shuffle randomly within each tier.
+          // tierRank: 0=partner, 1=badge(featured/premium), 2=has-portfolio,
+          // 3=rest (computed in the pipeline below). This way ALL partners
+          // rotate among themselves, all badged among themselves, etc. — no
+          // single pro stays pinned #1 just because they cumulate flags.
+          sortObj = {
+            tierRank: 1,
+            rnd: 1,
+          };
+        } else {
+          // "recommended" - portfolio-having pros at the top of each
+          // premium tier, then profileScore, then reviews/rating as
+          // tiebreakers within identical-portfolio bands.
+          sortObj = {
+            // Homico Partners (bookable, contracted) lead every list.
+            isHomicoPartner: -1,
+            isFeatured: -1,
+            isPremium: -1,
+            hasVisiblePortfolio: -1,
+            profileScore: -1,
+            totalReviews: -1,
+            avgRating: -1,
+            _id: -1,
+          };
+        }
     }
 
     // Build query - only role=pro
@@ -2195,13 +2229,48 @@ export class UsersService {
           isHomicoPartner: { $ifNull: ["$isHomicoPartner", false] },
           isFeatured: { $ifNull: ["$isFeatured", false] },
           isPremium: { $ifNull: ["$isPremium", false] },
+          // Seeded per-doc shuffle key for grouped-random ordering. Hash of
+          // (id + seed) via $toHashedIndexKey (pure aggregation, no server-side
+          // JS — $function is blocked on this Atlas tier). Deterministic for a
+          // given seed → consistent pagination; a new seed (refresh) → new
+          // order. Only added when randomizing; the static sort ignores it.
+          ...(useRandomOrder
+            ? {
+                rnd: {
+                  $toHashedIndexKey: {
+                    $concat: [
+                      { $toString: "$_id" },
+                      ":",
+                      String(randomSeed),
+                    ],
+                  },
+                },
+                // Single priority tier per pro = their BEST qualification.
+                // 0 partner → 1 badge → 2 has-portfolio → 3 rest. Sorting by
+                // this (then rnd) shuffles WITHIN each group, so all partners
+                // rotate among themselves, etc.
+                tierRank: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: [{ $ifNull: ["$isHomicoPartner", false] }, true] }, then: 0 },
+                      { case: { $or: [{ $eq: [{ $ifNull: ["$isFeatured", false] }, true] }, { $eq: [{ $ifNull: ["$isPremium", false] }, true] }] }, then: 1 },
+                      { case: { $eq: ["$hasVisiblePortfolio", true] }, then: 2 },
+                    ],
+                    default: 3,
+                  },
+                },
+              }
+            : {}),
         },
       },
       // Drop the temporary lookup array - keeps the response payload tight.
+      // (`rnd`/`tierRank` are kept here so $sort can use them, dropped after.)
       { $project: { linkedPortfolio: 0, password: 0 } },
       { $sort: sortObj },
       { $skip: fetchSkip },
       { $limit: fetchLimit },
+      // Drop the grouped-random sort helpers from the response.
+      { $project: { rnd: 0, tierRank: 0 } },
     ];
 
     let total = await this.userModel.countDocuments(query).exec();
