@@ -6,7 +6,7 @@
  */
 
 import { translations } from './translations';
-import type { SeedCategory, SeedLocalizedText, SeedService, SeedSubcategory, SeedUnitOption } from './types';
+import type { SeedAddon, SeedCategory, SeedLocalizedText, SeedService, SeedSubcategory, SeedUnitOption } from './types';
 
 /**
  * Optional extras a `sub()` / `svc()` call can carry on top of the
@@ -30,6 +30,21 @@ export interface SeedExtras {
    * `licensed`, `weekend`, etc. - not for translations.
    */
   tags?: string[];
+  /**
+   * Inline label override. When set, `svc()` uses it instead of looking the id
+   * up in translations.ts — handy for many one-off items (e.g. cleaning rooms)
+   * that don't warrant a global translation id each.
+   */
+  label?: SeedLocalizedText;
+  /**
+   * Rich, multi-line description (e.g. "what the service includes").
+   * Applies to `svc()` and `sub()`.
+   */
+  description?: SeedLocalizedText;
+  /**
+   * Priced add-ons / yes-no options. Only meaningful on `sub()`.
+   */
+  addons?: SeedAddon[];
 }
 
 function lookup(id: string): { en: string; ka: string; ru: string } {
@@ -55,14 +70,38 @@ export function svc(
   return {
     id,
     key,
-    label: lookup(id),
+    label: extras?.label ?? lookup(id),
     unitOptions: unitOpts,
     basePrice: primary.defaultPrice,
     maxPrice: primary.maxPrice,
     unit: primary.unit,
     unitLabel: primary.label,
+    description: extras?.description,
     keywords: extras?.keywords,
     tags: extras?.tags,
+  };
+}
+
+/**
+ * Build a priced add-on / yes-no option for a subcategory. Inline labels
+ * (not translation ids) since add-ons are local to a subcategory.
+ */
+export function addon(
+  key: string,
+  label: SeedLocalizedText,
+  promptLabel: SeedLocalizedText,
+  basePrice: number,
+  unitOpt: SeedUnitOption,
+  iconName?: string,
+): SeedAddon {
+  return {
+    key,
+    label,
+    promptLabel,
+    basePrice,
+    unit: unitOpt.unit,
+    unitLabel: unitOpt.label,
+    iconName,
   };
 }
 
@@ -81,7 +120,7 @@ export function sub(
   return {
     id,
     key,
-    label: lookup(id),
+    label: extras?.label ?? lookup(id),
     iconName,
     priceRange: {
       min: Math.min(...prices, 0),
@@ -90,8 +129,9 @@ export function sub(
     sortOrder,
     isActive: true,
     services,
-    addons: [],
+    addons: extras?.addons ?? [],
     additionalServices: [],
+    description: extras?.description,
     keywords: extras?.keywords,
     tags: extras?.tags,
   };

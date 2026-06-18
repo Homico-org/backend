@@ -43,7 +43,7 @@ export const translations: Record<string, SeedLocalizedText> = {
   C13: { en: "Windows & doors", ka: "ფანჯრები და კარები", ru: "Окна и двери" },
   C14: { en: "Concrete & masonry", ka: "ბეტონი და ქვა", ru: "Бетон и кладка" },
   C15: { en: "Designers", ka: "დიზაინერები", ru: "Дизайнеры" },
-  S001: { en: "Regular home cleaning", ka: "სახლის დალაგება", ru: "Регулярная уборка" },
+  S001: { en: "Regular cleaning", ka: "რეგულარული დალაგება", ru: "Регулярная уборка" },
   S002: { en: "Deep cleaning", ka: "გენერალური დალაგება", ru: "Генеральная уборка" },
   S003: { en: "Post-renovation cleaning", ka: "რემონტის შემდეგ დალაგება", ru: "Уборка после ремонта" },
   S004: { en: "Move-in / move-out cleaning", ka: "გადასახლების დალაგება", ru: "Уборка при переезде" },

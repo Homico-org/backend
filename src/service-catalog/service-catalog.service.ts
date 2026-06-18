@@ -62,6 +62,17 @@ export interface LeanService {
   imageUrl?: string;
 }
 
+export interface LeanAddon {
+  key: string;
+  label: LeanLocalizedText;
+  promptLabel: LeanLocalizedText;
+  basePrice: number;
+  maxPrice?: number;
+  unit: ServiceUnit;
+  unitLabel: LeanLocalizedText;
+  iconName?: string;
+}
+
 export interface LeanSubcategory {
   id?: string;
   key: string;
@@ -74,6 +85,7 @@ export interface LeanSubcategory {
   isActive?: boolean;
   services?: LeanService[];
   additionalServices?: LeanService[];
+  addons?: LeanAddon[];
   tags?: string[];
   keywords?: LeanLocalizedText[];
 }
@@ -324,6 +336,25 @@ export class ServiceCatalogService {
               imageUrl: svc.imageUrl,
             };
           }),
+        // Priced add-ons / yes-no options (e.g. ironing +5₾, supplies +12₾).
+        // Were previously dropped here — the client picker needs them.
+        addons: (sub.addons ?? []).map((a) => ({
+          key: a.key,
+          name: a.label?.en ?? a.key,
+          nameKa: a.label?.ka ?? a.label?.en ?? a.key,
+          nameRu: a.label?.ru ?? a.label?.en ?? a.key,
+          promptLabel: {
+            en: a.promptLabel?.en ?? '',
+            ka: a.promptLabel?.ka ?? '',
+            ru: a.promptLabel?.ru ?? '',
+          },
+          basePrice: a.basePrice,
+          maxPrice: a.maxPrice,
+          unit: a.unit,
+          unitName: a.unitLabel?.en ?? a.unit,
+          unitNameKa: a.unitLabel?.ka ?? a.unit,
+          iconName: a.iconName,
+        })),
         priceRange: sub.priceRange,
       })),
     }));
