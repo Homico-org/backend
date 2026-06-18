@@ -656,6 +656,12 @@ export class UsersController {
     description:
       "ISO 3166-1 alpha-2 country code. Scopes results to pros in that marketplace. Omit to see every country (admin-only behaviour).",
   })
+  @ApiQuery({
+    name: "seed",
+    required: false,
+    description:
+      "Random seed for grouped-random ordering of the default 'recommended' sort. Pass the same seed across pages for consistent pagination; send a new seed to reshuffle.",
+  })
   @ApiResponse({ status: 200, description: "Paginated list of pro users" })
   @UseGuards(OptionalJwtAuthGuard)
   findAllPros(
@@ -679,6 +685,7 @@ export class UsersController {
     @Query("country") country?: string,
     @Query("completeOnly") completeOnly?: string,
     @Query("partnersOnly") partnersOnly?: string,
+    @Query("seed") seed?: string,
   ) {
     // Country scoping: an unauthenticated or non-admin caller MUST be
     // scoped to a country. We accept whatever they pass (validated by
@@ -712,6 +719,7 @@ export class UsersController {
       country: effectiveCountry,
       completeOnly: completeOnly === "true",
       partnersOnly: partnersOnly === "true",
+      seed: seed != null && seed !== "" ? parseInt(seed, 10) : undefined,
     });
   }
 
