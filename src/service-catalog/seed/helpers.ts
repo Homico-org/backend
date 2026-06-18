@@ -120,7 +120,7 @@ export function sub(
   return {
     id,
     key,
-    label: lookup(id),
+    label: extras?.label ?? lookup(id),
     iconName,
     priceRange: {
       min: Math.min(...prices, 0),
