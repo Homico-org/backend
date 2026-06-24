@@ -616,6 +616,23 @@ export class AddProductDto {
   @IsOptional()
   category?: string;
 
+  // FF&E schedule / procurement details.
+  @IsString()
+  @IsOptional()
+  sku?: string;
+
+  @IsString()
+  @IsOptional()
+  dimensions?: string;
+
+  @IsNumber()
+  @IsOptional()
+  leadTimeDays?: number;
+
+  @IsDateString()
+  @IsOptional()
+  etaDate?: string;
+
   @IsEnum(ProductStatus)
   @IsOptional()
   status?: ProductStatus;
@@ -680,6 +697,23 @@ export class UpdateProductDto {
   @IsOptional()
   category?: string;
 
+  // FF&E schedule / procurement details.
+  @IsString()
+  @IsOptional()
+  sku?: string;
+
+  @IsString()
+  @IsOptional()
+  dimensions?: string;
+
+  @IsNumber()
+  @IsOptional()
+  leadTimeDays?: number;
+
+  @IsDateString()
+  @IsOptional()
+  etaDate?: string;
+
   @IsEnum(ProductStatus)
   @IsOptional()
   status?: ProductStatus;
@@ -687,6 +721,12 @@ export class UpdateProductDto {
   @IsString()
   @IsOptional()
   note?: string;
+}
+
+// Client approves / requests changes on a schedule line item.
+export class ReviewProductDto {
+  @IsEnum(ApprovalStatus)
+  status: ApprovalStatus;
 }
 
 export class AddMilestoneDto {
