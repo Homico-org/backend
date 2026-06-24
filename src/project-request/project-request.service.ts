@@ -973,6 +973,48 @@ export class ProjectRequestService {
     return project.save();
   }
 
+  // Materialize a selection's chosen option into a schedule product, so an
+  // approved design choice flows into procurement. Idempotent (the selection
+  // remembers its product). Client or engaged pro (findForViewer).
+  async selectionToProduct(
+    id: string,
+    userId: string,
+    selectionId: string,
+  ): Promise<ProjectRequest> {
+    const { project } = await this.findForViewer(id, userId);
+    const sel = (project.selections ?? []).find((s) => s.id === selectionId);
+    if (!sel) throw new NotFoundException('Selection not found');
+    if (sel.productId) return project; // already added - no-op
+    if (!sel.chosenOptionId) {
+      throw new BadRequestException('No option chosen yet');
+    }
+    const opt = sel.options.find((o) => o.id === sel.chosenOptionId);
+    if (!opt) throw new NotFoundException('Chosen option not found');
+
+    const productId = this.shortId('P');
+    project.products.push({
+      id: productId,
+      name: opt.name,
+      qty: 1,
+      unitPrice: opt.price ?? 0,
+      vendor: opt.vendor,
+      url: opt.url,
+      imageUrl: opt.imageUrl,
+      roomId: sel.roomId || undefined,
+      category: sel.surface || undefined,
+      selectionId: sel.id,
+      // The client already approved this selection, so the procurement line
+      // carries that sign-off through.
+      approvalStatus: ApprovalStatus.APPROVED,
+      approvedAt: new Date(),
+      status: ProductStatus.TO_BUY,
+      createdAt: new Date(),
+    } as any);
+    sel.productId = productId;
+    this.logProduct(project, 'added', opt.name);
+    return project.save();
+  }
+
   // === Rooms / spaces ===
 
   private withArea(data: {

@@ -281,6 +281,10 @@ export class ProjectProduct {
   @Prop({ type: Date })
   approvedAt?: Date;
 
+  // Set when this product was materialized from a Selection's chosen option.
+  @Prop()
+  selectionId?: string;
+
   @Prop({
     type: String,
     enum: Object.values(ProductStatus),
@@ -420,6 +424,11 @@ export class Selection {
   // The option the client picked.
   @Prop()
   chosenOptionId?: string;
+
+  // Link to the schedule product materialized from this selection's chosen
+  // option, so the design choice flows into procurement (and isn't re-added).
+  @Prop()
+  productId?: string;
 
   @Prop({
     type: String,

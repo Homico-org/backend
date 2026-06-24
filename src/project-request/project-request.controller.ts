@@ -816,4 +816,18 @@ export class ProjectRequestController {
       dto,
     );
   }
+
+  // Materialize a selection's chosen option into a schedule line item.
+  @Post(':id/selections/:selectionId/to-product')
+  selectionToProduct(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Param('selectionId') selectionId: string,
+  ) {
+    return this.projectRequestService.selectionToProduct(
+      id,
+      user.userId,
+      selectionId,
+    );
+  }
 }
