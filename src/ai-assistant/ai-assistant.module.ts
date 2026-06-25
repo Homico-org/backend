@@ -8,6 +8,7 @@ import { ChatSession, ChatSessionSchema } from './schemas/chat-session.schema';
 import { ChatMessage, ChatMessageSchema } from './schemas/chat-message.schema';
 import { UsersModule } from '../users/users.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { ServiceCatalogModule } from '../service-catalog/service-catalog.module';
 import { ReviewModule } from '../review/review.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { ReviewModule } from '../review/review.module';
     ]),
     UsersModule,
     CategoriesModule,
+    ServiceCatalogModule,
     ReviewModule,
   ],
   controllers: [AiAssistantController],
