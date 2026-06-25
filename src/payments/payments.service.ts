@@ -926,7 +926,7 @@ export class PaymentsService {
    * account, creates a Payout doc, and flips all escrows to released.
    *
    * Phase 1: admin manually performs the actual bank transfer externally
-   * and pastes the transfer reference here. Phase 3 automates via BoG's
+   * and pastes the transfer reference here. Phase 3 automates via Flitt's
    * outgoing-transfer API.
    */
   async processPayout(opts: {
@@ -1089,18 +1089,32 @@ export class PaymentsService {
 
     const platformFeeMinor = Math.round(payment.amountMinor * PLATFORM_FEE_RATE);
 
-    const escrow = await this.escrowModel.create({
-      entityType: payment.entityType,
-      entityId: payment.entityId,
-      paymentId: payment._id,
-      payerUserId: payment.userId,
-      payeeUserId: payment.payeeUserId,
-      amountHeldMinor: payment.amountMinor,
-      platformFeeMinor,
-      currency: payment.currency,
-      status: "held",
-      refundedAmountMinor: 0,
-    });
+    let escrow;
+    try {
+      escrow = await this.escrowModel.create({
+        entityType: payment.entityType,
+        entityId: payment.entityId,
+        paymentId: payment._id,
+        payerUserId: payment.userId,
+        payeeUserId: payment.payeeUserId,
+        amountHeldMinor: payment.amountMinor,
+        platformFeeMinor,
+        currency: payment.currency,
+        status: "held",
+        refundedAmountMinor: 0,
+      });
+    } catch (err) {
+      // Lost a race with a concurrent payment-success path - the unique index
+      // on (entityType, entityId) rejected the second insert. Resolve to the
+      // escrow the winner created instead of erroring.
+      if ((err as { code?: number })?.code === 11000) {
+        const existing = await this.escrowModel
+          .findOne({ entityType: payment.entityType, entityId: payment.entityId })
+          .exec();
+        if (existing) return existing.toObject() as EscrowDoc;
+      }
+      throw err;
+    }
 
     this.logger.log(
       `Escrow created for ${payment.entityType}:${payment.entityId} amount=${payment.amountMinor} fee=${platformFeeMinor}`,

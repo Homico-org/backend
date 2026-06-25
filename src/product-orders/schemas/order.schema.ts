@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 /**
  * A customer's product order. Homico is the merchant of record: the customer
- * pays Homico (BoG) for the whole cart, and Homico fulfils it manually (ops
+ * pays Homico (Flitt) for the whole cart, and Homico fulfils it manually (ops
  * buys from each shop, arranges delivery). It is a platform charge - no escrow
  * (see PaymentEntityType 'product_order'). Items + address + totals are
  * snapshotted at order time so a later scrape/price change can't mutate a

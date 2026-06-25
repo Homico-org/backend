@@ -7,8 +7,8 @@ import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  // rawBody: true is required so the BoG webhook handler can verify the
-  // RSA-SHA256 signature against the EXACT bytes BoG signed. Without it,
+  // rawBody: true is required so the Flitt webhook handler can verify the
+  // callback signature against the EXACT bytes the provider signed. Without it,
   // Express parses and re-serializes JSON, which subtly mutates whitespace
   // and breaks signature verification.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

@@ -21,7 +21,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "seed": "node dist/seed/seed.js",
-    "seed:dev": "ts-node -r tsconfig-paths/register scripts/seed-dev.ts"
+    "seed:dev": "ts-node -r tsconfig-paths/register scripts/seed-dev.ts",
+    "flitt:selftest": "ts-node -r tsconfig-paths/register src/scripts/flitt-selftest.ts"
   },
   "dependencies": {
     "@amplitude/analytics-node": "^1.5.57",
