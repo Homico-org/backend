@@ -2254,6 +2254,7 @@ export class UsersService {
           isHomicoPartner: { $ifNull: ["$isHomicoPartner", false] },
           isFeatured: { $ifNull: ["$isFeatured", false] },
           isPremium: { $ifNull: ["$isPremium", false] },
+          isTopQuality: { $ifNull: ["$isTopQuality", false] },
           // Seeded per-doc shuffle key for grouped-random ordering. Hash of
           // (id + seed) via $toHashedIndexKey (pure aggregation, no server-side
           // JS — $function is blocked on this Atlas tier). Deterministic for a
