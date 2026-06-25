@@ -533,6 +533,12 @@ export class User extends Document {
   @Prop({ default: false })
   isHomicoPartner: boolean;
 
+  // Top Quality - hand-granted by an admin to profiles with the best photos,
+  // description and portfolio. Pure quality signal (display badge), independent
+  // of Premium/Featured. Admin-set.
+  @Prop({ default: false })
+  isTopQuality: boolean;
+
   @Prop()
   premiumExpiresAt: Date;
 
