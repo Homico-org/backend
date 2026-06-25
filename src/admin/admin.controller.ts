@@ -502,6 +502,19 @@ export class AdminController {
     return this.adminService.setHomicoPartner(proId, !!partner);
   }
 
+  @Patch('pros/:id/top-quality')
+  @ApiOperation({
+    summary: 'Grant/revoke the Top Quality badge (admin only, display badge)',
+  })
+  @ApiResponse({ status: 200, description: 'Top Quality flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setTopQuality(
+    @Param('id') proId: string,
+    @Body('topQuality') topQuality: boolean,
+  ) {
+    return this.adminService.setTopQuality(proId, !!topQuality);
+  }
+
   @Patch('pros/:id/premium')
   @ApiOperation({
     summary: 'Manually grant/revoke the Premium badge (pre-payment, admin only)',

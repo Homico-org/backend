@@ -1351,7 +1351,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner isPremium adminRejectionReason createdAt portfolioProjects",
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner isPremium isTopQuality adminRejectionReason createdAt portfolioProjects",
         )
         .lean(),
       this.userModel.countDocuments(query),
@@ -1769,6 +1769,20 @@ export class AdminService {
       id: String(user._id),
       isHomicoPartner: Boolean(user.isHomicoPartner),
     };
+  }
+
+  async setTopQuality(
+    proId: string,
+    topQuality: boolean,
+  ): Promise<{ id: string; isTopQuality: boolean }> {
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, { isTopQuality: topQuality }, { new: true })
+      .select("_id isTopQuality role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return { id: String(user._id), isTopQuality: Boolean(user.isTopQuality) };
   }
 
   async setPremium(
