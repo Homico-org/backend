@@ -98,6 +98,16 @@ const AI_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
             type: 'number',
             description: "Maximum price in the marketplace's local currency for budget searches.",
           },
+          premiumOnly: {
+            type: 'boolean',
+            description:
+              'Set true to return ONLY Premium professionals. Use when the user asks for premium/პრემიუმ/премиум pros only. If none match, the result will be empty - say so plainly.',
+          },
+          partnersOnly: {
+            type: 'boolean',
+            description:
+              'Set true to return ONLY Homico Partners (the bookable, contracted pros). Use when the user asks specifically for Homico Partners.',
+          },
           sort: {
             type: 'string',
             enum: ['rating', 'reviews', 'price-low', 'price-high', 'newest'],
@@ -1080,9 +1090,15 @@ ${toolInstructions}
           const result = await this.aiToolsService.searchProfessionals({
             category: args.category,
             subcategory: args.subcategory,
+            serviceKey: args.serviceKey,
+            serviceArea: args.serviceArea,
+            scheduledDate: args.scheduledDate,
+            languages: args.languages,
             minRating: args.minRating,
             minPrice: args.minPrice,
             maxPrice: args.maxPrice,
+            premiumOnly: args.premiumOnly,
+            partnersOnly: args.partnersOnly,
             sort: args.sort || 'rating',
             limit: Math.min(args.limit || 5, 10),
             locale,

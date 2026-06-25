@@ -39,6 +39,10 @@ export interface SearchProfessionalsParams {
   minRating?: number;
   maxPrice?: number;
   minPrice?: number;
+  /** When true, return only Premium pros. */
+  premiumOnly?: boolean;
+  /** When true, return only Homico Partners (bookable pros). */
+  partnersOnly?: boolean;
   sort?: 'rating' | 'reviews' | 'price-low' | 'price-high' | 'newest';
   limit?: number;
   locale?: 'en' | 'ka' | 'ru';
@@ -85,6 +89,8 @@ export class AiToolsService {
       minRating,
       maxPrice,
       minPrice,
+      premiumOnly,
+      partnersOnly,
       sort,
       limit = 5,
       locale = 'en',
@@ -120,6 +126,8 @@ export class AiToolsService {
     if (minRating) filters.minRating = minRating;
     if (maxPrice) filters.maxPrice = maxPrice;
     if (minPrice) filters.minPrice = minPrice;
+    if (premiumOnly) filters.premiumOnly = true;
+    if (partnersOnly) filters.partnersOnly = true;
     if (sort) filters.sort = sort;
 
     // New AI-search filters (added 2026-05). All optional - the model

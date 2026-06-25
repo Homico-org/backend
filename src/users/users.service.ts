@@ -1714,6 +1714,8 @@ export class UsersService {
     completeOnly?: boolean;
     /** When true, return only Homico Partners (the bookable pros). */
     partnersOnly?: boolean;
+    /** When true, return only Premium pros. */
+    premiumOnly?: boolean;
     /**
      * Per-browse random seed. When set (and sort is the default
      * "recommended"), pros are shuffled RANDOMLY within each priority tier
@@ -1974,6 +1976,10 @@ export class UsersService {
 
     if (filters?.partnersOnly) {
       query.isHomicoPartner = true;
+    }
+
+    if (filters?.premiumOnly) {
+      query.isPremium = true;
     }
 
     if (filters?.languages && filters.languages.length > 0) {
