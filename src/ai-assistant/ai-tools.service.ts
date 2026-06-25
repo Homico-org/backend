@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { CategoriesService } from '../categories/categories.service';
+import { ServiceCatalogService } from '../service-catalog/service-catalog.service';
 import { ReviewService } from '../review/review.service';
 import { CURRENCY_BY_COUNTRY, DEFAULT_COUNTRY, type CountryCode } from '../common/countries';
 
@@ -53,8 +54,20 @@ export class AiToolsService {
   constructor(
     private usersService: UsersService,
     private categoriesService: CategoriesService,
+    private serviceCatalogService: ServiceCatalogService,
     private reviewService: ReviewService,
   ) {}
+
+  /**
+   * The live service catalog in the SAME shape the legacy CategoriesService
+   * returned ({ key, name, nameKa, nameRu, icon, subcategories, keywords }).
+   * The chatbot must resolve categories against THIS (servicecatalogcategories
+   * — what pros and the public listing use), not the stale legacy `categories`
+   * collection, or category searches silently return zero.
+   */
+  private async catalogCategories(): Promise<any[]> {
+    return this.serviceCatalogService.findAllAsCategories();
+  }
 
   /**
    * Search for professionals based on criteria
@@ -170,9 +183,13 @@ export class AiToolsService {
 
     // Resolve category names
     if (professionals.length > 0) {
-      const categoryKeys = [...new Set(professionals.map((p) => p.primaryCategory))];
-      const categories = await this.categoriesService.findByKeys(categoryKeys);
-      const categoryMap = new Map(categories.map((c: any) => [c.key, c]));
+      const categoryKeys = new Set(professionals.map((p) => p.primaryCategory));
+      const all = await this.catalogCategories();
+      const categoryMap = new Map(
+        all
+          .filter((c: any) => categoryKeys.has(c.key))
+          .map((c: any) => [c.key, c]),
+      );
 
       professionals.forEach((pro) => {
         const cat = categoryMap.get(pro.primaryCategory);
@@ -200,10 +217,11 @@ export class AiToolsService {
       let primaryCategory = '';
       let primaryCategoryKa = '';
       if (pro.categories && pro.categories.length > 0) {
-        const categories = await this.categoriesService.findByKeys([pro.categories[0]]);
-        if (categories.length > 0) {
-          primaryCategory = categories[0].name;
-          primaryCategoryKa = categories[0].nameKa;
+        const all = await this.catalogCategories();
+        const cat = all.find((c: any) => c.key === pro.categories[0]);
+        if (cat) {
+          primaryCategory = cat.name;
+          primaryCategoryKa = cat.nameKa;
         }
       }
 
@@ -274,7 +292,8 @@ export class AiToolsService {
    */
   async getCategories(categoryKey?: string): Promise<RichContent> {
     if (categoryKey) {
-      const category = await this.categoriesService.findByKey(categoryKey);
+      const all = await this.catalogCategories();
+      const category = all.find((c: any) => c.key === categoryKey);
       if (!category) {
         return {
           type: RichContentType.CATEGORY_LIST,
@@ -298,7 +317,7 @@ export class AiToolsService {
       };
     }
 
-    const categories = await this.categoriesService.findAll();
+    const categories = await this.catalogCategories();
 
     const categoryItems: CategoryItem[] = categories.map((cat: any) => ({
       key: cat.key,
@@ -328,9 +347,14 @@ export class AiToolsService {
       return { type: RichContentType.CATEGORY_LIST, data: [] };
     }
 
-    const result = await this.categoriesService.search(q);
+    const all = await this.catalogCategories();
     const items: CategoryItem[] = [];
     const seen = new Set<string>();
+    const norm = this.normalizeCategoryQuery(q);
+    const contains = (v: string | undefined | null) => {
+      const n = this.normalizeCategoryQuery(v);
+      return n.length > 0 && (n.includes(norm) || norm.includes(n));
+    };
 
     const pushCategory = (cat: any) => {
       if (!cat?.key || seen.has(cat.key)) return;
@@ -344,28 +368,36 @@ export class AiToolsService {
       });
     };
 
-    // Prioritize top-level categories first
-    for (const cat of result.categories || []) {
-      pushCategory(cat);
-      if (items.length >= limit) break;
+    // Role-word alias first (e.g. "electrician" -> electrical)
+    const alias = this.resolveCategoryAlias(q.toLowerCase());
+    if (alias) {
+      const a = all.find((c: any) => c.key === alias);
+      if (a) pushCategory(a);
     }
 
-    // Then categories of matching subcategories/sub-subcategories
-    if (items.length < limit) {
-      const categoriesByKey = new Map<string, any>(
-        (await this.categoriesService.findAll()).map((c: any) => [c.key, c]),
-      );
-
-      for (const sub of result.subcategories || []) {
-        const cat = categoriesByKey.get(sub.category);
-        if (cat) pushCategory(cat);
-        if (items.length >= limit) break;
+    // Top-level category matches (name / localized name / keywords)
+    for (const cat of all) {
+      if (items.length >= limit) break;
+      if (
+        contains(cat.name) ||
+        contains(cat.nameKa) ||
+        (cat.keywords || []).some((k: string) => contains(k))
+      ) {
+        pushCategory(cat);
       }
+    }
 
-      for (const child of result.subSubcategories || []) {
-        const cat = categoriesByKey.get(child.category);
-        if (cat) pushCategory(cat);
+    // Then categories that have a matching subcategory
+    if (items.length < limit) {
+      for (const cat of all) {
         if (items.length >= limit) break;
+        const hit = (cat.subcategories || []).some(
+          (s: any) =>
+            contains(s.name) ||
+            contains(s.nameKa) ||
+            (s.keywords || []).some((k: string) => contains(k)),
+        );
+        if (hit) pushCategory(cat);
       }
     }
 
@@ -410,8 +442,9 @@ export class AiToolsService {
 
     const professionals = result.data;
 
-    // Get category details - try both as category and subcategory
-    let categoryDetails = await this.categoriesService.findByKey(category);
+    // Get category details - try both as category and subcategory (live catalog)
+    const allCategories = await this.catalogCategories();
+    const categoryDetails = allCategories.find((c: any) => c.key === category);
     let categoryName = category;
     let categoryNameKa = category;
 
@@ -420,7 +453,6 @@ export class AiToolsService {
       categoryNameKa = categoryDetails.nameKa;
     } else {
       // Try to find subcategory details
-      const allCategories = await this.categoriesService.findAll();
       for (const cat of allCategories) {
         const sub = cat.subcategories?.find((s: any) => s.key === category);
         if (sub) {
@@ -771,8 +803,9 @@ export class AiToolsService {
       return { isTopLevel: true, categoryKey: alias };
     }
 
-    // First, check if it's a top-level category
-    const allCategories = await this.categoriesService.findAll();
+    // First, check if it's a top-level category (against the LIVE catalog —
+    // the same keys pros and the listing use, not the stale legacy collection).
+    const allCategories = await this.catalogCategories();
 
     const norm = this.normalizeCategoryQuery(query);
 
@@ -825,32 +858,37 @@ export class AiToolsService {
       }
     }
 
-    // Fallback: use the categories search (supports partial matches and keywords)
-    // This is crucial for queries like "არქიტექტორი" where users type a role word, not a category key.
-    if (query) {
-      const search = await this.categoriesService.search(query);
-
-      if (search.categories?.length) {
-        // Best effort: pick first (CategoriesService already filters inactive)
-        return { isTopLevel: true, categoryKey: search.categories[0].key };
+    // Fallback: partial / substring match over the live catalog (name,
+    // localized name, keywords). Covers free-text like "architect" that isn't
+    // an exact key. Prefer a top-level category hit, then a subcategory.
+    if (norm) {
+      const contains = (v: string | undefined | null) => {
+        const n = this.normalizeCategoryQuery(v);
+        return n.length > 0 && (n.includes(norm) || norm.includes(n));
+      };
+      for (const cat of allCategories) {
+        if (
+          contains(cat.name) ||
+          contains(cat.nameKa) ||
+          (cat.keywords || []).some((k: string) => contains(k))
+        ) {
+          return { isTopLevel: true, categoryKey: cat.key };
+        }
       }
-
-      if (search.subSubcategories?.length) {
-        const best = search.subSubcategories[0];
-        return {
-          isTopLevel: false,
-          categoryKey: best.category,
-          subcategoryKey: best.subSubcategory.key,
-        };
-      }
-
-      if (search.subcategories?.length) {
-        const best = search.subcategories[0];
-        return {
-          isTopLevel: false,
-          categoryKey: best.category,
-          subcategoryKey: best.subcategory.key,
-        };
+      for (const cat of allCategories) {
+        for (const sub of cat.subcategories || []) {
+          if (
+            contains(sub.name) ||
+            contains(sub.nameKa) ||
+            (sub.keywords || []).some((k: string) => contains(k))
+          ) {
+            return {
+              isTopLevel: false,
+              categoryKey: cat.key,
+              subcategoryKey: sub.key,
+            };
+          }
+        }
       }
     }
 
@@ -870,37 +908,48 @@ export class AiToolsService {
 
   private resolveCategoryAlias(queryLower: string): string | null {
     const q = this.normalizeCategoryQuery(queryLower);
+    // Targets MUST be real servicecatalogcategories keys (architects/designers/
+    // painters/electrical/plumbing), not the old legacy taxonomy.
     const aliases: Record<string, string> = {
       // EN
-      architect: 'architecture',
-      architects: 'architecture',
-      architecture: 'architecture',
-      'interior designer': 'interior-design',
-      designer: 'design',
+      architect: 'architects',
+      architects: 'architects',
+      architecture: 'architects',
+      'interior designer': 'designers',
+      designer: 'designers',
+      designers: 'designers',
       electricians: 'electrical',
       electrician: 'electrical',
+      electric: 'electrical',
+      electricity: 'electrical',
       plumber: 'plumbing',
       plumbers: 'plumbing',
-      painter: 'painting',
-      painters: 'painting',
+      plumbing: 'plumbing',
+      painter: 'painters',
+      painters: 'painters',
+      painting: 'painters',
+      design: 'designers',
+      'interior design': 'designers',
+      moving: 'movers',
+      mover: 'movers',
       // KA
-      არქიტექტორი: 'architecture',
-      არქიტექტორები: 'architecture',
-      არქიტექტურა: 'architecture',
-      დიზაინერი: 'design',
-      ინტერიერი: 'interior-design',
-      'ინტერიერის დიზაინი': 'interior-design',
+      არქიტექტორი: 'architects',
+      არქიტექტორები: 'architects',
+      არქიტექტურა: 'architects',
+      დიზაინერი: 'designers',
+      ინტერიერი: 'designers',
+      'ინტერიერის დიზაინი': 'designers',
       ელექტრიკოსი: 'electrical',
       სანტექნიკოსი: 'plumbing',
       სანტექნიკა: 'plumbing',
-      მხატვარი: 'painting',
+      მხატვარი: 'painters',
       // RU
-      архитектор: 'architecture',
-      архитектура: 'architecture',
-      дизайнер: 'design',
+      архитектор: 'architects',
+      архитектура: 'architects',
+      дизайнер: 'designers',
       электрик: 'electrical',
       сантехник: 'plumbing',
-      маляр: 'painting',
+      маляр: 'painters',
     };
 
     return aliases[q] || null;
