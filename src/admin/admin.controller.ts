@@ -502,6 +502,19 @@ export class AdminController {
     return this.adminService.setHomicoPartner(proId, !!partner);
   }
 
+  @Patch('pros/:id/premium')
+  @ApiOperation({
+    summary: 'Manually grant/revoke the Premium badge (pre-payment, admin only)',
+  })
+  @ApiResponse({ status: 200, description: 'Premium flag updated successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async setPremium(
+    @Param('id') proId: string,
+    @Body('premium') premium: boolean,
+  ) {
+    return this.adminService.setPremium(proId, !!premium);
+  }
+
   // ============== JOB MANAGEMENT ==============
 
   @Get('jobs/:id')

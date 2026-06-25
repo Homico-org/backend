@@ -1351,7 +1351,7 @@ export class AdminService {
         .skip(skip)
         .limit(limit)
         .select(
-          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner adminRejectionReason createdAt portfolioProjects",
+          "_id uid name email phone role avatar city bio categories subcategories selectedCategories selectedSubcategories selectedServices basePrice maxPrice pricingModel yearsExperience isProfileCompleted verificationStatus isFeatured isHomicoPartner isPremium adminRejectionReason createdAt portfolioProjects",
         )
         .lean(),
       this.userModel.countDocuments(query),
@@ -1769,6 +1769,33 @@ export class AdminService {
       id: String(user._id),
       isHomicoPartner: Boolean(user.isHomicoPartner),
     };
+  }
+
+  async setPremium(
+    proId: string,
+    premium: boolean,
+  ): Promise<{ id: string; isPremium: boolean }> {
+    // Manual admin grant (pre-payment): the Premium badge is currently set by
+    // hand purely for display, until billing ships. A granted badge is
+    // permanent until an admin revokes it, so we stamp a far-future
+    // premiumExpiresAt — the hourly premium-expire cron sweeps on
+    // `premiumExpiresAt < now`, so this keeps the cron from clearing manual
+    // grants WITHOUT touching the cron. Revoking clears the flag and the date.
+    const update = premium
+      ? {
+          isPremium: true,
+          premiumTier: "pro",
+          premiumExpiresAt: new Date("2099-12-31T00:00:00.000Z"),
+        }
+      : { isPremium: false, premiumTier: "none", premiumExpiresAt: null };
+    const user = await this.userModel
+      .findByIdAndUpdate(proId, update, { new: true })
+      .select("_id isPremium role")
+      .lean();
+    if (!user) {
+      throw new Error("Professional not found");
+    }
+    return { id: String(user._id), isPremium: Boolean(user.isPremium) };
   }
 
   // ============== JOB MANAGEMENT ==============
