@@ -3,7 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { PaymentsController } from "./payments.controller";
 import { PaymentsService } from "./payments.service";
-import { BogPaymentProvider } from "./providers/bog-payment.provider";
+import { FlittPaymentProvider } from "./providers/flitt-payment.provider";
 import { MockPaymentProvider } from "./providers/mock-payment.provider";
 import { DisabledPaymentProvider } from "./providers/disabled-payment.provider";
 import { PaymentProviderFactory } from "./providers/payment-provider.factory";
@@ -21,7 +21,7 @@ import { PremiumCronService } from "./premium-cron.service";
  * cross-cutting concern - any feature that wants to take or refund money
  * goes through us, and we don't want boilerplate at every consumer.
  *
- * Provider implementations (MockPaymentProvider, future BogPaymentProvider)
+ * Provider implementations (MockPaymentProvider, FlittPaymentProvider)
  * are providers here but NOT exported - consumers should go through
  * PaymentsService, never call providers directly. The factory hides the
  * choice of provider behind a uniform interface.
@@ -47,7 +47,7 @@ import { PremiumCronService } from "./premium-cron.service";
     PaymentsService,
     PaymentProviderFactory,
     MockPaymentProvider,
-    BogPaymentProvider,
+    FlittPaymentProvider,
     DisabledPaymentProvider,
     PremiumCronService,
   ],

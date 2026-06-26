@@ -389,7 +389,7 @@ export class ProductOrdersService {
   /**
    * Resume payment for an order the customer never finished paying. Re-checks
    * status, then spins up a fresh payment intent and hands back a redirectUrl
-   * (mock: the return page; BoG: the hosted gateway), mirroring createOrder.
+   * (mock: the return page; Flitt: the hosted gateway), mirroring createOrder.
    */
   async resumePayment(userId: string, id: string) {
     const order = await this.loadOwned(id, userId);

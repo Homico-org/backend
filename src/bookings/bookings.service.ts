@@ -335,6 +335,39 @@ export class BookingsService {
       booking.status = BookingStatus.CANCELLED;
       booking.cancelReason = `Payment ${payment.status}`;
       mutated = true;
+    } else if (
+      payment.status === 'succeeded' &&
+      booking.status === BookingStatus.CANCELLED &&
+      booking.paymentStatus === BookingPaymentStatus.UNPAID
+    ) {
+      // Money landed AFTER the booking was already cancelled - happens when the
+      // payment-timeout cron fires while the client is still finishing on the
+      // gateway. The slot was released, so we can't honour the booking: refund
+      // the full amount instead of stranding it `held` in escrow.
+      // The UNPAID guard distinguishes a timeout-cancel from a normal cancel(),
+      // which already set paymentStatus to REFUNDED/PARTIALLY_REFUNDED/RELEASED
+      // per the cancellation policy.
+      const refundable = payment.amountMinor - payment.refundedAmountMinor;
+      if (refundable > 0) {
+        try {
+          await this.paymentsService.refundForEntity(
+            'booking',
+            bookingId,
+            refundable,
+            'Auto-refund: payment completed after the booking timed out',
+          );
+          booking.paymentStatus = BookingPaymentStatus.REFUNDED;
+          mutated = true;
+          this.logger.warn(
+            `Auto-refunded late payment for already-cancelled booking ${bookingId} (amount=${refundable})`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Auto-refund failed for late payment on cancelled booking ${bookingId}: ` +
+              `${(err as Error).message} - leaving for manual admin refund`,
+          );
+        }
+      }
     }
 
     // Dispute resolution self-heal: if the booking is currently DISPUTED
@@ -1182,6 +1215,42 @@ export class BookingsService {
       `Auto-cancelled stale AWAITING_PAYMENT booking ${booking._id}`,
     );
     return booking;
+  }
+
+  /**
+   * Belt-and-suspenders for the timeout-then-late-payment edge: a booking that
+   * was auto-cancelled by the payment timeout but whose payment LATER settled
+   * (e.g. the webhook landed after the client finished paying late) would
+   * otherwise sit with money `held` in escrow forever - the list-sync only
+   * touches AWAITING_PAYMENT, and the webhook path doesn't call
+   * syncPaymentStatus. This sweep runs syncPaymentStatus on recently-cancelled
+   * unpaid bookings that have a payment, which fires the auto-refund branch
+   * when the payment turns out to have succeeded. Bounded to the last 48h
+   * (a provider intent won't settle later than that). Returns refunds issued.
+   */
+  async sweepLatePaidCancellations(): Promise<number> {
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const candidates = await this.bookingModel
+      .find({
+        status: BookingStatus.CANCELLED,
+        paymentStatus: BookingPaymentStatus.UNPAID,
+        paymentId: { $exists: true, $ne: null },
+        updatedAt: { $gte: since },
+      })
+      .limit(100);
+
+    let refunded = 0;
+    for (const booking of candidates) {
+      try {
+        const synced = await this.syncPaymentStatus(booking);
+        if (synced.paymentStatus === BookingPaymentStatus.REFUNDED) refunded++;
+      } catch (err) {
+        this.logger.warn(
+          `sweepLatePaidCancellations: booking ${booking._id} failed: ${(err as Error).message}`,
+        );
+      }
+    }
+    return refunded;
   }
 
   /**

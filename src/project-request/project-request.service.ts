@@ -47,6 +47,7 @@ import {
   UpdateMilestoneDto,
   UpdateMoodboardItemDto,
   UpdateProductDto,
+  ReviewProductDto,
   UpdateProjectDto,
   UpdateRoomDto,
   UpdateScopeItemDto,
@@ -972,6 +973,48 @@ export class ProjectRequestService {
     return project.save();
   }
 
+  // Materialize a selection's chosen option into a schedule product, so an
+  // approved design choice flows into procurement. Idempotent (the selection
+  // remembers its product). Client or engaged pro (findForViewer).
+  async selectionToProduct(
+    id: string,
+    userId: string,
+    selectionId: string,
+  ): Promise<ProjectRequest> {
+    const { project } = await this.findForViewer(id, userId);
+    const sel = (project.selections ?? []).find((s) => s.id === selectionId);
+    if (!sel) throw new NotFoundException('Selection not found');
+    if (sel.productId) return project; // already added - no-op
+    if (!sel.chosenOptionId) {
+      throw new BadRequestException('No option chosen yet');
+    }
+    const opt = sel.options.find((o) => o.id === sel.chosenOptionId);
+    if (!opt) throw new NotFoundException('Chosen option not found');
+
+    const productId = this.shortId('P');
+    project.products.push({
+      id: productId,
+      name: opt.name,
+      qty: 1,
+      unitPrice: opt.price ?? 0,
+      vendor: opt.vendor,
+      url: opt.url,
+      imageUrl: opt.imageUrl,
+      roomId: sel.roomId || undefined,
+      category: sel.surface || undefined,
+      selectionId: sel.id,
+      // The client already approved this selection, so the procurement line
+      // carries that sign-off through.
+      approvalStatus: ApprovalStatus.APPROVED,
+      approvedAt: new Date(),
+      status: ProductStatus.TO_BUY,
+      createdAt: new Date(),
+    } as any);
+    sel.productId = productId;
+    this.logProduct(project, 'added', opt.name);
+    return project.save();
+  }
+
   // === Rooms / spaces ===
 
   private withArea(data: {
@@ -1328,6 +1371,10 @@ export class ProjectRequestService {
       roomId: dto.roomId || undefined,
       stepId: dto.stepId || undefined,
       category: dto.category || undefined,
+      sku: dto.sku || undefined,
+      dimensions: dto.dimensions || undefined,
+      leadTimeDays: dto.leadTimeDays,
+      etaDate: dto.etaDate || undefined,
       status: dto.status ?? ProductStatus.TO_BUY,
       note: dto.note,
       createdAt: new Date(),
@@ -1364,6 +1411,23 @@ export class ProjectRequestService {
       statusChanged ? dto.status : 'edited',
       product.name,
     );
+    return project.save();
+  }
+
+  // Client signs off (or requests changes) on a schedule line item. Client-only
+  // (findOwned) - this is the owner's purchase approval, the FF&E trust gate.
+  async reviewProduct(
+    id: string,
+    clientId: string,
+    productId: string,
+    dto: ReviewProductDto,
+  ): Promise<ProjectRequest> {
+    const project = await this.findOwned(id, clientId);
+    const product = project.products.find((p) => p.id === productId);
+    if (!product) throw new NotFoundException('Product not found');
+    product.approvalStatus = dto.status;
+    product.approvedAt =
+      dto.status === ApprovalStatus.APPROVED ? new Date() : undefined;
     return project.save();
   }
 
@@ -1821,6 +1885,104 @@ export class ProjectRequestService {
       createdAt: new Date(),
     } as any);
     return project.save();
+  }
+
+  // Smart import for the shopping schedule: read og/meta/JSON-LD from any
+  // product URL so the add-product form can autofill name/image/price/vendor.
+  // Read-only (no mutation); gated on project access. Best-effort - returns
+  // whatever it could extract, empty fields included.
+  async previewProductFromUrl(
+    id: string,
+    userId: string,
+    url: string,
+  ): Promise<{
+    name?: string;
+    imageUrl?: string;
+    price?: number;
+    vendor?: string;
+  }> {
+    await this.findForViewer(id, userId);
+    if (!/^https?:\/\//i.test(url || '')) {
+      throw new BadRequestException('Invalid URL');
+    }
+    let html: string;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (compatible; HomicoBot/1.0; +https://homico.ge)',
+          Accept: 'text/html',
+        },
+        redirect: 'follow',
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      html = await res.text();
+    } catch {
+      throw new BadRequestException('Could not open that link');
+    }
+    const $ = cheerio.load(html);
+    const meta = (sel: string) => $(sel).attr('content')?.trim() || undefined;
+
+    const name =
+      meta('meta[property="og:title"]') ||
+      $('title').first().text().trim() ||
+      undefined;
+    const imageUrl =
+      meta('meta[property="og:image"]') ||
+      meta('meta[property="og:image:url"]') ||
+      meta('meta[name="twitter:image"]') ||
+      undefined;
+
+    // Price: meta tags first, then JSON-LD offers.
+    let priceStr =
+      meta('meta[property="product:price:amount"]') ||
+      meta('meta[property="og:price:amount"]') ||
+      meta('meta[itemprop="price"]') ||
+      $('[itemprop="price"]').first().attr('content') ||
+      $('[itemprop="price"]').first().text().trim() ||
+      undefined;
+    if (!priceStr) {
+      $('script[type="application/ld+json"]').each((_, el) => {
+        if (priceStr) return;
+        try {
+          const data = JSON.parse($(el).contents().text());
+          const nodes = Array.isArray(data) ? data : [data];
+          for (const node of nodes) {
+            const offers = (node as { offers?: unknown })?.offers;
+            const offer = Array.isArray(offers) ? offers[0] : offers;
+            const p = (offer as { price?: unknown })?.price;
+            if (p != null) {
+              priceStr = String(p);
+              break;
+            }
+          }
+        } catch {
+          /* ignore malformed JSON-LD */
+        }
+      });
+    }
+    const parsed = priceStr
+      ? parseFloat(String(priceStr).replace(/[^\d.]/g, ''))
+      : NaN;
+    const price = !Number.isNaN(parsed) && parsed > 0 ? parsed : undefined;
+
+    // Vendor from the hostname (e.g. www.legoroom.ge -> Legoroom).
+    let vendor: string | undefined;
+    try {
+      const label = new URL(url).hostname.replace(/^www\./, '').split('.')[0];
+      vendor = label
+        ? label.charAt(0).toUpperCase() + label.slice(1)
+        : undefined;
+    } catch {
+      /* ignore */
+    }
+
+    return {
+      name: name ? name.slice(0, 200) : undefined,
+      imageUrl,
+      price,
+      vendor,
+    };
   }
 
   // === Milestones ===

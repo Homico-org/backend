@@ -279,7 +279,7 @@ export class MilestonePaymentsService {
 
   // ---- funding (client) --------------------------------------------------
 
-  /** Client funds an approved installment - returns the BoG redirect URL. */
+  /** Client funds an approved installment - returns the Flitt redirect URL. */
   async fund(
     clientId: string,
     id: string,

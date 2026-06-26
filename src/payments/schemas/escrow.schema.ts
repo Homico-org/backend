@@ -103,7 +103,12 @@ export class Escrow extends Document {
 
 export const EscrowSchema = SchemaFactory.createForClass(Escrow);
 
-EscrowSchema.index({ entityType: 1, entityId: 1 });
+// Unique: exactly one escrow per entity (booking / milestone / order). Without
+// this, two concurrent payment-success paths (e.g. the return page polling
+// reconcile every 1.5s) both pass the findOne guard in createEscrow and insert
+// duplicate escrows. The unique index makes the second insert fail (E11000),
+// which createEscrow catches and resolves to the existing row.
+EscrowSchema.index({ entityType: 1, entityId: 1 }, { unique: true });
 EscrowSchema.index({ payeeUserId: 1, status: 1 }); // pro payout listings
 EscrowSchema.index({ payerUserId: 1, status: 1 }); // client refund listings
 

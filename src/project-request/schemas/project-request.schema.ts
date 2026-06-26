@@ -233,7 +233,7 @@ export class ProjectProduct {
   imageUrl?: string;
 
   // Links this shopping-list row back to a supplier-catalog product so it
-  // can be ordered through the real checkout (BoG + delivery). Present only
+  // can be ordered through the real checkout (Flitt + delivery). Present only
   // for products added from the catalog; manual rows leave it empty and are
   // not orderable. `supplierProductId` is the catalog product's Mongo _id.
   @Prop()
@@ -256,6 +256,34 @@ export class ProjectProduct {
 
   @Prop()
   category?: string; // user-defined grouping label (e.g. "Lighting")
+
+  // === FF&E schedule / procurement details ===
+  @Prop()
+  sku?: string; // supplier reference / model number
+
+  @Prop()
+  dimensions?: string; // free-text, e.g. "120 x 60 x H85 cm"
+
+  @Prop({ min: 0 })
+  leadTimeDays?: number; // vendor lead time in days
+
+  @Prop({ type: Date })
+  etaDate?: Date; // expected delivery date
+
+  // Client sign-off on this line item (the FF&E "approved to buy" gate).
+  @Prop({
+    type: String,
+    enum: Object.values(ApprovalStatus),
+    default: ApprovalStatus.NONE,
+  })
+  approvalStatus: ApprovalStatus;
+
+  @Prop({ type: Date })
+  approvedAt?: Date;
+
+  // Set when this product was materialized from a Selection's chosen option.
+  @Prop()
+  selectionId?: string;
 
   @Prop({
     type: String,
@@ -396,6 +424,11 @@ export class Selection {
   // The option the client picked.
   @Prop()
   chosenOptionId?: string;
+
+  // Link to the schedule product materialized from this selection's chosen
+  // option, so the design choice flows into procurement (and isn't re-added).
+  @Prop()
+  productId?: string;
 
   @Prop({
     type: String,

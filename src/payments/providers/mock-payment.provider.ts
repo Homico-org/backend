@@ -23,7 +23,7 @@ import {
  *  - refund just records the refund in memory and returns a fake id.
  *  - fetchIntentStatus reads from the in-memory map.
  *
- * Use this as the active provider in dev until BoG sandbox credentials are
+ * Use this as the active provider in dev until Flitt sandbox credentials are
  * provisioned (Task #8). Production should NEVER use this - the factory
  * refuses to return it when NODE_ENV=production.
  *
