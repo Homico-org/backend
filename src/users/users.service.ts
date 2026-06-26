@@ -632,6 +632,25 @@ export class UsersService {
       proUid: (user as any).uid ?? null,
     });
 
+    // Tell the pro their edit was received and is awaiting review — otherwise a
+    // verified pro saves, sees nothing change, and doesn't know an admin must
+    // approve it first. Mirrors the decision notifications (English copy +
+    // i18n keys resolved at view time). Best-effort: a notification failure
+    // must never roll back the recorded change request.
+    await this.notificationModel
+      .create({
+        userId: user._id,
+        type: "profile_changes_submitted",
+        title: "Profile changes submitted",
+        message:
+          "Your profile changes have been submitted and are awaiting review by the Homico team. You'll be notified once they're approved.",
+        titleKey: "notifications.types.profile_changes_submitted.title",
+        messageKey: "notifications.types.profile_changes_submitted.message",
+        isRead: false,
+        createdAt: new Date(),
+      })
+      .catch(() => {});
+
     return true;
   }
 
