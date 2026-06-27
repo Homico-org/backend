@@ -1890,11 +1890,28 @@ export class UsersService {
     // Quality floor (opt-in). Empty-shell profiles - no portfolio, no priced
     // services, no reviews - give a first-time client nothing to judge, so the
     // default browse hides them. A pro needs ANY one real signal to appear.
+    // The service signal must be a REAL offer: an active entry with a price.
+    // (The old `servicePricing.0 exists` let a profile through on a single
+    // inactive / price-0 row, so empty shells still showed.) "Priced" covers
+    // both flat (`price`) AND range pricing (`priceMin`/`priceMax`), since a
+    // range like 70–500 ₾ stores `price: 0` — without this, range-only pros
+    // would be wrongly hidden.
     if (filters?.completeOnly) {
       query.$and.push({
         $or: [
           { "portfolioProjects.0": { $exists: true } },
-          { "servicePricing.0": { $exists: true } },
+          {
+            servicePricing: {
+              $elemMatch: {
+                isActive: true,
+                $or: [
+                  { price: { $gt: 0 } },
+                  { priceMin: { $gt: 0 } },
+                  { priceMax: { $gt: 0 } },
+                ],
+              },
+            },
+          },
           { totalReviews: { $gt: 0 } },
         ],
       });
