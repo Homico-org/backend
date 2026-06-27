@@ -62,6 +62,14 @@ export class UsersController {
       derivedSubcategories = userData.subcategories;
     }
 
+    // Read-time premium expiry guard: never present a lapsed subscription as
+    // active (the hourly cron owns the persistent flip, this corrects the
+    // moment it expires).
+    const premiumActive =
+      !!userData.isPremium &&
+      (!userData.premiumExpiresAt ||
+        new Date(userData.premiumExpiresAt) > new Date());
+
     return {
       id: userData._id,
       uid: userData.uid,
@@ -101,6 +109,12 @@ export class UsersController {
             isProfileDeactivated: userData.isProfileDeactivated || false,
             deactivatedUntil: userData.deactivatedUntil,
             deactivationReason: userData.deactivationReason,
+            // Premium subscription status (so the pro can see their plan + expiry).
+            isPremium: premiumActive,
+            premiumTier: premiumActive
+              ? userData.premiumTier || "none"
+              : "none",
+            premiumExpiresAt: userData.premiumExpiresAt,
           }
         : {}),
     };
