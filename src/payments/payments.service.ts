@@ -16,6 +16,10 @@ import {
 import { Escrow, EscrowDoc } from "./schemas/escrow.schema";
 import { Dispute, DisputeDoc, DisputeStatus } from "./schemas/dispute.schema";
 import { Payout, PayoutDoc } from "./schemas/payout.schema";
+import {
+  PromoCode,
+  PromoDiscountType,
+} from "./schemas/promo-code.schema";
 import { User } from "../users/schemas/user.schema";
 import { PaymentProviderFactory } from "./providers/payment-provider.factory";
 import { PaymentProviderName } from "./providers/payment-provider.interface";
@@ -74,6 +78,8 @@ export class PaymentsService {
     @InjectModel(Dispute.name) private readonly disputeModel: Model<Dispute>,
     @InjectModel(Payout.name) private readonly payoutModel: Model<Payout>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(PromoCode.name)
+    private readonly promoCodeModel: Model<PromoCode>,
     private readonly providers: PaymentProviderFactory,
   ) {}
 
@@ -145,19 +151,87 @@ export class PaymentsService {
    * client can't pay less. tier+period are encoded in the entityId so the
    * grant step can apply the right plan from the Payment doc alone.
    */
+  // Launch pricing (GEL). `elite` is sold as "Super Pro". Must mirror the
+  // frontend's data/premium-pricing.ts GE column so the charge matches the
+  // displayed price.
+  private static readonly PREMIUM_PRICES: Record<
+    string,
+    { monthly: number; yearly: number }
+  > = {
+    basic: { monthly: 29, yearly: 290 },
+    pro: { monthly: 100, yearly: 1000 },
+    elite: { monthly: 250, yearly: 2500 },
+  };
+
+  /** Apply a promo's discount to a GEL price, clamped to >= 0 and rounded. */
+  private applyPromoDiscount(price: number, promo: PromoCode): number {
+    let final = price;
+    if (promo.discountType === "amount_off") final = price - promo.value;
+    else if (promo.discountType === "percent_off")
+      final = price - (price * promo.value) / 100;
+    else if (promo.discountType === "fixed_price") final = promo.value;
+    return Math.max(0, Math.round(final));
+  }
+
+  /**
+   * Look up a usable promo code for a tier, throwing a specific BadRequest
+   * (INVALID_PROMO / EXPIRED_PROMO / PROMO_USED_UP / PROMO_NOT_FOR_TIER) the
+   * frontend can map to a friendly message. Returns the live document.
+   */
+  private async findValidPromo(code: string, tier: string): Promise<PromoCode> {
+    const promo = await this.promoCodeModel
+      .findOne({ code: code.toUpperCase().trim() })
+      .exec();
+    if (!promo || !promo.active) throw new BadRequestException("INVALID_PROMO");
+    if (promo.expiresAt && new Date(promo.expiresAt) < new Date())
+      throw new BadRequestException("EXPIRED_PROMO");
+    if (promo.maxUses > 0 && promo.usedCount >= promo.maxUses)
+      throw new BadRequestException("PROMO_USED_UP");
+    if (
+      promo.applicableTiers?.length &&
+      !promo.applicableTiers.includes(tier)
+    )
+      throw new BadRequestException("PROMO_NOT_FOR_TIER");
+    return promo;
+  }
+
+  /**
+   * Preview the premium price for a tier/period, optionally after a promo
+   * code. Read-only - used by the checkout page to show the discount before
+   * the user pays. Throws the same coded errors as findValidPromo.
+   */
+  async previewPremiumPrice(
+    tier: string,
+    period: "monthly" | "yearly",
+    code?: string,
+  ): Promise<{
+    originalAmount: number;
+    finalAmount: number;
+    discounted: boolean;
+    code?: string;
+  }> {
+    const prices = PaymentsService.PREMIUM_PRICES[tier];
+    if (!prices) throw new BadRequestException(`Unknown premium tier: ${tier}`);
+    const base = period === "yearly" ? prices.yearly : prices.monthly;
+    if (!code?.trim()) {
+      return { originalAmount: base, finalAmount: base, discounted: false };
+    }
+    const promo = await this.findValidPromo(code, tier);
+    const final = this.applyPromoDiscount(base, promo);
+    return {
+      originalAmount: base,
+      finalAmount: final,
+      discounted: final < base,
+      code: promo.code,
+    };
+  }
+
   async createPremiumIntent(
     userId: string,
     tier: string,
     period: "monthly" | "yearly",
+    promoCode?: string,
   ): Promise<{ paymentId: string; redirectUrl: string }> {
-    // Launch pricing (GEL). `elite` is sold as "Super Pro". Must mirror the
-    // frontend's data/premium-pricing.ts GE column so the charge matches the
-    // displayed price.
-    const PREMIUM_PRICES: Record<string, { monthly: number; yearly: number }> = {
-      basic: { monthly: 29, yearly: 290 },
-      pro: { monthly: 100, yearly: 1000 },
-      elite: { monthly: 250, yearly: 2500 },
-    };
     // Allow-list: only the plans the UI actually sells may be purchased. The
     // app offers Pro and Super Pro (elite) on a MONTHLY basis only. Without
     // this, a crafted request could buy an off-menu plan (e.g. `basic`, or
@@ -169,7 +243,7 @@ export class PaymentsService {
     if (period !== "monthly") {
       throw new BadRequestException("Only monthly billing is available");
     }
-    const prices = PREMIUM_PRICES[tier];
+    const prices = PaymentsService.PREMIUM_PRICES[tier];
     if (!prices) {
       throw new BadRequestException(`Unknown premium tier: ${tier}`);
     }
@@ -187,9 +261,16 @@ export class PaymentsService {
     ) {
       throw new BadRequestException("ALREADY_PREMIUM");
     }
-    // Monthly-only today (guarded above); `prices.yearly` stays in the table
-    // for when yearly billing is re-enabled.
-    const amountMinor = Math.round(prices.monthly * 100);
+    // Monthly-only today (guarded above), optionally discounted by a promo.
+    let amount = prices.monthly;
+    let appliedCode: string | undefined;
+    if (promoCode?.trim()) {
+      const promo = await this.findValidPromo(promoCode, tier);
+      amount = this.applyPromoDiscount(amount, promo);
+      appliedCode = promo.code;
+    }
+    const amountMinor = Math.round(amount * 100);
+
     const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     return this.createIntentForEntity({
       entityType: "premium",
@@ -203,8 +284,52 @@ export class PaymentsService {
       payeeUserId: userId,
       returnUrl: `${appUrl}/pro/premium/return?tier=${tier}`,
       cancelUrl: `${appUrl}/pro/premium`,
-      metadata: { tier, period, kind: "premium" },
+      metadata: { tier, period, kind: "premium", promoCode: appliedCode },
     });
+  }
+
+  // ---- Promo code admin ----
+
+  async createPromoCode(input: {
+    code: string;
+    discountType: PromoDiscountType;
+    value: number;
+    applicableTiers?: string[];
+    maxUses?: number;
+    expiresAt?: string;
+    note?: string;
+  }): Promise<PromoCode> {
+    const code = input.code?.toUpperCase().trim();
+    if (!code) throw new BadRequestException("Code is required");
+    if (!["amount_off", "percent_off", "fixed_price"].includes(input.discountType))
+      throw new BadRequestException("Invalid discountType");
+    if (typeof input.value !== "number" || input.value < 0)
+      throw new BadRequestException("Invalid value");
+    const exists = await this.promoCodeModel.findOne({ code }).lean().exec();
+    if (exists) throw new BadRequestException("Code already exists");
+    return this.promoCodeModel.create({
+      code,
+      discountType: input.discountType,
+      value: input.value,
+      applicableTiers: input.applicableTiers || [],
+      maxUses: input.maxUses || 0,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+      note: input.note,
+    });
+  }
+
+  async listPromoCodes(): Promise<PromoCode[]> {
+    return this.promoCodeModel.find().sort({ createdAt: -1 }).lean().exec();
+  }
+
+  async setPromoCodeActive(id: string, active: boolean): Promise<PromoCode> {
+    if (!Types.ObjectId.isValid(id))
+      throw new NotFoundException("Promo code not found");
+    const promo = await this.promoCodeModel
+      .findByIdAndUpdate(id, { active }, { new: true })
+      .exec();
+    if (!promo) throw new NotFoundException("Promo code not found");
+    return promo;
   }
 
   /**
@@ -239,6 +364,15 @@ export class PaymentsService {
       // renewal cron can remind again as THIS period nears its end.
       $unset: { premiumRenewalRemindedAt: "" },
     });
+    // Count the promo redemption once the charge actually cleared.
+    const promoCode = (payment as { metadata?: Record<string, string> })
+      .metadata?.promoCode;
+    if (promoCode) {
+      await this.promoCodeModel
+        .updateOne({ code: promoCode }, { $inc: { usedCount: 1 } })
+        .exec()
+        .catch(() => undefined);
+    }
     this.logger.log(
       `Granted premium (${tier}/${period}) to user ${userId} until ${premiumExpiresAt.toISOString()}`,
     );

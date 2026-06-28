@@ -11,6 +11,7 @@ import { Dispute, DisputeSchema } from "./schemas/dispute.schema";
 import { Escrow, EscrowSchema } from "./schemas/escrow.schema";
 import { Payment, PaymentSchema } from "./schemas/payment.schema";
 import { Payout, PayoutSchema } from "./schemas/payout.schema";
+import { PromoCode, PromoCodeSchema } from "./schemas/promo-code.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PremiumCronService } from "./premium-cron.service";
@@ -36,6 +37,7 @@ import { PremiumCronService } from "./premium-cron.service";
       { name: Escrow.name, schema: EscrowSchema },
       { name: Dispute.name, schema: DisputeSchema },
       { name: Payout.name, schema: PayoutSchema },
+      { name: PromoCode.name, schema: PromoCodeSchema },
       // Used by PaymentsService to read bank-account snapshots when
       // computing pending payouts. Read-only here; mutations live in
       // UsersService (its own MongooseModule.forFeature).

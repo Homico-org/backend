@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   Param,
+  Patch,
   Post,
   RawBodyRequest,
   Req,
@@ -125,13 +126,67 @@ export class PaymentsController {
   @ApiOperation({ summary: "Start a premium subscription payment" })
   async premiumCheckout(
     @Req() req: { user: { userId: string } },
-    @Body() body: { tier: string; period: "monthly" | "yearly" },
+    @Body()
+    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
   ) {
     return this.paymentsService.createPremiumIntent(
       req.user.userId,
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
+      body.promoCode,
     );
+  }
+
+  @Post("premium/preview")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Preview the premium price after a promo code" })
+  async premiumPreview(
+    @Body()
+    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
+  ) {
+    return this.paymentsService.previewPremiumPrice(
+      body.tier,
+      body.period === "yearly" ? "yearly" : "monthly",
+      body.promoCode,
+    );
+  }
+
+  @Get("admin/promo-codes")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] List promo codes" })
+  async listPromoCodes() {
+    return this.paymentsService.listPromoCodes();
+  }
+
+  @Post("admin/promo-codes")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Create a promo code" })
+  async createPromoCode(
+    @Body()
+    body: {
+      code: string;
+      discountType: "amount_off" | "percent_off" | "fixed_price";
+      value: number;
+      applicableTiers?: string[];
+      maxUses?: number;
+      expiresAt?: string;
+      note?: string;
+    },
+  ) {
+    return this.paymentsService.createPromoCode(body);
+  }
+
+  @Patch("admin/promo-codes/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Activate / deactivate a promo code" })
+  async setPromoCodeActive(
+    @Param("id") id: string,
+    @Body("active") active: boolean,
+  ) {
+    return this.paymentsService.setPromoCodeActive(id, !!active);
   }
 
   @Post("premium/cancel")
