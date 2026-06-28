@@ -542,6 +542,12 @@ export class User extends Document {
   @Prop()
   premiumExpiresAt: Date;
 
+  // When the CURRENT paid period started. Drives the 3-day money-back
+  // cancellation window (cancel + refund is only allowed shortly after the
+  // charge). Set on every grant/renewal; cleared on cancellation.
+  @Prop()
+  premiumStartedAt: Date;
+
   @Prop({ default: "none" })
   premiumTier: string;
 

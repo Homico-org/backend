@@ -132,6 +132,15 @@ export class PaymentsController {
     );
   }
 
+  @Post("premium/cancel")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Cancel premium within the 3-day money-back window (refunds)",
+  })
+  async premiumCancel(@Req() req: { user: { userId: string } }) {
+    return this.paymentsService.cancelPremiumWithinWindow(req.user.userId);
+  }
+
   // ---- Admin ----
 
   @Get("admin/escrows/by-entity")

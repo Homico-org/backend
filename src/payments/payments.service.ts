@@ -216,6 +216,9 @@ export class PaymentsService {
       isPremium: true,
       premiumTier: tier,
       premiumExpiresAt,
+      // Stamp the start of THIS paid period so the 3-day money-back
+      // cancellation window is measured from the charge, not the expiry.
+      premiumStartedAt: now,
       // New paid period - clear the "expiring soon" nudge flag so the
       // renewal cron can remind again as THIS period nears its end.
       $unset: { premiumRenewalRemindedAt: "" },
@@ -223,6 +226,85 @@ export class PaymentsService {
     this.logger.log(
       `Granted premium (${tier}/${period}) to user ${userId} until ${premiumExpiresAt.toISOString()}`,
     );
+  }
+
+  // A premium plan can be cancelled for a full refund only within this many
+  // days of starting it. After that it simply runs to expiry (no auto-renew).
+  private static readonly PREMIUM_REFUND_WINDOW_DAYS = 3;
+
+  /**
+   * Cancel an active premium subscription within the money-back window.
+   * Refunds the latest premium charge (if any - manual grants have none) and
+   * revokes premium immediately. Rejects once the window has passed, since a
+   * non-renewing plan has nothing left to cancel.
+   */
+  async cancelPremiumWithinWindow(
+    userId: string,
+  ): Promise<{ refunded: boolean }> {
+    const user = await this.userModel
+      .findById(userId)
+      .select("isPremium premiumStartedAt")
+      .lean<{ isPremium?: boolean; premiumStartedAt?: Date }>()
+      .exec();
+    if (!user || !user.isPremium) {
+      throw new BadRequestException("No active premium subscription");
+    }
+
+    const windowMs =
+      PaymentsService.PREMIUM_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const startedAt = user.premiumStartedAt
+      ? new Date(user.premiumStartedAt).getTime()
+      : NaN;
+    if (Number.isNaN(startedAt) || Date.now() - startedAt > windowMs) {
+      throw new BadRequestException(
+        "The cancellation window has passed. Your plan stays active until it expires and will not renew.",
+      );
+    }
+
+    // Refund the most recent premium charge, if there is one. Wrapped so a
+    // provider hiccup never blocks the revoke - ops reconciles a failed
+    // refund manually rather than leaving the pro paying for a cancelled plan.
+    let refunded = false;
+    const payment = await this.paymentModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        entityType: "premium",
+        status: { $in: ["succeeded", "partially_refunded"] },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+    if (payment) {
+      const remaining = payment.amountMinor - payment.refundedAmountMinor;
+      if (remaining > 0) {
+        try {
+          const provider = this.providers.getByName(payment.provider);
+          await provider.refund({
+            intentId: payment.providerIntentId,
+            amountMinor: remaining,
+            reason: "premium_cancel_within_window",
+          });
+          payment.refundedAmountMinor += remaining;
+          payment.status = "refunded";
+          await payment.save();
+          refunded = true;
+        } catch (err) {
+          this.logger.error(
+            `Premium refund failed for user ${userId}; revoking anyway: ${err}`,
+          );
+        }
+      }
+    }
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      isPremium: false,
+      premiumTier: "none",
+      premiumExpiresAt: new Date(),
+      $unset: { premiumStartedAt: "", premiumRenewalRemindedAt: "" },
+    });
+    this.logger.log(
+      `Cancelled premium for user ${userId} (refunded=${refunded})`,
+    );
+    return { refunded };
   }
 
   /**

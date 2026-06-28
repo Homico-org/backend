@@ -115,6 +115,10 @@ export class UsersController {
               ? userData.premiumTier || "none"
               : "none",
             premiumExpiresAt: userData.premiumExpiresAt,
+            // Drives the 3-day money-back cancellation window on the client.
+            premiumStartedAt: premiumActive
+              ? userData.premiumStartedAt
+              : undefined,
           }
         : {}),
     };
