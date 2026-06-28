@@ -149,10 +149,13 @@ export class PaymentsService {
     tier: string,
     period: "monthly" | "yearly",
   ): Promise<{ paymentId: string; redirectUrl: string }> {
+    // Launch pricing (GEL). `elite` is sold as "Super Pro". Must mirror the
+    // frontend's data/premium-pricing.ts GE column so the charge matches the
+    // displayed price.
     const PREMIUM_PRICES: Record<string, { monthly: number; yearly: number }> = {
       basic: { monthly: 29, yearly: 290 },
-      pro: { monthly: 59, yearly: 590 },
-      elite: { monthly: 99, yearly: 990 },
+      pro: { monthly: 100, yearly: 1000 },
+      elite: { monthly: 250, yearly: 2500 },
     };
     const prices = PREMIUM_PRICES[tier];
     if (!prices) {
