@@ -135,6 +135,7 @@ export class PaymentsService {
       entityId: params.entityId,
       refundedAmountMinor: 0,
       redirectUrl,
+      metadata,
     });
 
     this.logger.log(
@@ -330,6 +331,141 @@ export class PaymentsService {
       .exec();
     if (!promo) throw new NotFoundException("Promo code not found");
     return promo;
+  }
+
+  /**
+   * Admin: who bought premium, what, and for how much. Newest first. Reads
+   * tier/promo from the persisted Payment metadata (falling back to entityId
+   * for older rows that predate the metadata field).
+   */
+  async listPremiumPurchases(): Promise<
+    Array<{
+      id: string;
+      buyerName: string;
+      buyerEmail: string;
+      tier: string;
+      tierLabel: string;
+      amount: number;
+      currency: string;
+      promoCode: string | null;
+      status: string;
+      refunded: boolean;
+      createdAt: Date;
+    }>
+  > {
+    const payments = await this.paymentModel
+      .find({ entityType: "premium" })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          userId: Types.ObjectId;
+          entityId: string;
+          amountMinor: number;
+          currency: string;
+          status: string;
+          refundedAmountMinor: number;
+          metadata?: Record<string, string>;
+          createdAt: Date;
+        }>
+      >()
+      .exec();
+    const userIds = [...new Set(payments.map((p) => String(p.userId)))];
+    const users = await this.userModel
+      .find({ _id: { $in: userIds } })
+      .select("name email")
+      .lean<Array<{ _id: Types.ObjectId; name?: string; email?: string }>>()
+      .exec();
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+    return payments.map((p) => {
+      const meta = p.metadata || {};
+      const tier = meta.tier || (p.entityId || "").split(":")[1] || "";
+      const u = byId.get(String(p.userId));
+      return {
+        id: String(p._id),
+        buyerName: u?.name || "",
+        buyerEmail: u?.email || "",
+        tier,
+        tierLabel:
+          tier === "elite" ? "Super Pro" : tier === "pro" ? "Pro" : tier,
+        amount: p.amountMinor / 100,
+        currency: p.currency,
+        promoCode: meta.promoCode || null,
+        status: p.status,
+        refunded: p.refundedAmountMinor > 0,
+        createdAt: p.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Admin: the Super Pro social-promo pipeline. Lists every active Super Pro
+   * (elite) sub with a `ready` flag once it's past the 3-day refund window -
+   * i.e. the charge is committed and the content team can safely start FB/
+   * Instagram content + storytelling.
+   */
+  async listSuperProContentQueue(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      email: string;
+      startedAt?: Date;
+      expiresAt?: Date;
+      ready: boolean;
+      contentStatus: string;
+    }>
+  > {
+    const windowMs =
+      PaymentsService.PREMIUM_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const readyCutoff = Date.now() - windowMs;
+    const users = await this.userModel
+      .find({ isPremium: true, premiumTier: "elite" })
+      .select("name email premiumStartedAt premiumExpiresAt superProContentStatus")
+      .sort({ premiumStartedAt: 1 })
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          name?: string;
+          email?: string;
+          premiumStartedAt?: Date;
+          premiumExpiresAt?: Date;
+          superProContentStatus?: string;
+        }>
+      >()
+      .exec();
+    return users.map((u) => ({
+      id: String(u._id),
+      name: u.name || "",
+      email: u.email || "",
+      startedAt: u.premiumStartedAt,
+      expiresAt: u.premiumExpiresAt,
+      ready: u.premiumStartedAt
+        ? new Date(u.premiumStartedAt).getTime() <= readyCutoff
+        : false,
+      contentStatus: u.superProContentStatus || "pending",
+    }));
+  }
+
+  async setSuperProContentStatus(
+    userId: string,
+    status: string,
+  ): Promise<{ id: string; contentStatus: string }> {
+    if (!["pending", "in_progress", "done"].includes(status))
+      throw new BadRequestException("Invalid status");
+    if (!Types.ObjectId.isValid(userId))
+      throw new NotFoundException("User not found");
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { superProContentStatus: status },
+        { new: true },
+      )
+      .select("superProContentStatus")
+      .lean<{ _id: Types.ObjectId; superProContentStatus?: string }>()
+      .exec();
+    if (!user) throw new NotFoundException("User not found");
+    return { id: String(user._id), contentStatus: user.superProContentStatus || status };
   }
 
   /**

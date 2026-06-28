@@ -93,6 +93,14 @@ export class Payment extends Document {
   @Prop({ type: Object })
   providerRawData?: unknown;
 
+  /**
+   * Our own correlation metadata (entity ids, and for premium: tier, period,
+   * promoCode). Persisted so the grant step + admin reporting can read the
+   * plan/promo from the Payment alone without re-deriving from entityId.
+   */
+  @Prop({ type: Object })
+  metadata?: Record<string, unknown>;
+
   /** Hosted-page URL the user was redirected to. Kept for support / audit. */
   @Prop()
   redirectUrl?: string;

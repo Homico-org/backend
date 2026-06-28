@@ -151,6 +151,33 @@ export class PaymentsController {
     );
   }
 
+  @Get("admin/premium-purchases")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] List premium purchases (who bought what)" })
+  async listPremiumPurchases() {
+    return this.paymentsService.listPremiumPurchases();
+  }
+
+  @Get("admin/super-pro-content")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Super Pro content pipeline" })
+  async listSuperProContentQueue() {
+    return this.paymentsService.listSuperProContentQueue();
+  }
+
+  @Patch("admin/super-pro-content/:userId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Update a Super Pro's content status" })
+  async setSuperProContentStatus(
+    @Param("userId") userId: string,
+    @Body("status") status: string,
+  ) {
+    return this.paymentsService.setSuperProContentStatus(userId, status);
+  }
+
   @Get("admin/promo-codes")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)

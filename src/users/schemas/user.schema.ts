@@ -551,6 +551,12 @@ export class User extends Document {
   @Prop({ default: "none" })
   premiumTier: string;
 
+  // Super Pro (elite) social-promo pipeline. Once a Super Pro sub passes the
+  // 3-day refund window, the content team prepares FB/Instagram content +
+  // storytelling; this tracks where each pro is in that workflow.
+  @Prop({ enum: ["pending", "in_progress", "done"], default: "pending" })
+  superProContentStatus: string;
+
   // When we last sent the "premium expiring soon" renewal nudge for the
   // CURRENT paid period. Cleared on every grant/renewal so the next period
   // gets a fresh reminder; set once the reminder fires so we don't spam.
