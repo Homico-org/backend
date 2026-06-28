@@ -158,6 +158,20 @@ export class PaymentsService {
     if (!prices) {
       throw new BadRequestException(`Unknown premium tier: ${tier}`);
     }
+    // One active subscription at a time: block a new purchase while the user
+    // still has premium running. They can buy again once it expires. Prevents
+    // accidental double-buys stacking the expiry years into the future.
+    const current = await this.userModel
+      .findById(userId)
+      .select("premiumExpiresAt")
+      .lean<{ premiumExpiresAt?: Date }>()
+      .exec();
+    if (
+      current?.premiumExpiresAt &&
+      new Date(current.premiumExpiresAt) > new Date()
+    ) {
+      throw new BadRequestException("ALREADY_PREMIUM");
+    }
     const amount = period === "yearly" ? prices.yearly : prices.monthly;
     const amountMinor = Math.round(amount * 100);
     const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
