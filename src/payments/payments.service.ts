@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -157,6 +158,17 @@ export class PaymentsService {
       pro: { monthly: 100, yearly: 1000 },
       elite: { monthly: 250, yearly: 2500 },
     };
+    // Allow-list: only the plans the UI actually sells may be purchased. The
+    // app offers Pro and Super Pro (elite) on a MONTHLY basis only. Without
+    // this, a crafted request could buy an off-menu plan (e.g. `basic`, or
+    // `yearly` at 10x the price). Keep in sync with data/premium-pricing.ts.
+    const OFFERED_TIERS = new Set(["pro", "elite"]);
+    if (!OFFERED_TIERS.has(tier)) {
+      throw new BadRequestException(`Unknown premium tier: ${tier}`);
+    }
+    if (period !== "monthly") {
+      throw new BadRequestException("Only monthly billing is available");
+    }
     const prices = PREMIUM_PRICES[tier];
     if (!prices) {
       throw new BadRequestException(`Unknown premium tier: ${tier}`);
@@ -175,8 +187,9 @@ export class PaymentsService {
     ) {
       throw new BadRequestException("ALREADY_PREMIUM");
     }
-    const amount = period === "yearly" ? prices.yearly : prices.monthly;
-    const amountMinor = Math.round(amount * 100);
+    // Monthly-only today (guarded above); `prices.yearly` stays in the table
+    // for when yearly billing is re-enabled.
+    const amountMinor = Math.round(prices.monthly * 100);
     const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     return this.createIntentForEntity({
       entityType: "premium",
@@ -352,19 +365,41 @@ export class PaymentsService {
     }
 
     if (decoded.status === "succeeded") {
-      payment.status = "succeeded";
-      payment.succeededAt = new Date();
-      payment.providerRawData = decoded.rawProviderData;
-      await payment.save();
-
-      // Premium and product_order are platform charges (no pro payee / escrow).
-      // Premium grants the subscription; product_order is handled by the orders
-      // module's own syncPaymentStatus. Everything else holds money in escrow.
-      if (payment.entityType === "premium") {
-        await this.grantPremium(payment);
-      } else if (payment.entityType !== "product_order") {
-        await this.createEscrow(payment);
+      // Atomically claim the pending->succeeded transition so a concurrent
+      // reconcile (return page) can't also run the grant/escrow. Only the
+      // caller that wins the claim runs the side-effects; the loser is a no-op.
+      const claimed = await this.paymentModel.findOneAndUpdate(
+        { _id: payment._id, status: "pending" },
+        {
+          $set: {
+            status: "succeeded",
+            succeededAt: new Date(),
+            providerRawData: decoded.rawProviderData,
+          },
+        },
+        { new: true },
+      );
+      if (claimed) {
+        // Premium and product_order are platform charges (no pro payee / escrow).
+        // Premium grants the subscription; product_order is handled by the orders
+        // module's own syncPaymentStatus. Everything else holds money in escrow.
+        if (claimed.entityType === "premium") {
+          await this.grantPremium(claimed);
+        } else if (claimed.entityType !== "product_order") {
+          await this.createEscrow(claimed);
+        }
+        this.logger.log(`Webhook processed: ${decoded.intentId} -> succeeded`);
+        return { paymentId: String(claimed._id), status: claimed.status };
       }
+      // Lost the race: another path already finalized it. Idempotent no-op.
+      const latest = await this.paymentModel.findById(payment._id).exec();
+      this.logger.log(
+        `Webhook re-entry for ${decoded.intentId}: already finalized, skipping grant`,
+      );
+      return {
+        paymentId: String(payment._id),
+        status: (latest ?? payment).status,
+      };
     } else {
       payment.status = decoded.status === "cancelled" ? "cancelled" : "failed";
       payment.providerRawData = decoded.rawProviderData;
@@ -384,14 +419,25 @@ export class PaymentsService {
    * etc). The frontend calls this to ask the provider's API directly and
    * update our records.
    */
-  async reconcileFromReturnUrl(paymentId: string): Promise<PaymentDoc> {
+  async reconcileFromReturnUrl(
+    paymentId: string,
+    requestingUserId?: string,
+  ): Promise<PaymentDoc> {
     const payment = await this.paymentModel.findById(paymentId).exec();
     if (!payment) throw new NotFoundException("Payment not found");
 
-    payment.returnedAt = new Date();
+    // Ownership gate BEFORE any side-effect. When called from the user-facing
+    // controller, `requestingUserId` is set and a user may only reconcile their
+    // OWN payment. Internal server callers (bookings/jobs/orders/milestones)
+    // omit it and are trusted. Without this, anyone could drive another user's
+    // pending payment to "succeeded" and trigger the grant/escrow on them.
+    if (requestingUserId && String(payment.userId) !== requestingUserId) {
+      throw new ForbiddenException("Not your payment");
+    }
 
     if (payment.status !== "pending") {
       // Already in terminal state - just record the return.
+      payment.returnedAt = new Date();
       await payment.save();
       return payment.toObject() as PaymentDoc;
     }
@@ -400,20 +446,34 @@ export class PaymentsService {
     const status = await provider.fetchIntentStatus(payment.providerIntentId);
 
     if (status.status === "succeeded") {
-      payment.status = "succeeded";
-      payment.succeededAt = new Date();
-      await payment.save();
-      // premium + product_order are platform charges (no escrow).
-      if (payment.entityType === "premium") {
-        await this.grantPremium(payment);
-      } else if (payment.entityType !== "product_order") {
-        await this.createEscrow(payment);
+      // Atomically claim the pending->succeeded transition so a concurrent
+      // webhook + reconcile (or double reconcile) can't both run the grant -
+      // which would double-charge-grant / stack the premium expiry. Only the
+      // caller that wins the claim runs the side-effects.
+      const claimed = await this.paymentModel.findOneAndUpdate(
+        { _id: payment._id, status: "pending" },
+        { $set: { status: "succeeded", succeededAt: new Date(), returnedAt: new Date() } },
+        { new: true },
+      );
+      if (claimed) {
+        // premium + product_order are platform charges (no escrow).
+        if (claimed.entityType === "premium") {
+          await this.grantPremium(claimed);
+        } else if (claimed.entityType !== "product_order") {
+          await this.createEscrow(claimed);
+        }
+        return claimed.toObject() as PaymentDoc;
       }
+      // Lost the race: another path already finalized it. Return the latest.
+      const latest = await this.paymentModel.findById(payment._id).exec();
+      return (latest ?? payment).toObject() as PaymentDoc;
     } else if (status.status === "failed" || status.status === "cancelled") {
       payment.status = status.status;
+      payment.returnedAt = new Date();
       await payment.save();
     } else {
       // Still pending - frontend will retry.
+      payment.returnedAt = new Date();
       await payment.save();
     }
 
