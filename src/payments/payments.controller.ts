@@ -76,12 +76,13 @@ export class PaymentsController {
     @Param("id") paymentId: string,
     @Req() req: { user: { userId: string } },
   ) {
-    const payment = await this.paymentsService.reconcileFromReturnUrl(paymentId);
-    // Defensive ownership check - reconcile is read-only but still
-    // shouldn't leak status of someone else's payment.
-    if (String(payment.userId) !== req.user.userId) {
-      return { status: "forbidden" };
-    }
+    // Pass the caller so the service enforces ownership BEFORE running any
+    // grant/escrow side-effect (it used to grant first, then merely mask the
+    // response - letting one user trigger another's grant).
+    const payment = await this.paymentsService.reconcileFromReturnUrl(
+      paymentId,
+      req.user.userId,
+    );
     return {
       id: String(payment._id),
       status: payment.status,
@@ -119,7 +120,8 @@ export class PaymentsController {
   }
 
   @Post("premium/checkout")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   @ApiOperation({ summary: "Start a premium subscription payment" })
   async premiumCheckout(
     @Req() req: { user: { userId: string } },
@@ -133,7 +135,8 @@ export class PaymentsController {
   }
 
   @Post("premium/cancel")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   @ApiOperation({
     summary: "Cancel premium within the 3-day money-back window (refunds)",
   })
