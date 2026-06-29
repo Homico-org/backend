@@ -1798,26 +1798,26 @@ export class UsersService {
     let sortObj: any = {};
     switch (filters?.sort) {
       case "rating":
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, hasVisiblePortfolio: -1, avgRating: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "reviews":
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, hasVisiblePortfolio: -1, totalReviews: -1, profileScore: -1, _id: -1 };
         break;
       case "price-low":
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, hasVisiblePortfolio: -1, basePrice: 1, profileScore: -1, _id: -1 };
         break;
       case "price-high":
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, hasVisiblePortfolio: -1, basePrice: -1, profileScore: -1, _id: -1 };
         break;
       case "newest":
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, hasVisiblePortfolio: -1, createdAt: -1, profileScore: -1, _id: -1 };
         break;
       case "badges":
         // Sort by standing/badges: editor's-pick (featured) first, then paid
         // premium, then the top-rated badge (rating + review volume), then
         // portfolio. All listed pros are already verified, so that badge is a
         // constant rather than a differentiator here.
-        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
+        sortObj = { isHomicoPartner: -1, isFeatured: -1, isPremium: -1, isTopQuality: -1, avgRating: -1, totalReviews: -1, hasVisiblePortfolio: -1, profileScore: -1, _id: -1 };
         break;
       default:
         if (useRandomOrder) {
@@ -1840,6 +1840,7 @@ export class UsersService {
             isHomicoPartner: -1,
             isFeatured: -1,
             isPremium: -1,
+            isTopQuality: -1,
             hasVisiblePortfolio: -1,
             profileScore: -1,
             totalReviews: -1,
@@ -2289,17 +2290,18 @@ export class UsersService {
                   },
                 },
                 // Single priority tier per pro = their BEST qualification.
-                // 0 partner → 1 badge → 2 has-portfolio → 3 rest. Sorting by
-                // this (then rnd) shuffles WITHIN each group, so all partners
-                // rotate among themselves, etc.
+                // 0 partner → 1 badge → 2 top-quality → 3 has-portfolio → 4
+                // rest. Sorting by this (then rnd) shuffles WITHIN each group,
+                // so all partners rotate among themselves, etc.
                 tierRank: {
                   $switch: {
                     branches: [
                       { case: { $eq: [{ $ifNull: ["$isHomicoPartner", false] }, true] }, then: 0 },
                       { case: { $or: [{ $eq: [{ $ifNull: ["$isFeatured", false] }, true] }, { $eq: [{ $ifNull: ["$isPremium", false] }, true] }] }, then: 1 },
-                      { case: { $eq: ["$hasVisiblePortfolio", true] }, then: 2 },
+                      { case: { $eq: [{ $ifNull: ["$isTopQuality", false] }, true] }, then: 2 },
+                      { case: { $eq: ["$hasVisiblePortfolio", true] }, then: 3 },
                     ],
-                    default: 3,
+                    default: 4,
                   },
                 },
               }
