@@ -34,6 +34,8 @@ export enum NotificationType {
   // Premium subscription lifecycle
   PREMIUM_EXPIRING = 'premium_expiring',
   PREMIUM_EXPIRED = 'premium_expired',
+  PREMIUM_PURCHASED = 'premium_purchased',
+  ADMIN_PREMIUM_PURCHASE = 'admin_premium_purchase',
   
   // Admin actions
   PROFILE_APPROVED = 'profile_approved',

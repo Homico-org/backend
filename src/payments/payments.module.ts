@@ -15,6 +15,7 @@ import { PromoCode, PromoCodeSchema } from "./schemas/promo-code.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PremiumCronService } from "./premium-cron.service";
+import { EmailService } from "../verification/services/email.service";
 
 /**
  * Global so feature modules (BookingsModule, JobsModule) can inject
@@ -52,6 +53,7 @@ import { PremiumCronService } from "./premium-cron.service";
     FlittPaymentProvider,
     DisabledPaymentProvider,
     PremiumCronService,
+    EmailService,
   ],
   exports: [PaymentsService, PaymentProviderFactory],
 })

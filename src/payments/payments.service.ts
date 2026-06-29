@@ -23,6 +23,9 @@ import {
 import { User } from "../users/schemas/user.schema";
 import { PaymentProviderFactory } from "./providers/payment-provider.factory";
 import { PaymentProviderName } from "./providers/payment-provider.interface";
+import { NotificationsService } from "../notifications/notifications.service";
+import { NotificationType } from "../notifications/schemas/notification.schema";
+import { EmailService } from "../verification/services/email.service";
 
 /**
  * Orchestration layer between Homico's domain (bookings/projects) and the
@@ -81,6 +84,8 @@ export class PaymentsService {
     @InjectModel(PromoCode.name)
     private readonly promoCodeModel: Model<PromoCode>,
     private readonly providers: PaymentProviderFactory,
+    private readonly notifications: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -489,8 +494,8 @@ export class PaymentsService {
     const now = new Date();
     const existing = await this.userModel
       .findById(userId)
-      .select("premiumExpiresAt")
-      .lean<{ premiumExpiresAt?: Date }>()
+      .select("premiumExpiresAt name email")
+      .lean<{ premiumExpiresAt?: Date; name?: string; email?: string }>()
       .exec();
     const base =
       existing?.premiumExpiresAt && new Date(existing.premiumExpiresAt) > now
@@ -524,6 +529,102 @@ export class PaymentsService {
     this.logger.log(
       `Granted premium (${tier}/${period}) to user ${userId} until ${premiumExpiresAt.toISOString()}`,
     );
+    // Fire-and-forget notifications (never let a notify/email error undo the grant).
+    const amountGel = Math.round(((payment.amountMinor as number) || 0) / 100);
+    void this.notifyPremiumPurchase(
+      userId,
+      existing?.name || "",
+      existing?.email || "",
+      tier,
+      amountGel,
+    );
+  }
+
+  /**
+   * After a successful premium charge: confirm to the buyer (in-app + email)
+   * and alert every admin (in-app + email) so the team sees revenue in real
+   * time. Best-effort: any failure here is logged, never thrown.
+   */
+  private async notifyPremiumPurchase(
+    buyerId: string,
+    buyerName: string,
+    buyerEmail: string,
+    tier: string,
+    amountGel: number,
+  ): Promise<void> {
+    const tierLabel = tier === "elite" ? "Super Pro" : "Pro";
+
+    // 1) Confirm to the buyer.
+    try {
+      await this.notifications.notify(
+        buyerId,
+        NotificationType.PREMIUM_PURCHASED,
+        "Premium activated",
+        `Your ${tierLabel} plan is now active.`,
+        {
+          link: "/pro/premium",
+          i18n: {
+            titleKey: "notifications.types.premium_purchased.title",
+            messageKey: "notifications.types.premium_purchased.message",
+            params: { tier: tierLabel },
+          },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(`buyer premium notify failed: ${(err as Error).message}`);
+    }
+    if (buyerEmail) {
+      await this.emailService
+        .sendPremiumPurchaseConfirmation(buyerEmail, { tierLabel, amountGel })
+        .catch((err) =>
+          this.logger.warn(`buyer premium email failed: ${err?.message}`),
+        );
+    }
+
+    // 2) Alert all admins (in-app + email).
+    try {
+      const admins = await this.userModel
+        .find({ role: "admin" })
+        .select("_id email")
+        .lean<Array<{ _id: Types.ObjectId; email?: string }>>();
+      const who = buyerName || "A pro";
+      await Promise.all(
+        admins.map((a) =>
+          this.notifications.notify(
+            String(a._id),
+            NotificationType.ADMIN_PREMIUM_PURCHASE,
+            "New premium purchase",
+            `${who} bought ${tierLabel} (${amountGel} ₾)`,
+            {
+              link: "/admin/premium-purchases",
+              i18n: {
+                titleKey: "notifications.types.admin_premium_purchase.title",
+                messageKey: "notifications.types.admin_premium_purchase.message",
+                params: { name: who, tier: tierLabel, amount: amountGel },
+              },
+            },
+          ),
+        ),
+      );
+      await Promise.all(
+        admins
+          .filter((a) => a.email)
+          .map((a) =>
+            this.emailService
+              .sendPremiumPurchaseAdminAlert(a.email as string, {
+                tierLabel,
+                amountGel,
+                buyerName: who,
+                buyerEmail,
+              })
+              .catch((err) =>
+                this.logger.warn(`admin premium email failed: ${err?.message}`),
+              ),
+          ),
+      );
+    } catch (err) {
+      this.logger.warn(`admin premium notify failed: ${(err as Error).message}`);
+    }
   }
 
   // A premium plan can be cancelled for a full refund only within this many
