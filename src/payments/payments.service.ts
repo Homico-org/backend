@@ -179,7 +179,11 @@ export class PaymentsService {
    * (INVALID_PROMO / EXPIRED_PROMO / PROMO_USED_UP / PROMO_NOT_FOR_TIER) the
    * frontend can map to a friendly message. Returns the live document.
    */
-  private async findValidPromo(code: string, tier: string): Promise<PromoCode> {
+  private async findValidPromo(
+    code: string,
+    tier: string,
+    userId?: string,
+  ): Promise<PromoCode> {
     const promo = await this.promoCodeModel
       .findOne({ code: code.toUpperCase().trim() })
       .exec();
@@ -188,6 +192,8 @@ export class PaymentsService {
       throw new BadRequestException("EXPIRED_PROMO");
     if (promo.maxUses > 0 && promo.usedCount >= promo.maxUses)
       throw new BadRequestException("PROMO_USED_UP");
+    if (userId && promo.usedBy?.some((id) => id.toString() === userId))
+      throw new BadRequestException("PROMO_ALREADY_USED");
     if (
       promo.applicableTiers?.length &&
       !promo.applicableTiers.includes(tier)
@@ -205,6 +211,7 @@ export class PaymentsService {
     tier: string,
     period: "monthly" | "yearly",
     code?: string,
+    userId?: string,
   ): Promise<{
     originalAmount: number;
     finalAmount: number;
@@ -217,7 +224,7 @@ export class PaymentsService {
     if (!code?.trim()) {
       return { originalAmount: base, finalAmount: base, discounted: false };
     }
-    const promo = await this.findValidPromo(code, tier);
+    const promo = await this.findValidPromo(code, tier, userId);
     const final = this.applyPromoDiscount(base, promo);
     return {
       originalAmount: base,
@@ -266,7 +273,7 @@ export class PaymentsService {
     let amount = prices.monthly;
     let appliedCode: string | undefined;
     if (promoCode?.trim()) {
-      const promo = await this.findValidPromo(promoCode, tier);
+      const promo = await this.findValidPromo(promoCode, tier, userId);
       amount = this.applyPromoDiscount(amount, promo);
       appliedCode = promo.code;
     }
@@ -306,6 +313,8 @@ export class PaymentsService {
       throw new BadRequestException("Invalid discountType");
     if (typeof input.value !== "number" || input.value < 0)
       throw new BadRequestException("Invalid value");
+    if (input.discountType === "percent_off" && input.value > 100)
+      throw new BadRequestException("percent_off cannot exceed 100");
     const exists = await this.promoCodeModel.findOne({ code }).lean().exec();
     if (exists) throw new BadRequestException("Code already exists");
     return this.promoCodeModel.create({
@@ -505,7 +514,10 @@ export class PaymentsService {
       .metadata?.promoCode;
     if (promoCode) {
       await this.promoCodeModel
-        .updateOne({ code: promoCode }, { $inc: { usedCount: 1 } })
+        .updateOne(
+          { code: promoCode },
+          { $inc: { usedCount: 1 }, $addToSet: { usedBy: userId } },
+        )
         .exec()
         .catch(() => undefined);
     }

@@ -34,6 +34,11 @@ export class PromoCode {
   @Prop({ default: 0 })
   usedCount: number;
 
+  // User ids that have already redeemed this code. Enforces one redemption
+  // per user so a leaked code can't be reused (or reused on every renewal).
+  @Prop({ type: [String], default: [] })
+  usedBy: string[];
+
   @Prop({ default: true })
   active: boolean;
 

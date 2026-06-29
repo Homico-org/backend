@@ -141,6 +141,7 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Preview the premium price after a promo code" })
   async premiumPreview(
+    @Req() req: { user: { userId: string } },
     @Body()
     body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
   ) {
@@ -148,6 +149,7 @@ export class PaymentsController {
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
       body.promoCode,
+      req.user.userId,
     );
   }
 
