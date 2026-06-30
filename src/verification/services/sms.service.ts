@@ -181,6 +181,49 @@ export class SmsService {
         };
       }
 
+      // HTTP 200 does NOT guarantee the SMS was actually accepted. UBill can
+      // answer 200 while the body carries an application-level failure
+      // (invalid brandID, insufficient balance, blocked region, bad number).
+      // If we trust response.ok alone we store the OTP and the user never gets
+      // it, then hits "invalid code" at verify time. So inspect the body and
+      // surface real failures as success:false.
+      //
+      // Field conventions are the same ones the !response.ok branch and
+      // getErrorMessage already rely on:
+      //   - error code  -> data.code | data.error_code
+      //   - error text  -> data.message | data.error
+      // and the documented success shape exposes a numeric status code
+      // (data.status, 200-range = OK). We stay CONSERVATIVE: only treat the
+      // response as a failure on UNAMBIGUOUS failure signals, otherwise fall
+      // back to the old "ok => sent" behaviour so a genuine send is never
+      // blocked by an unexpected body shape.
+      const appErrorCode = data.code || data.error_code;
+      const appStatus = data.status ?? data.statusCode;
+      const hasExplicitSuccessFlag =
+        data.success === false || data.error === true;
+      // A numeric status outside the 2xx range is an application error.
+      const hasFailingStatus =
+        typeof appStatus === 'number' && (appStatus < 200 || appStatus >= 300);
+      // An error code string that is not a neutral "ok"/"success"/"0" marker.
+      const hasFailingCode =
+        typeof appErrorCode === 'string' &&
+        appErrorCode.length > 0 &&
+        !['ok', 'success', '0', '200'].includes(appErrorCode.toLowerCase());
+
+      if (hasExplicitSuccessFlag || hasFailingStatus || hasFailingCode) {
+        this.logger.error(
+          `UBill: HTTP 200 but application-level failure for ${phoneNumber}: ${responseText}`,
+        );
+        return {
+          success: false,
+          error: this.getErrorMessage(
+            appErrorCode,
+            data.message || data.error || responseText,
+          ),
+          errorCode: typeof appErrorCode === 'string' ? appErrorCode : undefined,
+        };
+      }
+
       this.logger.log(`UBill: OTP sent successfully to ${phoneNumber}, response: ${JSON.stringify(data)}`);
       return { success: true };
     } catch (error: any) {

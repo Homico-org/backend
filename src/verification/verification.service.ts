@@ -171,8 +171,12 @@ export class VerificationService {
 
     // For phone verification
     if (type === OtpType.PHONE) {
-      // Dev bypass: accept 0000 as a valid OTP
-      if (code === "0007") {
+      // Dev bypass: accept 0007 as a valid OTP - ONLY outside production.
+      // In prod this backdoor must stay closed (a fixed code would let
+      // anyone verify any phone). Mirrors the NODE_ENV !== 'production'
+      // guard used elsewhere for dev-only shortcuts. In prod 0007 simply
+      // falls through and is checked like any other (invalid) code.
+      if (code === "0007" && process.env.NODE_ENV !== "production") {
         this.logger.warn(`Dev bypass OTP used for ${identifier}`);
         await this.otpModel.updateMany(
           { identifier, type, isUsed: false },
