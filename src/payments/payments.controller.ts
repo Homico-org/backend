@@ -127,13 +127,19 @@ export class PaymentsController {
   async premiumCheckout(
     @Req() req: { user: { userId: string } },
     @Body()
-    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
+    body: {
+      tier: string;
+      period: "monthly" | "yearly";
+      promoCode?: string;
+      country?: string;
+    },
   ) {
     return this.paymentsService.createPremiumIntent(
       req.user.userId,
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
       body.promoCode,
+      body.country,
     );
   }
 
@@ -143,13 +149,19 @@ export class PaymentsController {
   async premiumPreview(
     @Req() req: { user: { userId: string } },
     @Body()
-    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
+    body: {
+      tier: string;
+      period: "monthly" | "yearly";
+      promoCode?: string;
+      country?: string;
+    },
   ) {
     return this.paymentsService.previewPremiumPrice(
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
       body.promoCode,
       req.user.userId,
+      body.country,
     );
   }
 

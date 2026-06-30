@@ -56,6 +56,19 @@ export class VerificationController {
       throw new BadRequestException('Phone does not match');
     }
 
+    // Require proof that the identifier just passed OTP verification —
+    // otherwise an authenticated user could self-mark their email/phone as
+    // verified without ever entering a code.
+    const proven = await this.verificationService.consumeVerificationMarker(
+      body.identifier,
+      body.type,
+    );
+    if (!proven) {
+      throw new BadRequestException(
+        'Please verify the code before marking as verified',
+      );
+    }
+
     // Update user verification status
     const updateData: any = {};
     if (body.type === OtpType.EMAIL) {

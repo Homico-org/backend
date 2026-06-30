@@ -47,6 +47,12 @@ services:
         value: contact@homico.co
       - key: PRELUDE_API_KEY        # SMS (international); +995 uses UBill
         sync: false
+      # Google OAuth: the OAuth 2.0 Web client ID used as the ID-token
+      # audience in /auth/google. MUST match the frontend's
+      # NEXT_PUBLIC_GOOGLE_CLIENT_ID. Set per service in the Render
+      # dashboard (and locally in backend/.env).
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: FRONTEND_URL
         value: https://homico.ge
       - key: PUBLIC_BACKEND_URL

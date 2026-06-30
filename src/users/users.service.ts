@@ -580,14 +580,86 @@ export class UsersService {
     return { moderated, instant };
   }
 
-  // Shallow-ish equality good enough to skip no-op fields (a user re-saving
-  // a form without changing a field shouldn't create a review item).
+  // Turn any value into a plain, comparable form. Mongoose documents and
+  // subdocuments are converted to plain objects (so `selectedServices` /
+  // `servicePricing` lose their hidden internals), and `_id` keys are dropped
+  // since the front never sends them back.
+  private toPlain(value: any): any {
+    if (value == null || typeof value !== "object") return value;
+    // Mongoose documents/subdocuments expose toObject(); use it to strip the
+    // internal machinery and get a real plain object/array.
+    if (typeof value.toObject === "function") {
+      try {
+        value = value.toObject();
+      } catch {
+        // fall through to JSON round-trip below
+      }
+    }
+    if (Array.isArray(value)) {
+      return value.map((v) => this.toPlain(v));
+    }
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      // `_id` (and Mongoose's version key) are never part of the editable
+      // payload the front submits; ignore them so they don't trigger a diff.
+      if (k === "_id" || k === "__v") continue;
+      out[k] = this.toPlain(v);
+    }
+    return out;
+  }
+
+  // Deep equality that is robust to the differences between a Mongoose document
+  // (the live value) and a raw JSON payload (what the front submits):
+  //   - object key ORDER is ignored (we compare key sets + values),
+  //   - array ORDER is preserved (significant, e.g. portfolio ordering),
+  //   - `_id` / `__v` are stripped (already removed by toPlain),
+  //   - SUBSET on objects: only the keys present in `b` (the new value, the
+  //     source of truth for what is editable) are compared. Extra keys carried
+  //     by the stored document but never sent by the front do not count as a
+  //     change. Note: a key present in old but DROPPED by new is *not* treated
+  //     as a removal here — see the caveat in the deliverable.
+  private canonicalEqual(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (a == null || b == null) return a == null && b == null;
+
+    const aArr = Array.isArray(a);
+    const bArr = Array.isArray(b);
+    if (aArr !== bArr) return false;
+    if (aArr && bArr) {
+      if (a.length !== b.length) return false;
+      // Arrays keep their order: compare element-by-element.
+      for (let i = 0; i < a.length; i++) {
+        if (!this.canonicalEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+
+    if (typeof a === "object" && typeof b === "object") {
+      // Subset comparison driven by the NEW value's keys. The new payload is
+      // the source of truth for which keys are editable; old-only keys (e.g.
+      // `id`, `categoryId` re-derived server-side) are ignored.
+      for (const key of Object.keys(b)) {
+        if (!this.canonicalEqual(a[key], b[key])) return false;
+      }
+      return true;
+    }
+
+    return a === b;
+  }
+
+  // Equality good enough to skip no-op fields (a verified pro re-saving a form
+  // without changing a field shouldn't create a review item). Scalars and
+  // string arrays (e.g. serviceAreas) compare exactly; structured Mongoose
+  // values are canonicalised first.
   private valuesEqual(a: any, b: any): boolean {
     if (a === b) return true;
     if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
     try {
-      return JSON.stringify(a) === JSON.stringify(b);
+      return this.canonicalEqual(this.toPlain(a), this.toPlain(b));
     } catch {
+      // Conservative fallback: if anything goes wrong, treat as "changed"
+      // rather than silently dropping a real edit.
       return false;
     }
   }
@@ -2708,13 +2780,17 @@ export class UsersService {
           bypassModeration: true,
         });
       }
-      // Nothing applies instantly; return the (unchanged) live profile.
+      // Nothing applies instantly; the change is queued for admin review.
+      // Flag the response so the client can tell the truth ("submitted for
+      // review") instead of faking a successful save and reverting on reload.
       const current = await this.userModel
         .findById(userId)
         .select("-password")
         .exec();
       if (!current) throw new NotFoundException("User not found");
-      return current;
+      const staged: any = current.toJSON();
+      staged.moderationStaged = true;
+      return staged;
     }
 
     // Update the pro-specific fields on the user document
@@ -2737,6 +2813,11 @@ export class UsersService {
         proData.lastName !== undefined ? proData.lastName : user.lastName;
       const composed = [first, last].filter(Boolean).join(" ").trim();
       if (composed) updateData.name = composed;
+    } else if (typeof proData.name === "string" && proData.name.trim()) {
+      // Allow a direct display-name edit (the inline name editor on the
+      // detail page sends `{ name }` rather than first/last). Without this an
+      // admin editing another pro's name would be silently dropped.
+      updateData.name = proData.name.trim();
     }
     if (proData.title !== undefined) updateData.title = proData.title;
     if (proData.bio !== undefined) updateData.bio = proData.bio;
@@ -2921,6 +3002,8 @@ export class UsersService {
       updateData.facebookUrl = proData.facebookUrl;
     if (proData.linkedinUrl !== undefined)
       updateData.linkedinUrl = proData.linkedinUrl;
+    if (proData.tiktokUrl !== undefined)
+      updateData.tiktokUrl = proData.tiktokUrl;
     if (proData.websiteUrl !== undefined)
       updateData.websiteUrl = proData.websiteUrl;
 

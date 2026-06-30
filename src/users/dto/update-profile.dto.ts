@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -521,4 +522,12 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   selfieWithIdUrl?: string;
+
+  // The user may only move their OWN verification to "submitted" (after
+  // uploading ID docs). Approving ("verified") / rejecting stays an admin-only
+  // action through the dedicated admin endpoint — never self-serve here.
+  @ApiPropertyOptional({ description: "Verification status (self: 'submitted' only)" })
+  @IsIn(["submitted"])
+  @IsOptional()
+  verificationStatus?: string;
 }

@@ -7,7 +7,31 @@ import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MongoExceptionFilter } from './common/filters/mongo-exception.filter';
 
+// Fail fast on deploy misconfig instead of silently falling back to
+// localhost at payment time (broken Flitt return URL / webhook). These vars
+// have `|| 'http://localhost:...'` fallbacks across the payment/email code,
+// which are fine in dev but must never be active in production.
+function assertProductionEnv() {
+  if (process.env.NODE_ENV !== 'production') return;
+  const isBad = (v?: string) => !v || v.includes('localhost');
+  const problems: string[] = [];
+  if (isBad(process.env.FRONTEND_URL)) {
+    problems.push('FRONTEND_URL (payment return / customer emails)');
+  }
+  if (isBad(process.env.PUBLIC_BACKEND_URL)) {
+    problems.push('PUBLIC_BACKEND_URL (payment webhook callback)');
+  }
+  if (problems.length) {
+    throw new Error(
+      `Refusing to start in production with missing/localhost env: ${problems.join(
+        ', ',
+      )}`,
+    );
+  }
+}
+
 async function bootstrap() {
+  assertProductionEnv();
   // rawBody: true is required so the Flitt webhook handler can verify the
   // callback signature against the EXACT bytes the provider signed. Without it,
   // Express parses and re-serializes JSON, which subtly mutates whitespace

@@ -34,7 +34,7 @@ import {
 
 interface MockIntentRecord {
   amountMinor: number;
-  currency: "GEL";
+  currency: string;
   capturedMinor: number;
   refundedMinor: number;
   status: "pending" | "succeeded" | "failed" | "cancelled";
