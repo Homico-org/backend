@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   Param,
+  Patch,
   Post,
   RawBodyRequest,
   Req,
@@ -76,12 +77,13 @@ export class PaymentsController {
     @Param("id") paymentId: string,
     @Req() req: { user: { userId: string } },
   ) {
-    const payment = await this.paymentsService.reconcileFromReturnUrl(paymentId);
-    // Defensive ownership check - reconcile is read-only but still
-    // shouldn't leak status of someone else's payment.
-    if (String(payment.userId) !== req.user.userId) {
-      return { status: "forbidden" };
-    }
+    // Pass the caller so the service enforces ownership BEFORE running any
+    // grant/escrow side-effect (it used to grant first, then merely mask the
+    // response - letting one user trigger another's grant).
+    const payment = await this.paymentsService.reconcileFromReturnUrl(
+      paymentId,
+      req.user.userId,
+    );
     return {
       id: String(payment._id),
       status: payment.status,
@@ -119,17 +121,111 @@ export class PaymentsController {
   }
 
   @Post("premium/checkout")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
   @ApiOperation({ summary: "Start a premium subscription payment" })
   async premiumCheckout(
     @Req() req: { user: { userId: string } },
-    @Body() body: { tier: string; period: "monthly" | "yearly" },
+    @Body()
+    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
   ) {
     return this.paymentsService.createPremiumIntent(
       req.user.userId,
       body.tier,
       body.period === "yearly" ? "yearly" : "monthly",
+      body.promoCode,
     );
+  }
+
+  @Post("premium/preview")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Preview the premium price after a promo code" })
+  async premiumPreview(
+    @Req() req: { user: { userId: string } },
+    @Body()
+    body: { tier: string; period: "monthly" | "yearly"; promoCode?: string },
+  ) {
+    return this.paymentsService.previewPremiumPrice(
+      body.tier,
+      body.period === "yearly" ? "yearly" : "monthly",
+      body.promoCode,
+      req.user.userId,
+    );
+  }
+
+  @Get("admin/premium-purchases")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] List premium purchases (who bought what)" })
+  async listPremiumPurchases() {
+    return this.paymentsService.listPremiumPurchases();
+  }
+
+  @Get("admin/super-pro-content")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Super Pro content pipeline" })
+  async listSuperProContentQueue() {
+    return this.paymentsService.listSuperProContentQueue();
+  }
+
+  @Patch("admin/super-pro-content/:userId")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Update a Super Pro's content status" })
+  async setSuperProContentStatus(
+    @Param("userId") userId: string,
+    @Body("status") status: string,
+  ) {
+    return this.paymentsService.setSuperProContentStatus(userId, status);
+  }
+
+  @Get("admin/promo-codes")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] List promo codes" })
+  async listPromoCodes() {
+    return this.paymentsService.listPromoCodes();
+  }
+
+  @Post("admin/promo-codes")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Create a promo code" })
+  async createPromoCode(
+    @Body()
+    body: {
+      code: string;
+      discountType: "amount_off" | "percent_off" | "fixed_price";
+      value: number;
+      applicableTiers?: string[];
+      maxUses?: number;
+      expiresAt?: string;
+      note?: string;
+    },
+  ) {
+    return this.paymentsService.createPromoCode(body);
+  }
+
+  @Patch("admin/promo-codes/:id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: "[admin] Activate / deactivate a promo code" })
+  async setPromoCodeActive(
+    @Param("id") id: string,
+    @Body("active") active: boolean,
+  ) {
+    return this.paymentsService.setPromoCodeActive(id, !!active);
+  }
+
+  @Post("premium/cancel")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PRO, UserRole.ADMIN)
+  @ApiOperation({
+    summary: "Cancel premium within the 3-day money-back window (refunds)",
+  })
+  async premiumCancel(@Req() req: { user: { userId: string } }) {
+    return this.paymentsService.cancelPremiumWithinWindow(req.user.userId);
   }
 
   // ---- Admin ----

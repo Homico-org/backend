@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { BogPaymentProvider } from "./bog-payment.provider";
+import { FlittPaymentProvider } from "./flitt-payment.provider";
 import { MockPaymentProvider } from "./mock-payment.provider";
 import { DisabledPaymentProvider } from "./disabled-payment.provider";
 import {
@@ -14,16 +14,16 @@ import {
  *
  * Defaults: non-production -> "mock" (instant success, for dev/CI).
  * Production -> "disabled" (boots, but refuses every payment op) when
- * PAYMENT_PROVIDER is unset, so the app can ship to prod BEFORE a real
- * provider (BoG) is configured without crashing at boot.
+ * PAYMENT_PROVIDER is unset, so the app can ship to prod BEFORE the real
+ * provider (Flitt) is configured without crashing at boot.
  *
  * Why a factory instead of letting NestJS's DI inject the chosen provider
  * directly? Because adding a new provider shouldn't require editing every
  * consumer - they ask the factory, the factory returns the right thing.
  *
  * Safety: production REFUSES the mock provider (mock fakes instant success and
- * must never reach real users). Set PAYMENT_PROVIDER=bog (+ BOG_* env) when the
- * merchant account is live; until then leave it unset (or "disabled") on prod.
+ * must never reach real users). Set PAYMENT_PROVIDER=flitt (+ FLITT_* env) when
+ * the merchant account is live; until then leave it unset (or "disabled") on prod.
  */
 
 @Injectable()
@@ -34,9 +34,8 @@ export class PaymentProviderFactory implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly mockProvider: MockPaymentProvider,
-    private readonly bogProvider: BogPaymentProvider,
+    private readonly flittProvider: FlittPaymentProvider,
     private readonly disabledProvider: DisabledPaymentProvider,
-    // Future: TbcPaymentProvider, etc.
   ) {}
 
   onModuleInit() {
@@ -52,7 +51,7 @@ export class PaymentProviderFactory implements OnModuleInit {
     if (isProd && requested === "mock") {
       throw new Error(
         "PAYMENT_PROVIDER=mock is not allowed in production. " +
-          "Use a real provider (bog) when live, or 'disabled'/unset until then.",
+          "Use a real provider (flitt) when live, or 'disabled'/unset until then.",
       );
     }
 
@@ -60,8 +59,8 @@ export class PaymentProviderFactory implements OnModuleInit {
       case "mock":
         this.active = this.mockProvider;
         break;
-      case "bog":
-        this.active = this.bogProvider;
+      case "flitt":
+        this.active = this.flittProvider;
         break;
       case "disabled":
       case "none" as PaymentProviderName:
@@ -69,8 +68,8 @@ export class PaymentProviderFactory implements OnModuleInit {
         break;
       default:
         throw new Error(
-          `PAYMENT_PROVIDER="${requested}" is not implemented yet. ` +
-            `Available: mock, bog, disabled. Coming later: tbc, pay-ge, stripe.`,
+          `PAYMENT_PROVIDER="${requested}" is not implemented. ` +
+            `Available: mock, flitt, disabled.`,
         );
     }
 
@@ -90,7 +89,7 @@ export class PaymentProviderFactory implements OnModuleInit {
    */
   getByName(name: PaymentProviderName): PaymentProvider {
     if (name === "mock") return this.mockProvider;
-    if (name === "bog") return this.bogProvider;
+    if (name === "flitt") return this.flittProvider;
     if (name === "disabled") return this.disabledProvider;
     throw new Error(`Unknown or not-yet-implemented provider: ${name}`);
   }

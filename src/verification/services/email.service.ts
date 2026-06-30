@@ -380,6 +380,36 @@ export class EmailService {
     return `<table style="width:100%;border-collapse:collapse;margin-top:16px;">${rows}</table>`;
   }
 
+  /** Confirmation sent to a pro right after their premium charge clears. */
+  async sendPremiumPurchaseConfirmation(
+    email: string,
+    info: { tierLabel: string; amountGel: number },
+  ): Promise<boolean> {
+    const subject = `Your Homico ${info.tierLabel} plan is active`;
+    return this.sendOrderEmail(
+      email,
+      subject,
+      `<h2 style="color:#0f172a;margin-top:0;">Premium activated 🎉</h2>
+       <p style="color:#334155;">Your <strong>${info.tierLabel}</strong> plan is now active. Thank you for upgrading!</p>
+       <p style="color:#334155;">Amount paid: <strong>${info.amountGel} ₾</strong></p>`,
+    );
+  }
+
+  /** Alert sent to each admin when a pro buys premium (revenue heads-up). */
+  async sendPremiumPurchaseAdminAlert(
+    email: string,
+    info: { tierLabel: string; amountGel: number; buyerName: string; buyerEmail: string },
+  ): Promise<boolean> {
+    const subject = `New premium purchase: ${info.tierLabel} (${info.amountGel} ₾)`;
+    return this.sendOrderEmail(
+      email,
+      subject,
+      `<h2 style="color:#0f172a;margin-top:0;">New premium purchase</h2>
+       <p style="color:#334155;"><strong>${info.buyerName}</strong> (${info.buyerEmail || "no email"}) just bought the <strong>${info.tierLabel}</strong> plan.</p>
+       <p style="color:#334155;">Amount: <strong>${info.amountGel} ₾</strong></p>`,
+    );
+  }
+
   private async sendOrderEmail(email: string, subject: string, inner: string): Promise<boolean> {
     const fromEmail = this.configService.get<string>('SENDGRID_FROM_EMAIL') || 'noreply@homico.ge';
     try {

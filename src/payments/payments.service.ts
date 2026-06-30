@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,9 +16,16 @@ import {
 import { Escrow, EscrowDoc } from "./schemas/escrow.schema";
 import { Dispute, DisputeDoc, DisputeStatus } from "./schemas/dispute.schema";
 import { Payout, PayoutDoc } from "./schemas/payout.schema";
+import {
+  PromoCode,
+  PromoDiscountType,
+} from "./schemas/promo-code.schema";
 import { User } from "../users/schemas/user.schema";
 import { PaymentProviderFactory } from "./providers/payment-provider.factory";
 import { PaymentProviderName } from "./providers/payment-provider.interface";
+import { NotificationsService } from "../notifications/notifications.service";
+import { NotificationType } from "../notifications/schemas/notification.schema";
+import { EmailService } from "../verification/services/email.service";
 
 /**
  * Orchestration layer between Homico's domain (bookings/projects) and the
@@ -73,7 +81,11 @@ export class PaymentsService {
     @InjectModel(Dispute.name) private readonly disputeModel: Model<Dispute>,
     @InjectModel(Payout.name) private readonly payoutModel: Model<Payout>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(PromoCode.name)
+    private readonly promoCodeModel: Model<PromoCode>,
     private readonly providers: PaymentProviderFactory,
+    private readonly notifications: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -128,6 +140,7 @@ export class PaymentsService {
       entityId: params.entityId,
       refundedAmountMinor: 0,
       redirectUrl,
+      metadata,
     });
 
     this.logger.log(
@@ -144,22 +157,133 @@ export class PaymentsService {
    * client can't pay less. tier+period are encoded in the entityId so the
    * grant step can apply the right plan from the Payment doc alone.
    */
+  // Launch pricing (GEL). `elite` is sold as "Super Pro". Must mirror the
+  // frontend's data/premium-pricing.ts GE column so the charge matches the
+  // displayed price.
+  private static readonly PREMIUM_PRICES: Record<
+    string,
+    { monthly: number; yearly: number }
+  > = {
+    basic: { monthly: 29, yearly: 290 },
+    pro: { monthly: 100, yearly: 1000 },
+    elite: { monthly: 250, yearly: 2500 },
+  };
+
+  /** Apply a promo's discount to a GEL price, clamped to >= 0 and rounded. */
+  private applyPromoDiscount(price: number, promo: PromoCode): number {
+    let final = price;
+    if (promo.discountType === "amount_off") final = price - promo.value;
+    else if (promo.discountType === "percent_off")
+      final = price - (price * promo.value) / 100;
+    else if (promo.discountType === "fixed_price") final = promo.value;
+    return Math.max(0, Math.round(final));
+  }
+
+  /**
+   * Look up a usable promo code for a tier, throwing a specific BadRequest
+   * (INVALID_PROMO / EXPIRED_PROMO / PROMO_USED_UP / PROMO_NOT_FOR_TIER) the
+   * frontend can map to a friendly message. Returns the live document.
+   */
+  private async findValidPromo(
+    code: string,
+    tier: string,
+    userId?: string,
+  ): Promise<PromoCode> {
+    const promo = await this.promoCodeModel
+      .findOne({ code: code.toUpperCase().trim() })
+      .exec();
+    if (!promo || !promo.active) throw new BadRequestException("INVALID_PROMO");
+    if (promo.expiresAt && new Date(promo.expiresAt) < new Date())
+      throw new BadRequestException("EXPIRED_PROMO");
+    if (promo.maxUses > 0 && promo.usedCount >= promo.maxUses)
+      throw new BadRequestException("PROMO_USED_UP");
+    if (userId && promo.usedBy?.some((id) => id.toString() === userId))
+      throw new BadRequestException("PROMO_ALREADY_USED");
+    if (
+      promo.applicableTiers?.length &&
+      !promo.applicableTiers.includes(tier)
+    )
+      throw new BadRequestException("PROMO_NOT_FOR_TIER");
+    return promo;
+  }
+
+  /**
+   * Preview the premium price for a tier/period, optionally after a promo
+   * code. Read-only - used by the checkout page to show the discount before
+   * the user pays. Throws the same coded errors as findValidPromo.
+   */
+  async previewPremiumPrice(
+    tier: string,
+    period: "monthly" | "yearly",
+    code?: string,
+    userId?: string,
+  ): Promise<{
+    originalAmount: number;
+    finalAmount: number;
+    discounted: boolean;
+    code?: string;
+  }> {
+    const prices = PaymentsService.PREMIUM_PRICES[tier];
+    if (!prices) throw new BadRequestException(`Unknown premium tier: ${tier}`);
+    const base = period === "yearly" ? prices.yearly : prices.monthly;
+    if (!code?.trim()) {
+      return { originalAmount: base, finalAmount: base, discounted: false };
+    }
+    const promo = await this.findValidPromo(code, tier, userId);
+    const final = this.applyPromoDiscount(base, promo);
+    return {
+      originalAmount: base,
+      finalAmount: final,
+      discounted: final < base,
+      code: promo.code,
+    };
+  }
+
   async createPremiumIntent(
     userId: string,
     tier: string,
     period: "monthly" | "yearly",
+    promoCode?: string,
   ): Promise<{ paymentId: string; redirectUrl: string }> {
-    const PREMIUM_PRICES: Record<string, { monthly: number; yearly: number }> = {
-      basic: { monthly: 29, yearly: 290 },
-      pro: { monthly: 59, yearly: 590 },
-      elite: { monthly: 99, yearly: 990 },
-    };
-    const prices = PREMIUM_PRICES[tier];
+    // Allow-list: only the plans the UI actually sells may be purchased. The
+    // app offers Pro and Super Pro (elite) on a MONTHLY basis only. Without
+    // this, a crafted request could buy an off-menu plan (e.g. `basic`, or
+    // `yearly` at 10x the price). Keep in sync with data/premium-pricing.ts.
+    const OFFERED_TIERS = new Set(["pro", "elite"]);
+    if (!OFFERED_TIERS.has(tier)) {
+      throw new BadRequestException(`Unknown premium tier: ${tier}`);
+    }
+    if (period !== "monthly") {
+      throw new BadRequestException("Only monthly billing is available");
+    }
+    const prices = PaymentsService.PREMIUM_PRICES[tier];
     if (!prices) {
       throw new BadRequestException(`Unknown premium tier: ${tier}`);
     }
-    const amount = period === "yearly" ? prices.yearly : prices.monthly;
+    // One active subscription at a time: block a new purchase while the user
+    // still has premium running. They can buy again once it expires. Prevents
+    // accidental double-buys stacking the expiry years into the future.
+    const current = await this.userModel
+      .findById(userId)
+      .select("premiumExpiresAt")
+      .lean<{ premiumExpiresAt?: Date }>()
+      .exec();
+    if (
+      current?.premiumExpiresAt &&
+      new Date(current.premiumExpiresAt) > new Date()
+    ) {
+      throw new BadRequestException("ALREADY_PREMIUM");
+    }
+    // Monthly-only today (guarded above), optionally discounted by a promo.
+    let amount = prices.monthly;
+    let appliedCode: string | undefined;
+    if (promoCode?.trim()) {
+      const promo = await this.findValidPromo(promoCode, tier, userId);
+      amount = this.applyPromoDiscount(amount, promo);
+      appliedCode = promo.code;
+    }
     const amountMinor = Math.round(amount * 100);
+
     const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     return this.createIntentForEntity({
       entityType: "premium",
@@ -173,8 +297,189 @@ export class PaymentsService {
       payeeUserId: userId,
       returnUrl: `${appUrl}/pro/premium/return?tier=${tier}`,
       cancelUrl: `${appUrl}/pro/premium`,
-      metadata: { tier, period, kind: "premium" },
+      metadata: { tier, period, kind: "premium", promoCode: appliedCode },
     });
+  }
+
+  // ---- Promo code admin ----
+
+  async createPromoCode(input: {
+    code: string;
+    discountType: PromoDiscountType;
+    value: number;
+    applicableTiers?: string[];
+    maxUses?: number;
+    expiresAt?: string;
+    note?: string;
+  }): Promise<PromoCode> {
+    const code = input.code?.toUpperCase().trim();
+    if (!code) throw new BadRequestException("Code is required");
+    if (!["amount_off", "percent_off", "fixed_price"].includes(input.discountType))
+      throw new BadRequestException("Invalid discountType");
+    if (typeof input.value !== "number" || input.value < 0)
+      throw new BadRequestException("Invalid value");
+    if (input.discountType === "percent_off" && input.value > 100)
+      throw new BadRequestException("percent_off cannot exceed 100");
+    const exists = await this.promoCodeModel.findOne({ code }).lean().exec();
+    if (exists) throw new BadRequestException("Code already exists");
+    return this.promoCodeModel.create({
+      code,
+      discountType: input.discountType,
+      value: input.value,
+      applicableTiers: input.applicableTiers || [],
+      maxUses: input.maxUses || 0,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+      note: input.note,
+    });
+  }
+
+  async listPromoCodes(): Promise<PromoCode[]> {
+    return this.promoCodeModel.find().sort({ createdAt: -1 }).lean().exec();
+  }
+
+  async setPromoCodeActive(id: string, active: boolean): Promise<PromoCode> {
+    if (!Types.ObjectId.isValid(id))
+      throw new NotFoundException("Promo code not found");
+    const promo = await this.promoCodeModel
+      .findByIdAndUpdate(id, { active }, { new: true })
+      .exec();
+    if (!promo) throw new NotFoundException("Promo code not found");
+    return promo;
+  }
+
+  /**
+   * Admin: who bought premium, what, and for how much. Newest first. Reads
+   * tier/promo from the persisted Payment metadata (falling back to entityId
+   * for older rows that predate the metadata field).
+   */
+  async listPremiumPurchases(): Promise<
+    Array<{
+      id: string;
+      buyerName: string;
+      buyerEmail: string;
+      tier: string;
+      tierLabel: string;
+      amount: number;
+      currency: string;
+      promoCode: string | null;
+      status: string;
+      refunded: boolean;
+      createdAt: Date;
+    }>
+  > {
+    const payments = await this.paymentModel
+      .find({ entityType: "premium" })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          userId: Types.ObjectId;
+          entityId: string;
+          amountMinor: number;
+          currency: string;
+          status: string;
+          refundedAmountMinor: number;
+          metadata?: Record<string, string>;
+          createdAt: Date;
+        }>
+      >()
+      .exec();
+    const userIds = [...new Set(payments.map((p) => String(p.userId)))];
+    const users = await this.userModel
+      .find({ _id: { $in: userIds } })
+      .select("name email")
+      .lean<Array<{ _id: Types.ObjectId; name?: string; email?: string }>>()
+      .exec();
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+    return payments.map((p) => {
+      const meta = p.metadata || {};
+      const tier = meta.tier || (p.entityId || "").split(":")[1] || "";
+      const u = byId.get(String(p.userId));
+      return {
+        id: String(p._id),
+        buyerName: u?.name || "",
+        buyerEmail: u?.email || "",
+        tier,
+        tierLabel:
+          tier === "elite" ? "Super Pro" : tier === "pro" ? "Pro" : tier,
+        amount: p.amountMinor / 100,
+        currency: p.currency,
+        promoCode: meta.promoCode || null,
+        status: p.status,
+        refunded: p.refundedAmountMinor > 0,
+        createdAt: p.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Admin: the Super Pro social-promo pipeline. Lists every active Super Pro
+   * (elite) sub with a `ready` flag once it's past the 3-day refund window -
+   * i.e. the charge is committed and the content team can safely start FB/
+   * Instagram content + storytelling.
+   */
+  async listSuperProContentQueue(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      email: string;
+      startedAt?: Date;
+      expiresAt?: Date;
+      ready: boolean;
+      contentStatus: string;
+    }>
+  > {
+    const windowMs =
+      PaymentsService.PREMIUM_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const readyCutoff = Date.now() - windowMs;
+    const users = await this.userModel
+      .find({ isPremium: true, premiumTier: "elite" })
+      .select("name email premiumStartedAt premiumExpiresAt superProContentStatus")
+      .sort({ premiumStartedAt: 1 })
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          name?: string;
+          email?: string;
+          premiumStartedAt?: Date;
+          premiumExpiresAt?: Date;
+          superProContentStatus?: string;
+        }>
+      >()
+      .exec();
+    return users.map((u) => ({
+      id: String(u._id),
+      name: u.name || "",
+      email: u.email || "",
+      startedAt: u.premiumStartedAt,
+      expiresAt: u.premiumExpiresAt,
+      ready: u.premiumStartedAt
+        ? new Date(u.premiumStartedAt).getTime() <= readyCutoff
+        : false,
+      contentStatus: u.superProContentStatus || "pending",
+    }));
+  }
+
+  async setSuperProContentStatus(
+    userId: string,
+    status: string,
+  ): Promise<{ id: string; contentStatus: string }> {
+    if (!["pending", "in_progress", "done"].includes(status))
+      throw new BadRequestException("Invalid status");
+    if (!Types.ObjectId.isValid(userId))
+      throw new NotFoundException("User not found");
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { superProContentStatus: status },
+        { new: true },
+      )
+      .select("superProContentStatus")
+      .lean<{ _id: Types.ObjectId; superProContentStatus?: string }>()
+      .exec();
+    if (!user) throw new NotFoundException("User not found");
+    return { id: String(user._id), contentStatus: user.superProContentStatus || status };
   }
 
   /**
@@ -189,8 +494,8 @@ export class PaymentsService {
     const now = new Date();
     const existing = await this.userModel
       .findById(userId)
-      .select("premiumExpiresAt")
-      .lean<{ premiumExpiresAt?: Date }>()
+      .select("premiumExpiresAt name email")
+      .lean<{ premiumExpiresAt?: Date; name?: string; email?: string }>()
       .exec();
     const base =
       existing?.premiumExpiresAt && new Date(existing.premiumExpiresAt) > now
@@ -202,13 +507,203 @@ export class PaymentsService {
       isPremium: true,
       premiumTier: tier,
       premiumExpiresAt,
+      // Stamp the start of THIS paid period so the 3-day money-back
+      // cancellation window is measured from the charge, not the expiry.
+      premiumStartedAt: now,
       // New paid period - clear the "expiring soon" nudge flag so the
       // renewal cron can remind again as THIS period nears its end.
       $unset: { premiumRenewalRemindedAt: "" },
     });
+    // Count the promo redemption once the charge actually cleared.
+    const promoCode = (payment as { metadata?: Record<string, string> })
+      .metadata?.promoCode;
+    if (promoCode) {
+      await this.promoCodeModel
+        .updateOne(
+          { code: promoCode },
+          { $inc: { usedCount: 1 }, $addToSet: { usedBy: userId } },
+        )
+        .exec()
+        .catch(() => undefined);
+    }
     this.logger.log(
       `Granted premium (${tier}/${period}) to user ${userId} until ${premiumExpiresAt.toISOString()}`,
     );
+    // Fire-and-forget notifications (never let a notify/email error undo the grant).
+    const amountGel = Math.round(((payment.amountMinor as number) || 0) / 100);
+    void this.notifyPremiumPurchase(
+      userId,
+      existing?.name || "",
+      existing?.email || "",
+      tier,
+      amountGel,
+    );
+  }
+
+  /**
+   * After a successful premium charge: confirm to the buyer (in-app + email)
+   * and alert every admin (in-app + email) so the team sees revenue in real
+   * time. Best-effort: any failure here is logged, never thrown.
+   */
+  private async notifyPremiumPurchase(
+    buyerId: string,
+    buyerName: string,
+    buyerEmail: string,
+    tier: string,
+    amountGel: number,
+  ): Promise<void> {
+    const tierLabel = tier === "elite" ? "Super Pro" : "Pro";
+
+    // 1) Confirm to the buyer.
+    try {
+      await this.notifications.notify(
+        buyerId,
+        NotificationType.PREMIUM_PURCHASED,
+        "Premium activated",
+        `Your ${tierLabel} plan is now active.`,
+        {
+          link: "/pro/premium",
+          i18n: {
+            titleKey: "notifications.types.premium_purchased.title",
+            messageKey: "notifications.types.premium_purchased.message",
+            params: { tier: tierLabel },
+          },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(`buyer premium notify failed: ${(err as Error).message}`);
+    }
+    if (buyerEmail) {
+      await this.emailService
+        .sendPremiumPurchaseConfirmation(buyerEmail, { tierLabel, amountGel })
+        .catch((err) =>
+          this.logger.warn(`buyer premium email failed: ${err?.message}`),
+        );
+    }
+
+    // 2) Alert all admins (in-app + email).
+    try {
+      const admins = await this.userModel
+        .find({ role: "admin" })
+        .select("_id email")
+        .lean<Array<{ _id: Types.ObjectId; email?: string }>>();
+      const who = buyerName || "A pro";
+      await Promise.all(
+        admins.map((a) =>
+          this.notifications.notify(
+            String(a._id),
+            NotificationType.ADMIN_PREMIUM_PURCHASE,
+            "New premium purchase",
+            `${who} bought ${tierLabel} (${amountGel} ₾)`,
+            {
+              link: "/admin/premium-purchases",
+              i18n: {
+                titleKey: "notifications.types.admin_premium_purchase.title",
+                messageKey: "notifications.types.admin_premium_purchase.message",
+                params: { name: who, tier: tierLabel, amount: amountGel },
+              },
+            },
+          ),
+        ),
+      );
+      await Promise.all(
+        admins
+          .filter((a) => a.email)
+          .map((a) =>
+            this.emailService
+              .sendPremiumPurchaseAdminAlert(a.email as string, {
+                tierLabel,
+                amountGel,
+                buyerName: who,
+                buyerEmail,
+              })
+              .catch((err) =>
+                this.logger.warn(`admin premium email failed: ${err?.message}`),
+              ),
+          ),
+      );
+    } catch (err) {
+      this.logger.warn(`admin premium notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  // A premium plan can be cancelled for a full refund only within this many
+  // days of starting it. After that it simply runs to expiry (no auto-renew).
+  private static readonly PREMIUM_REFUND_WINDOW_DAYS = 3;
+
+  /**
+   * Cancel an active premium subscription within the money-back window.
+   * Refunds the latest premium charge (if any - manual grants have none) and
+   * revokes premium immediately. Rejects once the window has passed, since a
+   * non-renewing plan has nothing left to cancel.
+   */
+  async cancelPremiumWithinWindow(
+    userId: string,
+  ): Promise<{ refunded: boolean }> {
+    const user = await this.userModel
+      .findById(userId)
+      .select("isPremium premiumStartedAt")
+      .lean<{ isPremium?: boolean; premiumStartedAt?: Date }>()
+      .exec();
+    if (!user || !user.isPremium) {
+      throw new BadRequestException("No active premium subscription");
+    }
+
+    const windowMs =
+      PaymentsService.PREMIUM_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const startedAt = user.premiumStartedAt
+      ? new Date(user.premiumStartedAt).getTime()
+      : NaN;
+    if (Number.isNaN(startedAt) || Date.now() - startedAt > windowMs) {
+      throw new BadRequestException(
+        "The cancellation window has passed. Your plan stays active until it expires and will not renew.",
+      );
+    }
+
+    // Refund the most recent premium charge, if there is one. Wrapped so a
+    // provider hiccup never blocks the revoke - ops reconciles a failed
+    // refund manually rather than leaving the pro paying for a cancelled plan.
+    let refunded = false;
+    const payment = await this.paymentModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        entityType: "premium",
+        status: { $in: ["succeeded", "partially_refunded"] },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+    if (payment) {
+      const remaining = payment.amountMinor - payment.refundedAmountMinor;
+      if (remaining > 0) {
+        try {
+          const provider = this.providers.getByName(payment.provider);
+          await provider.refund({
+            intentId: payment.providerIntentId,
+            amountMinor: remaining,
+            reason: "premium_cancel_within_window",
+          });
+          payment.refundedAmountMinor += remaining;
+          payment.status = "refunded";
+          await payment.save();
+          refunded = true;
+        } catch (err) {
+          this.logger.error(
+            `Premium refund failed for user ${userId}; revoking anyway: ${err}`,
+          );
+        }
+      }
+    }
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      isPremium: false,
+      premiumTier: "none",
+      premiumExpiresAt: new Date(),
+      $unset: { premiumStartedAt: "", premiumRenewalRemindedAt: "" },
+    });
+    this.logger.log(
+      `Cancelled premium for user ${userId} (refunded=${refunded})`,
+    );
+    return { refunded };
   }
 
   /**
@@ -253,19 +748,41 @@ export class PaymentsService {
     }
 
     if (decoded.status === "succeeded") {
-      payment.status = "succeeded";
-      payment.succeededAt = new Date();
-      payment.providerRawData = decoded.rawProviderData;
-      await payment.save();
-
-      // Premium and product_order are platform charges (no pro payee / escrow).
-      // Premium grants the subscription; product_order is handled by the orders
-      // module's own syncPaymentStatus. Everything else holds money in escrow.
-      if (payment.entityType === "premium") {
-        await this.grantPremium(payment);
-      } else if (payment.entityType !== "product_order") {
-        await this.createEscrow(payment);
+      // Atomically claim the pending->succeeded transition so a concurrent
+      // reconcile (return page) can't also run the grant/escrow. Only the
+      // caller that wins the claim runs the side-effects; the loser is a no-op.
+      const claimed = await this.paymentModel.findOneAndUpdate(
+        { _id: payment._id, status: "pending" },
+        {
+          $set: {
+            status: "succeeded",
+            succeededAt: new Date(),
+            providerRawData: decoded.rawProviderData,
+          },
+        },
+        { new: true },
+      );
+      if (claimed) {
+        // Premium and product_order are platform charges (no pro payee / escrow).
+        // Premium grants the subscription; product_order is handled by the orders
+        // module's own syncPaymentStatus. Everything else holds money in escrow.
+        if (claimed.entityType === "premium") {
+          await this.grantPremium(claimed);
+        } else if (claimed.entityType !== "product_order") {
+          await this.createEscrow(claimed);
+        }
+        this.logger.log(`Webhook processed: ${decoded.intentId} -> succeeded`);
+        return { paymentId: String(claimed._id), status: claimed.status };
       }
+      // Lost the race: another path already finalized it. Idempotent no-op.
+      const latest = await this.paymentModel.findById(payment._id).exec();
+      this.logger.log(
+        `Webhook re-entry for ${decoded.intentId}: already finalized, skipping grant`,
+      );
+      return {
+        paymentId: String(payment._id),
+        status: (latest ?? payment).status,
+      };
     } else {
       payment.status = decoded.status === "cancelled" ? "cancelled" : "failed";
       payment.providerRawData = decoded.rawProviderData;
@@ -285,14 +802,25 @@ export class PaymentsService {
    * etc). The frontend calls this to ask the provider's API directly and
    * update our records.
    */
-  async reconcileFromReturnUrl(paymentId: string): Promise<PaymentDoc> {
+  async reconcileFromReturnUrl(
+    paymentId: string,
+    requestingUserId?: string,
+  ): Promise<PaymentDoc> {
     const payment = await this.paymentModel.findById(paymentId).exec();
     if (!payment) throw new NotFoundException("Payment not found");
 
-    payment.returnedAt = new Date();
+    // Ownership gate BEFORE any side-effect. When called from the user-facing
+    // controller, `requestingUserId` is set and a user may only reconcile their
+    // OWN payment. Internal server callers (bookings/jobs/orders/milestones)
+    // omit it and are trusted. Without this, anyone could drive another user's
+    // pending payment to "succeeded" and trigger the grant/escrow on them.
+    if (requestingUserId && String(payment.userId) !== requestingUserId) {
+      throw new ForbiddenException("Not your payment");
+    }
 
     if (payment.status !== "pending") {
       // Already in terminal state - just record the return.
+      payment.returnedAt = new Date();
       await payment.save();
       return payment.toObject() as PaymentDoc;
     }
@@ -301,20 +829,34 @@ export class PaymentsService {
     const status = await provider.fetchIntentStatus(payment.providerIntentId);
 
     if (status.status === "succeeded") {
-      payment.status = "succeeded";
-      payment.succeededAt = new Date();
-      await payment.save();
-      // premium + product_order are platform charges (no escrow).
-      if (payment.entityType === "premium") {
-        await this.grantPremium(payment);
-      } else if (payment.entityType !== "product_order") {
-        await this.createEscrow(payment);
+      // Atomically claim the pending->succeeded transition so a concurrent
+      // webhook + reconcile (or double reconcile) can't both run the grant -
+      // which would double-charge-grant / stack the premium expiry. Only the
+      // caller that wins the claim runs the side-effects.
+      const claimed = await this.paymentModel.findOneAndUpdate(
+        { _id: payment._id, status: "pending" },
+        { $set: { status: "succeeded", succeededAt: new Date(), returnedAt: new Date() } },
+        { new: true },
+      );
+      if (claimed) {
+        // premium + product_order are platform charges (no escrow).
+        if (claimed.entityType === "premium") {
+          await this.grantPremium(claimed);
+        } else if (claimed.entityType !== "product_order") {
+          await this.createEscrow(claimed);
+        }
+        return claimed.toObject() as PaymentDoc;
       }
+      // Lost the race: another path already finalized it. Return the latest.
+      const latest = await this.paymentModel.findById(payment._id).exec();
+      return (latest ?? payment).toObject() as PaymentDoc;
     } else if (status.status === "failed" || status.status === "cancelled") {
       payment.status = status.status;
+      payment.returnedAt = new Date();
       await payment.save();
     } else {
       // Still pending - frontend will retry.
+      payment.returnedAt = new Date();
       await payment.save();
     }
 
@@ -926,7 +1468,7 @@ export class PaymentsService {
    * account, creates a Payout doc, and flips all escrows to released.
    *
    * Phase 1: admin manually performs the actual bank transfer externally
-   * and pastes the transfer reference here. Phase 3 automates via BoG's
+   * and pastes the transfer reference here. Phase 3 automates via Flitt's
    * outgoing-transfer API.
    */
   async processPayout(opts: {
@@ -1089,18 +1631,32 @@ export class PaymentsService {
 
     const platformFeeMinor = Math.round(payment.amountMinor * PLATFORM_FEE_RATE);
 
-    const escrow = await this.escrowModel.create({
-      entityType: payment.entityType,
-      entityId: payment.entityId,
-      paymentId: payment._id,
-      payerUserId: payment.userId,
-      payeeUserId: payment.payeeUserId,
-      amountHeldMinor: payment.amountMinor,
-      platformFeeMinor,
-      currency: payment.currency,
-      status: "held",
-      refundedAmountMinor: 0,
-    });
+    let escrow;
+    try {
+      escrow = await this.escrowModel.create({
+        entityType: payment.entityType,
+        entityId: payment.entityId,
+        paymentId: payment._id,
+        payerUserId: payment.userId,
+        payeeUserId: payment.payeeUserId,
+        amountHeldMinor: payment.amountMinor,
+        platformFeeMinor,
+        currency: payment.currency,
+        status: "held",
+        refundedAmountMinor: 0,
+      });
+    } catch (err) {
+      // Lost a race with a concurrent payment-success path - the unique index
+      // on (entityType, entityId) rejected the second insert. Resolve to the
+      // escrow the winner created instead of erroring.
+      if ((err as { code?: number })?.code === 11000) {
+        const existing = await this.escrowModel
+          .findOne({ entityType: payment.entityType, entityId: payment.entityId })
+          .exec();
+        if (existing) return existing.toObject() as EscrowDoc;
+      }
+      throw err;
+    }
 
     this.logger.log(
       `Escrow created for ${payment.entityType}:${payment.entityId} amount=${payment.amountMinor} fee=${platformFeeMinor}`,

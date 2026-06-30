@@ -36,6 +36,7 @@ import {
   UpdateEngagementDto,
   UpdateMilestoneDto,
   UpdateProductDto,
+  ReviewProductDto,
   UpdateProjectDto,
   UpdateRoomDto,
   UpdateScopeItemDto,
@@ -487,6 +488,37 @@ export class ProjectRequestController {
     );
   }
 
+  // Smart import: read og/meta/JSON-LD from a pasted product URL so the
+  // add-product form can autofill name/image/price/vendor. Read-only.
+  @Post(':id/products/preview-url')
+  previewProductUrl(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: MoodboardFromUrlDto,
+  ) {
+    return this.projectRequestService.previewProductFromUrl(
+      id,
+      user.userId,
+      dto.url,
+    );
+  }
+
+  // Client approves / requests changes on a schedule line item.
+  @Patch(':id/products/:productId/review')
+  reviewProduct(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Param('productId') productId: string,
+    @Body() dto: ReviewProductDto,
+  ) {
+    return this.projectRequestService.reviewProduct(
+      id,
+      user.userId,
+      productId,
+      dto,
+    );
+  }
+
   // === Design phase gate (architect/designer) ===
 
   // Assigned pro submits / advances their design phase for review.
@@ -782,6 +814,20 @@ export class ProjectRequestController {
       user.userId,
       selectionId,
       dto,
+    );
+  }
+
+  // Materialize a selection's chosen option into a schedule line item.
+  @Post(':id/selections/:selectionId/to-product')
+  selectionToProduct(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Param('selectionId') selectionId: string,
+  ) {
+    return this.projectRequestService.selectionToProduct(
+      id,
+      user.userId,
+      selectionId,
     );
   }
 }

@@ -83,7 +83,7 @@ export class MilestonePaymentsController {
     return this.service.remove(user.userId, id);
   }
 
-  // Client funds an approved installment -> returns BoG redirect URL.
+  // Client funds an approved installment -> returns Flitt redirect URL.
   @Post(':id/fund')
   fund(@CurrentUser() user: any, @Param('id') id: string) {
     return this.service.fund(user.userId, id);

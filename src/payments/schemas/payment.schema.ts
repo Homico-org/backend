@@ -9,7 +9,7 @@ import { Document, Types } from "mongoose";
  * Amounts are stored in MINOR units (tetri for GEL) to avoid floating-point
  * arithmetic on currency. A `1000 amountMinor` for GEL means 10.00 GEL.
  *
- * `providerIntentId` is the provider's canonical reference (e.g. BoG's
+ * `providerIntentId` is the provider's canonical reference (e.g. Flitt's
  * order_id). This is also our idempotency key - webhooks with the same
  * providerIntentId are safe to handle multiple times.
  */
@@ -28,7 +28,7 @@ export type PaymentEntityType =
   | "premium"
   | "product_order";
 
-export type PaymentProviderName = "mock" | "bog" | "tbc" | "pay-ge" | "stripe";
+export type PaymentProviderName = "mock" | "flitt";
 
 @Schema({ timestamps: true, collection: "payments" })
 export class Payment extends Document {
@@ -47,8 +47,8 @@ export class Payment extends Document {
   provider: PaymentProviderName;
 
   /**
-   * Provider's canonical reference (BoG order_id, Stripe PaymentIntent id,
-   * etc). Unique per provider - we use the (provider, providerIntentId)
+   * Provider's canonical reference (Flitt order_id). Unique per provider -
+   * we use the (provider, providerIntentId)
    * pair as our idempotency key when handling webhooks.
    */
   @Prop({ required: true, index: true })
@@ -92,6 +92,14 @@ export class Payment extends Document {
   /** Raw provider payload, useful for support / debugging. */
   @Prop({ type: Object })
   providerRawData?: unknown;
+
+  /**
+   * Our own correlation metadata (entity ids, and for premium: tier, period,
+   * promoCode). Persisted so the grant step + admin reporting can read the
+   * plan/promo from the Payment alone without re-deriving from entityId.
+   */
+  @Prop({ type: Object })
+  metadata?: Record<string, unknown>;
 
   /** Hosted-page URL the user was redirected to. Kept for support / audit. */
   @Prop()

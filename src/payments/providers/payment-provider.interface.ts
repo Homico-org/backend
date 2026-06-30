@@ -1,22 +1,19 @@
 /**
- * Abstraction over a payment provider (BoG, TBC, Pay.ge, Stripe, Mock).
+ * Abstraction over a payment provider (Flitt, Mock).
  *
- * Phase 1 ships with MockPaymentProvider (instant success, no external
- * dependency). Phase 3 adds the real BoG implementation. The interface is
- * intentionally narrow - just the operations Homico's escrow lifecycle
- * needs - to keep new providers cheap to add.
+ * Live provider is FlittPaymentProvider (hosted card payments + refunds).
+ * MockPaymentProvider (instant success, no external dependency) is used in
+ * dev/CI. The interface is intentionally narrow - just the operations
+ * Homico's escrow lifecycle needs - to keep new providers cheap to add.
  *
  * All money amounts are MINOR units of the currency (tetri for GEL).
  * Providers are responsible for converting to their native API format if
- * they expect major units (e.g. Stripe wants cents, BoG wants tetri).
+ * they expect major units.
  */
 
 export type PaymentProviderName =
   | "mock"
-  | "bog"
-  | "tbc"
-  | "pay-ge"
-  | "stripe"
+  | "flitt"
   // Payments intentionally off for this environment (boots, but refuses every
   // operation). See DisabledPaymentProvider.
   | "disabled";

@@ -5,10 +5,11 @@ import { AppModule } from './app.module';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { MongoExceptionFilter } from './common/filters/mongo-exception.filter';
 
 async function bootstrap() {
-  // rawBody: true is required so the BoG webhook handler can verify the
-  // RSA-SHA256 signature against the EXACT bytes BoG signed. Without it,
+  // rawBody: true is required so the Flitt webhook handler can verify the
+  // callback signature against the EXACT bytes the provider signed. Without it,
   // Express parses and re-serializes JSON, which subtly mutates whitespace
   // and breaks signature verification.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -61,6 +62,10 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  // Map Mongoose CastError/ValidationError to 400 instead of a leaked 500
+  // (e.g. a malformed ObjectId in a route param).
+  app.useGlobalFilters(new MongoExceptionFilter());
 
   // Swagger configuration (opt-in; protect with Basic Auth)
   const swaggerEnabled = process.env.SWAGGER_ENABLED === 'true';

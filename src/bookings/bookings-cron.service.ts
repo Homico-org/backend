@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
@@ -33,12 +34,20 @@ export class BookingsCronService {
   // Window after which an AWAITING_CLIENT_CONFIRMATION booking auto-completes.
   private readonly AUTO_CONFIRM_AFTER_HOURS = 48;
   // Window after which an unpaid AWAITING_PAYMENT booking is cancelled.
-  private readonly PAYMENT_TIMEOUT_MIN = 15;
+  // Configurable via PAYMENT_TIMEOUT_MIN (default 15); bump it locally when a
+  // slow sandbox/debug cycle keeps timing out the booking before you pay.
+  private readonly PAYMENT_TIMEOUT_MIN: number;
 
   constructor(
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
     private readonly bookingsService: BookingsService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    const raw = Number(
+      this.configService.get<string>('PAYMENT_TIMEOUT_MIN'),
+    );
+    this.PAYMENT_TIMEOUT_MIN = Number.isFinite(raw) && raw > 0 ? raw : 15;
+  }
 
   /**
    * Auto-confirm completed bookings whose 48h client-review window expired.
@@ -87,19 +96,35 @@ export class BookingsCronService {
       .lean<{ _id: { toString(): string } }[]>()
       .exec();
 
-    if (candidates.length === 0) return;
-    this.logger.log(
-      `Cancelling ${candidates.length} stale AWAITING_PAYMENT bookings`,
-    );
+    if (candidates.length > 0) {
+      this.logger.log(
+        `Cancelling ${candidates.length} stale AWAITING_PAYMENT bookings`,
+      );
+      for (const c of candidates) {
+        try {
+          await this.bookingsService.autoCancelStalePayment(c._id.toString());
+        } catch (err) {
+          this.logger.warn(
+            `Auto-cancel failed for ${c._id}: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
 
-    for (const c of candidates) {
-      try {
-        await this.bookingsService.autoCancelStalePayment(c._id.toString());
-      } catch (err) {
+    // Always sweep for bookings cancelled by a *previous* run whose payment has
+    // since settled (e.g. the client paid late, or the webhook landed after the
+    // timeout) - auto-refund them so money never stays `held` on a dead booking.
+    try {
+      const refunded = await this.bookingsService.sweepLatePaidCancellations();
+      if (refunded > 0) {
         this.logger.warn(
-          `Auto-cancel failed for ${c._id}: ${(err as Error).message}`,
+          `Auto-refunded ${refunded} late payment(s) on already-cancelled bookings`,
         );
       }
+    } catch (err) {
+      this.logger.warn(
+        `sweepLatePaidCancellations failed: ${(err as Error).message}`,
+      );
     }
   }
 
