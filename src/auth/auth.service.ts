@@ -6,8 +6,10 @@ import {
   UnauthorizedException,
   forwardRef,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { InjectModel } from "@nestjs/mongoose";
+import { OAuth2Client } from "google-auth-library";
 import { Model } from "mongoose";
 import { AmplitudeService } from "../analytics/amplitude.service";
 import { ActivityType, LoggerService } from "../common/logger";
@@ -20,9 +22,13 @@ import { LoginDto } from "./dto/login.dto";
 import { PhoneLoginDto } from "./dto/phone-login.dto";
 import { ProRegisterDto } from "./dto/pro-register.dto";
 import { ProRegistrationStepDto } from "./dto/pro-registration-step.dto";
+import { GoogleAuthDto } from "./dto/google-auth.dto";
+import { AttachPhoneDto } from "./dto/attach-phone.dto";
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient: OAuth2Client;
+
   constructor(
     @Inject(forwardRef(() => UsersService)) private usersService: UsersService,
     private jwtService: JwtService,
@@ -30,7 +36,12 @@ export class AuthService {
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly logger: LoggerService,
     private readonly amplitude: AmplitudeService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.googleClient = new OAuth2Client(
+      this.configService.get<string>("GOOGLE_CLIENT_ID"),
+    );
+  }
 
   /**
    * Mirror auth events to Amplitude. Server-side tracking is more reliable
@@ -336,6 +347,206 @@ export class AuthService {
 
     this.trackAuthEvent("user_registered", user, { registrationMethod: "phone_otp" });
 
+    return {
+      ...this.generateTokens(user),
+      user: this.buildUserResponse(user),
+    };
+  }
+
+  /**
+   * Google OAuth sign-up / sign-in.
+   *
+   * The client performs the Google Sign-In and sends us the resulting ID
+   * token (a signed JWT). We verify it server-side against our own
+   * GOOGLE_CLIENT_ID audience — never trusting any user fields the client
+   * might send — then either log in an existing account (matched by
+   * googleId, or linked by email) or create a brand-new password-less
+   * account (mirrors how phoneLogin/proRegister create users).
+   *
+   * Phone is NOT collected here. The response carries `needsPhone` so the
+   * frontend can route a freshly-created (or otherwise phone-less) user
+   * through the OTP step (/verification/send-otp + /auth/attach-phone).
+   */
+  async googleAuth(
+    dto: GoogleAuthDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
+    const clientId = this.configService.get<string>("GOOGLE_CLIENT_ID");
+    if (!clientId) {
+      throw new BadRequestException("Google login is not configured");
+    }
+
+    // Verify the ID token: signature + expiry + audience (our client id).
+    let payload:
+      | {
+          sub?: string;
+          email?: string;
+          email_verified?: boolean;
+          name?: string;
+          picture?: string;
+        }
+      | undefined;
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: dto.idToken,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException("Invalid Google token");
+    }
+
+    if (!payload?.sub) {
+      throw new UnauthorizedException("Invalid Google token");
+    }
+
+    // Require a Google-verified email. Prevents account takeover via an
+    // unverified email that collides with an existing local account.
+    if (!payload.email || payload.email_verified !== true) {
+      throw new UnauthorizedException("Google account email is not verified");
+    }
+
+    const googleId = payload.sub;
+    const email = payload.email.toLowerCase();
+    const name = payload.name || "";
+    const picture = payload.picture;
+    const requestedRole =
+      dto.role === "pro" ? UserRole.PRO : UserRole.CLIENT;
+
+    // 1. Existing account already linked to this Google identity.
+    let user = await this.userModel.findOne({ googleId }).exec();
+    let isNewUser = false;
+
+    // 2. Otherwise, an existing local account with the same email -> LINK it.
+    if (!user) {
+      const byEmail = await this.userModel.findOne({ email }).exec();
+      if (byEmail) {
+        // Never auto-link Google to an admin account: someone controlling that
+        // Gmail box could otherwise take over an admin, bypassing the password.
+        // Admin Google linking, if ever wanted, must be done manually.
+        if (byEmail.role === UserRole.ADMIN) {
+          throw new UnauthorizedException(
+            "This email belongs to a restricted account; sign in with your password.",
+          );
+        }
+        byEmail.googleId = googleId;
+        if (!byEmail.avatar && picture) byEmail.avatar = picture;
+        await byEmail.save();
+        user = byEmail;
+      }
+    }
+
+    // 3. Brand-new user — create a password-less account.
+    if (!user) {
+      const lastUser = await this.userModel
+        .findOne({ uid: { $exists: true } })
+        .sort({ uid: -1 })
+        .exec();
+      const uid = lastUser?.uid ? lastUser.uid + 1 : 100001;
+
+      user = await new this.userModel({
+        uid,
+        googleId,
+        email,
+        name,
+        avatar: picture,
+        role: requestedRole,
+        isEmailVerified: true,
+        isPhoneVerified: false,
+        ...(requestedRole === UserRole.PRO ? { registrationStep: 1 } : {}),
+      }).save();
+      isNewUser = true;
+    } else {
+      await this.usersService.updateLastLogin(user._id.toString());
+    }
+
+    if (isNewUser) {
+      this.logger.logActivity({
+        type: ActivityType.USER_REGISTER,
+        userId: user._id.toString(),
+        userEmail: user.email || "unknown",
+        userName: user.name,
+        ip: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+        details: { role: user.role, registrationMethod: "google" },
+      });
+      this.trackAuthEvent("user_registered", user, {
+        registrationMethod: "google",
+      });
+    } else {
+      this.logger.logActivity({
+        type: ActivityType.USER_LOGIN,
+        userId: user._id.toString(),
+        userEmail: user.email || "unknown",
+        userName: user.name,
+        ip: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+        details: { role: user.role, loginMethod: "google" },
+      });
+      this.trackAuthEvent("user_logged_in", user, { loginMethod: "google" });
+    }
+
+    return {
+      ...this.generateTokens(user),
+      user: this.buildUserResponse(user),
+      needsPhone: !user.isPhoneVerified,
+    };
+  }
+
+  /**
+   * Attach + verify a phone number to the currently authenticated user.
+   * Used right after a Google sign-up to satisfy the "phone is mandatory"
+   * requirement. The OTP must already have been sent via the existing
+   * /verification/send-otp endpoint; here we only verify + attach.
+   */
+  async attachPhone(
+    userId: string,
+    dto: AttachPhoneDto,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ) {
+    // 1. Verify the OTP (throws BadRequest on invalid/expired code).
+    await this.verificationService.verifyOtp({
+      identifier: dto.identifier,
+      code: dto.code,
+      type: OtpType.PHONE,
+    });
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    // 2. Phone uniqueness — same rule as usersService.create: the number
+    // must not already belong to a DIFFERENT account.
+    const existingByPhone = await this.usersService.findByPhone(dto.identifier);
+    if (
+      existingByPhone &&
+      existingByPhone._id.toString() !== user._id.toString()
+    ) {
+      throw new ConflictException(
+        "User with this phone number already exists",
+      );
+    }
+
+    // 3. Attach + mark verified.
+    user.phone = dto.identifier;
+    user.isPhoneVerified = true;
+    user.phoneVerifiedAt = new Date();
+    await user.save();
+
+    this.logger.logActivity({
+      type: ActivityType.USER_UPDATE,
+      userId: user._id.toString(),
+      userEmail: user.email || user.phone || "unknown",
+      userName: user.name,
+      ip: requestMeta?.ip,
+      userAgent: requestMeta?.userAgent,
+      details: { action: "phone_attached", method: "otp" },
+    });
+
+    // Refresh tokens so the JWT reflects the current account state (the
+    // payload doesn't embed isPhoneVerified, but re-issuing keeps the
+    // contract identical to every other flow).
     return {
       ...this.generateTokens(user),
       user: this.buildUserResponse(user),

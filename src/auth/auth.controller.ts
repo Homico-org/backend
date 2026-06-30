@@ -6,6 +6,8 @@ import { LoginDto } from './dto/login.dto';
 import { PhoneLoginDto } from './dto/phone-login.dto';
 import { ProRegisterDto } from './dto/pro-register.dto';
 import { ProRegistrationStepDto } from './dto/pro-registration-step.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
+import { AttachPhoneDto } from './dto/attach-phone.dto';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -58,6 +60,41 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'Already registered as professional' })
   async proRegister(@Body() dto: ProRegisterDto, @Req() req: Request) {
     return this.authService.proRegister(dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('google')
+  @ApiOperation({ summary: 'Sign up / sign in with Google (OAuth ID token)' })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Authenticated. Returns tokens + user + needsPhone (true if phone not yet verified).',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid Google token' })
+  async google(@Body() dto: GoogleAuthDto, @Req() req: Request) {
+    return this.authService.googleAuth(dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('attach-phone')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Verify an OTP and attach the phone to the current user',
+  })
+  @ApiResponse({ status: 201, description: 'Phone attached and verified' })
+  @ApiResponse({ status: 400, description: 'Invalid OTP' })
+  @ApiResponse({ status: 409, description: 'Phone already in use' })
+  async attachPhone(
+    @CurrentUser() currentUser: any,
+    @Body() dto: AttachPhoneDto,
+    @Req() req: Request,
+  ) {
+    return this.authService.attachPhone(currentUser.userId, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
