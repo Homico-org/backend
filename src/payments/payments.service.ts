@@ -51,9 +51,10 @@ const PLATFORM_FEE_RATE = 0.05;
 export interface CreateIntentForEntityParams {
   entityType: PaymentEntityType;
   entityId: string;
-  /** Total to charge in minor units (tetri for GEL). */
+  /** Total to charge in minor units (e.g. tetri for GEL). */
   amountMinor: number;
-  currency: "GEL";
+  /** ISO currency code. GE/GEL is the only live market today. */
+  currency: string;
   description: string;
   payerUserId: string;
   /** Who will eventually receive money if escrow releases. */
@@ -157,17 +158,74 @@ export class PaymentsService {
    * client can't pay less. tier+period are encoded in the entityId so the
    * grant step can apply the right plan from the Payment doc alone.
    */
-  // Launch pricing (GEL). `elite` is sold as "Super Pro". Must mirror the
-  // frontend's data/premium-pricing.ts GE column so the charge matches the
-  // displayed price.
-  private static readonly PREMIUM_PRICES: Record<
+  // Per-marketplace pricing. `elite` is sold as "Super Pro". MUST mirror the
+  // frontend's data/premium-pricing.ts so the charge matches the displayed
+  // price AND currency. The server is authoritative: never derive the amount
+  // or currency from the client. Default market is GE (the only live one).
+  private static readonly DEFAULT_COUNTRY = "GE";
+  private static readonly PREMIUM_PRICES_BY_COUNTRY: Record<
     string,
-    { monthly: number; yearly: number }
+    Record<string, { monthly: number; yearly: number }>
   > = {
-    basic: { monthly: 29, yearly: 290 },
-    pro: { monthly: 100, yearly: 1000 },
-    elite: { monthly: 250, yearly: 2500 },
+    GE: {
+      basic: { monthly: 29, yearly: 290 },
+      pro: { monthly: 100, yearly: 1000 },
+      elite: { monthly: 250, yearly: 2500 },
+    },
+    IL: {
+      basic: { monthly: 39, yearly: 390 },
+      pro: { monthly: 89, yearly: 890 },
+      elite: { monthly: 149, yearly: 1490 },
+    },
+    FR: {
+      basic: { monthly: 10, yearly: 99 },
+      pro: { monthly: 20, yearly: 199 },
+      elite: { monthly: 35, yearly: 349 },
+    },
+    US: {
+      basic: { monthly: 10, yearly: 99 },
+      pro: { monthly: 20, yearly: 199 },
+      elite: { monthly: 40, yearly: 399 },
+    },
+    DE: {
+      basic: { monthly: 10, yearly: 99 },
+      pro: { monthly: 20, yearly: 199 },
+      elite: { monthly: 35, yearly: 349 },
+    },
+    UK: {
+      basic: { monthly: 9, yearly: 89 },
+      pro: { monthly: 18, yearly: 179 },
+      elite: { monthly: 30, yearly: 299 },
+    },
   };
+
+  private static readonly CURRENCY_BY_COUNTRY: Record<string, string> = {
+    GE: "GEL",
+    IL: "ILS",
+    FR: "EUR",
+    US: "USD",
+    DE: "EUR",
+    UK: "GBP",
+  };
+
+  /**
+   * Resolve the price table + currency for a marketplace. Defaults to GE when
+   * no country is supplied. Throws on an explicitly-unsupported country so we
+   * never charge the wrong amount/currency for a market we don't price.
+   */
+  private resolveMarket(country?: string): {
+    country: string;
+    currency: string;
+    prices: Record<string, { monthly: number; yearly: number }>;
+  } {
+    const resolved = (country || PaymentsService.DEFAULT_COUNTRY).toUpperCase();
+    const prices = PaymentsService.PREMIUM_PRICES_BY_COUNTRY[resolved];
+    const currency = PaymentsService.CURRENCY_BY_COUNTRY[resolved];
+    if (!prices || !currency) {
+      throw new BadRequestException(`Unsupported country: ${resolved}`);
+    }
+    return { country: resolved, currency, prices };
+  }
 
   /** Apply a promo's discount to a GEL price, clamped to >= 0 and rounded. */
   private applyPromoDiscount(price: number, promo: PromoCode): number {
@@ -217,17 +275,25 @@ export class PaymentsService {
     period: "monthly" | "yearly",
     code?: string,
     userId?: string,
+    country?: string,
   ): Promise<{
     originalAmount: number;
     finalAmount: number;
     discounted: boolean;
+    currency: string;
     code?: string;
   }> {
-    const prices = PaymentsService.PREMIUM_PRICES[tier];
+    const { currency, prices: table } = this.resolveMarket(country);
+    const prices = table[tier];
     if (!prices) throw new BadRequestException(`Unknown premium tier: ${tier}`);
     const base = period === "yearly" ? prices.yearly : prices.monthly;
     if (!code?.trim()) {
-      return { originalAmount: base, finalAmount: base, discounted: false };
+      return {
+        originalAmount: base,
+        finalAmount: base,
+        discounted: false,
+        currency,
+      };
     }
     const promo = await this.findValidPromo(code, tier, userId);
     const final = this.applyPromoDiscount(base, promo);
@@ -235,6 +301,7 @@ export class PaymentsService {
       originalAmount: base,
       finalAmount: final,
       discounted: final < base,
+      currency,
       code: promo.code,
     };
   }
@@ -244,6 +311,7 @@ export class PaymentsService {
     tier: string,
     period: "monthly" | "yearly",
     promoCode?: string,
+    country?: string,
   ): Promise<{ paymentId: string; redirectUrl: string }> {
     // Allow-list: only the plans the UI actually sells may be purchased. The
     // app offers Pro and Super Pro (elite) on a MONTHLY basis only. Without
@@ -256,7 +324,8 @@ export class PaymentsService {
     if (period !== "monthly") {
       throw new BadRequestException("Only monthly billing is available");
     }
-    const prices = PaymentsService.PREMIUM_PRICES[tier];
+    const { currency, prices: table } = this.resolveMarket(country);
+    const prices = table[tier];
     if (!prices) {
       throw new BadRequestException(`Unknown premium tier: ${tier}`);
     }
@@ -289,7 +358,7 @@ export class PaymentsService {
       entityType: "premium",
       entityId: `${userId}:${tier}:${period}`,
       amountMinor,
-      currency: "GEL",
+      currency,
       description: `Homico ${tier} (${period})`,
       payerUserId: userId,
       // No real payee for a platform charge - self-reference satisfies the

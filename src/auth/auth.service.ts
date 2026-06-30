@@ -112,7 +112,21 @@ export class AuthService {
     createUserDto: CreateUserDto,
     requestMeta?: { ip?: string; userAgent?: string },
   ) {
-    const user = await this.usersService.create(createUserDto);
+    // The client may *ask* for a phone-verified account, but we never trust
+    // that flag on its own — it must be backed by a VERIFIED marker produced
+    // by a real OTP check (POST /verification/verify-otp). Without proof we
+    // degrade gracefully to unverified rather than blocking the signup.
+    let isPhoneVerified = false;
+    if (createUserDto.phone && createUserDto.isPhoneVerified) {
+      isPhoneVerified = await this.verificationService.consumeVerificationMarker(
+        createUserDto.phone,
+        OtpType.PHONE,
+      );
+    }
+    const user = await this.usersService.create({
+      ...createUserDto,
+      isPhoneVerified,
+    });
 
     this.logger.logActivity({
       type: ActivityType.USER_REGISTER,

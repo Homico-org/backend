@@ -241,11 +241,15 @@ export class SmsService {
       const requestBody: {
         target: { type: string; value: string };
         dispatch?: { type: string };
+        options?: { code_size: number };
       } = {
         target: {
           type: 'phone_number',
           value: phoneNumber,
         },
+        // Force a 4-digit code so it matches our fixed 4-box OTP input.
+        // Prelude defaults to 6 digits, which the UI can't fully capture.
+        options: { code_size: 4 },
       };
 
       if (channel === 'whatsapp') {

@@ -182,6 +182,7 @@ export class VerificationService {
           { identifier, type, isUsed: false },
           { isUsed: true },
         );
+        await this.createVerifiedMarker(identifier, type);
         return { verified: true };
       }
 
@@ -218,6 +219,7 @@ export class VerificationService {
           { identifier, type, isUsed: false },
           { isUsed: true },
         );
+        await this.createVerifiedMarker(identifier, type);
         return { verified: true };
       }
 
@@ -228,12 +230,15 @@ export class VerificationService {
           type,
           isUsed: false,
           expiresAt: { $gt: new Date() },
-          code: { $ne: "PRELUDE_VERIFY" }, // Only check non-Prelude records
+          // Only check real code records: skip the Prelude placeholder and
+          // our own consumable "VERIFIED" markers.
+          code: { $nin: ["PRELUDE_VERIFY", "VERIFIED"] },
         })
         .sort({ createdAt: -1 });
 
       if (otp && otp.code === code) {
         await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+        await this.createVerifiedMarker(identifier, type);
         this.logger.log(`OTP verified locally for ${identifier}`);
         return { verified: true };
       }
@@ -248,6 +253,8 @@ export class VerificationService {
         type,
         isUsed: false,
         expiresAt: { $gt: new Date() },
+        // Never match our own consumable "VERIFIED" markers as a code.
+        code: { $ne: "VERIFIED" },
       })
       .sort({ createdAt: -1 });
 
@@ -273,8 +280,58 @@ export class VerificationService {
 
     // Mark OTP as used
     await this.otpModel.updateOne({ _id: otp._id }, { isUsed: true });
+    await this.createVerifiedMarker(identifier, type);
 
     return { verified: true };
+  }
+
+  /**
+   * Records a short-lived, single-use proof that `identifier` just passed
+   * OTP verification. Consumers (register, mark-verified) require this proof
+   * before trusting a "verified" flag, so a verified status can no longer be
+   * forged by a direct API call. Mirrors the password-reset VERIFIED record.
+   */
+  private async createVerifiedMarker(
+    identifier: string,
+    type: OtpType,
+  ): Promise<void> {
+    await this.otpModel.create({
+      identifier,
+      code: "VERIFIED",
+      type,
+      purpose: OtpPurpose.VERIFICATION,
+      // Generous window: the pro signup wizard verifies the phone, then the
+      // user still fills name/city/password + uploads an avatar before
+      // /auth/register consumes this. A short TTL would silently drop their
+      // verified flag on a slow signup.
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 60 min to consume
+      isUsed: false,
+    });
+  }
+
+  /**
+   * Consumes a VERIFIED marker for `identifier`/`type` produced by a recent
+   * successful verifyOtp. Returns true (and burns the marker) when the proof
+   * exists, false otherwise. Callers decide whether absence is fatal.
+   */
+  async consumeVerificationMarker(
+    identifier: string,
+    type: OtpType,
+  ): Promise<boolean> {
+    const marker = await this.otpModel
+      .findOne({
+        identifier,
+        type,
+        purpose: OtpPurpose.VERIFICATION,
+        code: "VERIFIED",
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
+      })
+      .sort({ createdAt: -1 });
+
+    if (!marker) return false;
+    await this.otpModel.updateOne({ _id: marker._id }, { isUsed: true });
+    return true;
   }
 
   // Cleanup expired OTPs (can be called by a cron job)

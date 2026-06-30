@@ -20,7 +20,8 @@ export type PaymentProviderName =
 
 export interface CreateIntentParams {
   amountMinor: number;
-  currency: "GEL";
+  /** ISO currency code. GE/GEL is the only live market today. */
+  currency: string;
   description: string;
   /** Internal IDs we want echoed back in webhook payloads. */
   metadata: Record<string, string>;

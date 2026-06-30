@@ -2780,13 +2780,17 @@ export class UsersService {
           bypassModeration: true,
         });
       }
-      // Nothing applies instantly; return the (unchanged) live profile.
+      // Nothing applies instantly; the change is queued for admin review.
+      // Flag the response so the client can tell the truth ("submitted for
+      // review") instead of faking a successful save and reverting on reload.
       const current = await this.userModel
         .findById(userId)
         .select("-password")
         .exec();
       if (!current) throw new NotFoundException("User not found");
-      return current;
+      const staged: any = current.toJSON();
+      staged.moderationStaged = true;
+      return staged;
     }
 
     // Update the pro-specific fields on the user document
@@ -2809,6 +2813,11 @@ export class UsersService {
         proData.lastName !== undefined ? proData.lastName : user.lastName;
       const composed = [first, last].filter(Boolean).join(" ").trim();
       if (composed) updateData.name = composed;
+    } else if (typeof proData.name === "string" && proData.name.trim()) {
+      // Allow a direct display-name edit (the inline name editor on the
+      // detail page sends `{ name }` rather than first/last). Without this an
+      // admin editing another pro's name would be silently dropped.
+      updateData.name = proData.name.trim();
     }
     if (proData.title !== undefined) updateData.title = proData.title;
     if (proData.bio !== undefined) updateData.bio = proData.bio;
@@ -2993,6 +3002,8 @@ export class UsersService {
       updateData.facebookUrl = proData.facebookUrl;
     if (proData.linkedinUrl !== undefined)
       updateData.linkedinUrl = proData.linkedinUrl;
+    if (proData.tiktokUrl !== undefined)
+      updateData.tiktokUrl = proData.tiktokUrl;
     if (proData.websiteUrl !== undefined)
       updateData.websiteUrl = proData.websiteUrl;
 

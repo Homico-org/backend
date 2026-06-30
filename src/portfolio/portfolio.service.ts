@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PortfolioItem, ProjectSource, ProjectStatus, ProjectType } from './schemas/portfolio-item.schema';
@@ -75,7 +75,13 @@ export class PortfolioService {
     return item;
   }
 
-  async update(id: string, updateDto: Partial<CreatePortfolioItemDto>): Promise<PortfolioItem> {
+  async update(
+    id: string,
+    updateDto: Partial<CreatePortfolioItemDto>,
+    // When provided (non-admin callers), the item must belong to this owner.
+    ownerId?: string,
+  ): Promise<PortfolioItem> {
+    if (ownerId) await this.assertOwnership(id, ownerId);
     const item = await this.portfolioItemModel
       .findByIdAndUpdate(id, updateDto, { new: true })
       .exec();
@@ -85,10 +91,22 @@ export class PortfolioService {
     return item;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, ownerId?: string): Promise<void> {
+    if (ownerId) await this.assertOwnership(id, ownerId);
     const result = await this.portfolioItemModel.findByIdAndDelete(id).exec();
     if (!result) {
       throw new NotFoundException('Portfolio item not found');
+    }
+  }
+
+  // Guards against IDOR: a non-admin caller may only touch items they own.
+  private async assertOwnership(id: string, ownerId: string): Promise<void> {
+    const item = await this.portfolioItemModel.findById(id).select('proId').exec();
+    if (!item) {
+      throw new NotFoundException('Portfolio item not found');
+    }
+    if (item.proId?.toString() !== ownerId) {
+      throw new ForbiddenException('You can only modify your own portfolio items');
     }
   }
 
