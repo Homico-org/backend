@@ -27,6 +27,7 @@ import { PollsService } from './polls.service';
 import { ProjectTrackingService } from './project-tracking.service';
 import { JobPropertyType, JobStatus } from './schemas/job.schema';
 import { ProjectStage } from './schemas/project-tracking.schema';
+import { getClientIp } from '../common/utils/client-ip';
 
 @ApiTags('Jobs')
 @Controller('jobs')
@@ -622,8 +623,8 @@ export class JobsController {
     @Req() req: any,
   ) {
     const userId = user?.userId;
-    // Use IP address as visitor ID for anonymous users
-    const visitorId = !userId ? (req.ip || req.headers['x-forwarded-for'] || 'unknown') : undefined;
+    // Use the real client IP (behind Cloudflare) as visitor ID for anonymous users
+    const visitorId = !userId ? getClientIp(req) : undefined;
     return this.jobsService.findJobById(id, userId, visitorId);
   }
 
