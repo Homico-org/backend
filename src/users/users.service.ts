@@ -2497,6 +2497,10 @@ export class UsersService {
     const data = users.map((user) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const userObj = { ...user } as any;
+      // Admin-only signal — the browse listing comes from .aggregate() (no
+      // toJSON), so strip premiumSource here so public users can't tell a
+      // free admin grant apart from a paid premium.
+      delete userObj.premiumSource;
       const portfolioItemCount =
         portfolioCountMap.get(user._id.toString()) || 0;
       const embeddedCount = userObj.portfolioProjects?.length || 0;

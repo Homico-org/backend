@@ -551,6 +551,15 @@ export class User extends Document {
   @Prop({ default: "none" })
   premiumTier: string;
 
+  // How the CURRENT premium was obtained: "purchase" (paid via Flitt) or
+  // "admin" (granted for free by an admin — a 1-month badge that auto-expires
+  // via the hourly premium-expire cron, exactly like an unrenewed paid sub).
+  // Admin-only signal so the team can tell a granted badge from a purchased
+  // one; NEVER surfaced on public cards/profiles. Cleared when premium lapses
+  // or is revoked.
+  @Prop({ enum: ["purchase", "admin"], default: null })
+  premiumSource: string;
+
   // Super Pro (elite) social-promo pipeline. Once a Super Pro sub passes the
   // 3-day refund window, the content team prepares FB/Instagram content +
   // storytelling; this tracks where each pro is in that workflow.
@@ -750,6 +759,10 @@ function normalizePricingModel(
 UserSchema.set("toJSON", {
   virtuals: true,
   transform: (_doc: any, ret: any) => {
+    // Admin-only signal: never expose HOW premium was obtained (free grant vs
+    // paid) on public/self serialization. The admin list reads via .lean()
+    // (which bypasses toJSON), so it still sees premiumSource.
+    delete ret.premiumSource;
     const normalized = normalizePricingModel(
       ret.pricingModel,
       ret.basePrice,

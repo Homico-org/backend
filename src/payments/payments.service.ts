@@ -576,6 +576,9 @@ export class PaymentsService {
       isPremium: true,
       premiumTier: tier,
       premiumExpiresAt,
+      // Paid via Flitt — mark the source so the admin UI can tell this apart
+      // from a free admin-granted badge (never exposed to public users).
+      premiumSource: "purchase",
       // Stamp the start of THIS paid period so the 3-day money-back
       // cancellation window is measured from the charge, not the expiry.
       premiumStartedAt: now,
