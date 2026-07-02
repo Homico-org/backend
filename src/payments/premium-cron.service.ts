@@ -42,7 +42,7 @@ export class PremiumCronService {
     const ids = expired.map((u) => u._id);
     await this.userModel.updateMany(
       { _id: { $in: ids } },
-      { $set: { isPremium: false, premiumTier: 'none' } },
+      { $set: { isPremium: false, premiumTier: 'none', premiumSource: null } },
     );
 
     for (const id of ids) {
