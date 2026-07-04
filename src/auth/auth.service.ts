@@ -82,6 +82,12 @@ export class AuthService {
   }
 
   private buildUserResponse(user: any) {
+    // Read-time premium expiry guard, mirroring GET /users/me: never present a
+    // lapsed subscription as active (the hourly cron owns the persistent flip).
+    const premiumActive =
+      !!user.isPremium &&
+      (!user.premiumExpiresAt ||
+        new Date(user.premiumExpiresAt) > new Date());
     return {
       id: user._id,
       uid: user.uid,
@@ -98,6 +104,13 @@ export class AuthService {
       verificationStatus: user.verificationStatus || "pending",
       registrationStep: user.registrationStep ?? 0,
       servicePricing: user.servicePricing || [],
+      // Premium subscription state so the header/dropdown reflect it right
+      // after login/register - WITHOUT waiting for a /users/me refresh.
+      // Without this, a premium pro sees the "Go Premium" CTA + upsell until
+      // a full page reload (looked like they'd lost their subscription).
+      isPremium: premiumActive,
+      premiumTier: premiumActive ? user.premiumTier || "none" : "none",
+      premiumExpiresAt: user.premiumExpiresAt,
     };
   }
 
