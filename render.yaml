@@ -138,6 +138,11 @@ services:
         value: contact@homico.co
       - key: PRELUDE_API_KEY
         sync: false
+      # Google OAuth client ID (ID-token audience in /auth/google). MUST match
+      # the dev frontend's NEXT_PUBLIC_GOOGLE_CLIENT_ID, else the Google button
+      # shows on dev but the backend rejects the token ("not configured").
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: FRONTEND_URL
         value: https://dev.homico.ge
       - key: PUBLIC_BACKEND_URL
