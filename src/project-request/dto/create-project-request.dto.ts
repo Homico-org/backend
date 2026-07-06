@@ -86,6 +86,10 @@ export class CreateRoomEntryDto {
 
   @IsNumber()
   @IsOptional()
+  wallArea?: number;
+
+  @IsNumber()
+  @IsOptional()
   budget?: number;
 
   @IsString()
