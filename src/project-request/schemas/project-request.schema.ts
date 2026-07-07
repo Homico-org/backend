@@ -755,7 +755,9 @@ export class ProjectRequest extends Document {
   @Prop({ required: true })
   title: string;
 
-  @Prop({ required: true })
+  // Optional since the creation wizard no longer collects a description
+  // (task 1.2). Defaults to '' so existing string reads stay safe.
+  @Prop({ default: '' })
   description: string;
 
   @Prop({ required: true })

@@ -161,7 +161,10 @@ export class ProjectRequestService {
   ): void {
     this.activityModel
       .create({
-        projectId,
+        // Normalise to ObjectId - callers pass either the raw string route id
+        // (mutations) or a real ObjectId (create). The read query matches on
+        // ObjectId, so both MUST be stored the same way or entries go missing.
+        projectId: new Types.ObjectId(String(projectId)),
         actorId: actorId ? new Types.ObjectId(actorId) : undefined,
         actorRole,
         type,
@@ -230,6 +233,7 @@ export class ProjectRequestService {
       width: r.width,
       height: r.height,
       area: this.withArea(r),
+      wallArea: r.wallArea,
       budget: r.budget,
       note: r.note,
       photos: r.photos ?? [],
@@ -275,6 +279,9 @@ export class ProjectRequestService {
     const request = new this.projectRequestModel({
       clientId,
       ...rest,
+      // description is optional in the creation wizard (task 1.2); the schema
+      // still requires a string, so default to empty when omitted.
+      description: rest.description ?? '',
       engagements,
       milestones,
       rooms,

@@ -180,8 +180,12 @@ export class CreateProjectRequestDto {
   @IsString()
   title: string;
 
+  // Optional since the creation wizard no longer collects a description
+  // (task 1.2). Falls back to an empty string server-side; the schema still
+  // stores a string, so existing reads stay safe.
   @IsString()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @IsString()
   location: string;
