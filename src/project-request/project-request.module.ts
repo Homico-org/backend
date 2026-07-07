@@ -4,6 +4,10 @@ import { ProjectRequestService } from './project-request.service';
 import { ProjectRequestController } from './project-request.controller';
 import { ProjectRequest, ProjectRequestSchema } from './schemas/project-request.schema';
 import {
+  ProjectActivity,
+  ProjectActivitySchema,
+} from './schemas/project-activity.schema';
+import {
   ProjectTracking,
   ProjectTrackingSchema,
 } from '../jobs/schemas/project-tracking.schema';
@@ -18,6 +22,8 @@ import { JobsModule } from '../jobs/jobs.module';
   imports: [
     MongooseModule.forFeature([
       { name: ProjectRequest.name, schema: ProjectRequestSchema },
+      // Per-project activity feed (the History tab). Separate collection.
+      { name: ProjectActivity.name, schema: ProjectActivitySchema },
       // Read-only here: the dashboard rolls up each engagement's
       // per-worker workspace (progress, stage, history).
       { name: ProjectTracking.name, schema: ProjectTrackingSchema },
