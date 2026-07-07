@@ -58,6 +58,7 @@ import { JobBudgetType, JobType } from '../jobs/schemas/job.schema';
 import { ProjectTracking } from '../jobs/schemas/project-tracking.schema';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
 import { Job } from '../jobs/schemas/job.schema';
+import { ProjectActivity } from './schemas/project-activity.schema';
 
 // Engagement statuses that count as "done" when rolling up project progress.
 const COMPLETED_ENGAGEMENT = EngagementStatus.COMPLETED;
@@ -135,11 +136,58 @@ export class ProjectRequestService {
     private bookingModel: Model<Booking>,
     @InjectModel(Job.name)
     private jobModel: Model<Job>,
+    @InjectModel(ProjectActivity.name)
+    private activityModel: Model<ProjectActivity>,
     private readonly jobsService: JobsService,
   ) {}
 
   private shortId(prefix: string): string {
     return `${prefix}${new Types.ObjectId().toString().slice(-8)}`;
+  }
+
+  // Fire-and-forget: append a row to the project activity feed (History tab).
+  // Never throws - a logging failure must not break the underlying action.
+  private logActivity(
+    projectId: unknown,
+    actorId: string | undefined,
+    actorRole: string,
+    type: string,
+    target?: {
+      targetType?: string;
+      targetId?: string;
+      targetLabel?: string;
+      metadata?: Record<string, unknown>;
+    },
+  ): void {
+    this.activityModel
+      .create({
+        // Normalise to ObjectId - callers pass either the raw string route id
+        // (mutations) or a real ObjectId (create). The read query matches on
+        // ObjectId, so both MUST be stored the same way or entries go missing.
+        projectId: new Types.ObjectId(String(projectId)),
+        actorId: actorId ? new Types.ObjectId(actorId) : undefined,
+        actorRole,
+        type,
+        ...(target ?? {}),
+      })
+      .catch(() => undefined);
+  }
+
+  // Read the project activity feed (newest first), with the actor's name/avatar
+  // resolved via populate. Access gated to project members (client / editor).
+  async getActivity(
+    id: string,
+    userId: string,
+    limit = 100,
+  ): Promise<unknown[]> {
+    await this.findForViewer(id, userId);
+    return this.activityModel
+      .find({ projectId: new Types.ObjectId(id) })
+      .sort({ createdAt: -1 })
+      .limit(Math.min(Math.max(limit, 1), 200))
+      .populate('actorId', 'name avatar')
+      .lean()
+      .exec();
   }
 
   async create(
@@ -185,6 +233,7 @@ export class ProjectRequestService {
       width: r.width,
       height: r.height,
       area: this.withArea(r),
+      wallArea: r.wallArea,
       budget: r.budget,
       note: r.note,
       photos: r.photos ?? [],
@@ -230,6 +279,9 @@ export class ProjectRequestService {
     const request = new this.projectRequestModel({
       clientId,
       ...rest,
+      // description is optional in the creation wizard (task 1.2); the schema
+      // still requires a string, so default to empty when omitted.
+      description: rest.description ?? '',
       engagements,
       milestones,
       rooms,
@@ -237,7 +289,15 @@ export class ProjectRequestService {
       scopeItems,
       status: ProjectStatus.DRAFT,
     });
-    return request.save();
+    const saved = await request.save();
+    this.logActivity(
+      (saved as any)._id,
+      clientId,
+      'client',
+      'project.created',
+      { targetType: 'project', targetLabel: saved.title },
+    );
+    return saved;
   }
 
   async findAll(filters?: {
@@ -1034,7 +1094,7 @@ export class ProjectRequestService {
     userId: string,
     dto: CreateRoomDto,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
     if (!Array.isArray(project.rooms)) project.rooms = [];
     project.rooms.push({
       id: this.shortId('RM'),
@@ -1049,6 +1109,10 @@ export class ProjectRequestService {
       photos: dto.photos ?? [],
       createdAt: new Date(),
     } as any);
+    this.logActivity(id, userId, role, 'room.added', {
+      targetType: 'room',
+      targetLabel: dto.name,
+    });
     return project.save();
   }
 
@@ -1058,7 +1122,7 @@ export class ProjectRequestService {
     roomId: string,
     dto: UpdateRoomDto,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
     const room = (project.rooms ?? []).find((r) => r.id === roomId);
     if (!room) throw new NotFoundException('Room not found');
     Object.assign(
@@ -1073,6 +1137,11 @@ export class ProjectRequestService {
       });
       if (a != null) room.area = a;
     }
+    this.logActivity(id, userId, role, 'room.updated', {
+      targetType: 'room',
+      targetId: roomId,
+      targetLabel: room.name,
+    });
     return project.save();
   }
 
@@ -1081,8 +1150,16 @@ export class ProjectRequestService {
     userId: string,
     roomId: string,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
+    const removedRoom = (project.rooms ?? []).find((r) => r.id === roomId);
     project.rooms = (project.rooms ?? []).filter((r) => r.id !== roomId);
+    if (removedRoom) {
+      this.logActivity(id, userId, role, 'room.removed', {
+        targetType: 'room',
+        targetId: roomId,
+        targetLabel: removedRoom.name,
+      });
+    }
     // Unlink everything that pointed at this space (it falls to whole-object).
     for (const sel of project.selections ?? []) {
       if (sel.roomId === roomId) sel.roomId = undefined;
@@ -1355,7 +1432,7 @@ export class ProjectRequestService {
     userId: string,
     dto: AddProductDto,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
     project.products.push({
       id: this.shortId('P'),
       name: dto.name,
@@ -1380,6 +1457,10 @@ export class ProjectRequestService {
       createdAt: new Date(),
     } as any);
     this.logProduct(project, 'added', dto.name);
+    this.logActivity(id, userId, role, 'product.added', {
+      targetType: 'product',
+      targetLabel: dto.name,
+    });
     return project.save();
   }
 
@@ -1389,7 +1470,7 @@ export class ProjectRequestService {
     productId: string,
     dto: UpdateProductDto,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
     const product = project.products.find((p) => p.id === productId);
     if (!product) throw new NotFoundException('Product not found');
     const prevStatus = product.status;
@@ -1411,6 +1492,18 @@ export class ProjectRequestService {
       statusChanged ? dto.status : 'edited',
       product.name,
     );
+    this.logActivity(
+      id,
+      userId,
+      role,
+      statusChanged ? 'product.status_changed' : 'product.updated',
+      {
+        targetType: 'product',
+        targetId: productId,
+        targetLabel: product.name,
+        metadata: statusChanged ? { status: dto.status } : undefined,
+      },
+    );
     return project.save();
   }
 
@@ -1428,6 +1521,12 @@ export class ProjectRequestService {
     product.approvalStatus = dto.status;
     product.approvedAt =
       dto.status === ApprovalStatus.APPROVED ? new Date() : undefined;
+    this.logActivity(id, clientId, 'client', 'product.reviewed', {
+      targetType: 'product',
+      targetId: productId,
+      targetLabel: product.name,
+      metadata: { status: dto.status },
+    });
     return project.save();
   }
 
@@ -1436,10 +1535,15 @@ export class ProjectRequestService {
     userId: string,
     productId: string,
   ): Promise<ProjectRequest> {
-    const { project } = await this.findForViewer(id, userId);
+    const { project, role } = await this.findForViewer(id, userId);
     const product = project.products.find((p) => p.id === productId);
     if (!product) throw new NotFoundException('Product not found');
     this.logProduct(project, 'removed', product.name);
+    this.logActivity(id, userId, role, 'product.removed', {
+      targetType: 'product',
+      targetId: productId,
+      targetLabel: product.name,
+    });
     project.products = project.products.filter((p) => p.id !== productId);
     return project.save();
   }
@@ -1452,6 +1556,7 @@ export class ProjectRequestService {
     dto: UpdateProjectDto,
   ): Promise<ProjectRequest> {
     const project = await this.findOwned(id, clientId);
+    const prevStatus = project.status;
     const patch: any = Object.fromEntries(
       Object.entries(dto).filter(([, v]) => v !== undefined),
     );
@@ -1460,6 +1565,16 @@ export class ProjectRequestService {
     if (dto.estimatedEndDate)
       patch.estimatedEndDate = new Date(dto.estimatedEndDate);
     Object.assign(project, patch);
+    const statusChanged = dto.status !== undefined && dto.status !== prevStatus;
+    this.logActivity(
+      id,
+      clientId,
+      'client',
+      statusChanged ? 'project.status_changed' : 'project.updated',
+      statusChanged
+        ? { metadata: { from: prevStatus, to: dto.status } }
+        : undefined,
+    );
     return project.save();
   }
 
@@ -1483,6 +1598,10 @@ export class ProjectRequestService {
     project.deletedAt = new Date();
     project.deletedBy = new Types.ObjectId(clientId);
     await project.save();
+    this.logActivity(id, clientId, 'client', 'project.deleted', {
+      targetType: 'project',
+      targetLabel: project.title,
+    });
     return { deleted: true };
   }
 
@@ -1707,6 +1826,10 @@ export class ProjectRequestService {
       color: dto.color,
       order,
     });
+    this.logActivity(id, clientId, 'client', 'step.added', {
+      targetType: 'step',
+      targetLabel: dto.name.trim(),
+    });
     return project.save();
   }
 
@@ -1733,7 +1856,15 @@ export class ProjectRequestService {
     clientId: string,
   ): Promise<ProjectRequest> {
     const project = await this.findOwned(id, clientId);
+    const removedStep = project.steps.find((s) => s.id === stepId);
     project.steps = project.steps.filter((s) => s.id !== stepId);
+    if (removedStep) {
+      this.logActivity(id, clientId, 'client', 'step.removed', {
+        targetType: 'step',
+        targetId: stepId,
+        targetLabel: removedStep.name,
+      });
+    }
     // Detach any engagements that pointed at this step so the data stays
     // consistent (the engagement falls back to its legacy phase).
     project.engagements.forEach((e) => {

@@ -99,6 +99,13 @@ export class ProjectRequestController {
     return this.projectRequestService.getDashboard(id, user.userId);
   }
 
+  // Project activity feed (the History tab): every meaningful action on the
+  // project, newest first. Members only (client / editor).
+  @Get(':id/activity')
+  getActivity(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.projectRequestService.getActivity(id, user.userId);
+  }
+
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
