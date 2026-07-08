@@ -1109,11 +1109,14 @@ export class ProjectRequestService {
       photos: dto.photos ?? [],
       createdAt: new Date(),
     } as any);
+    const saved = await project.save();
+    // Log only after the save succeeds so a failed write never leaves a
+    // phantom entry in the activity feed (the log is a separate collection).
     this.logActivity(id, userId, role, 'room.added', {
       targetType: 'room',
       targetLabel: dto.name,
     });
-    return project.save();
+    return saved;
   }
 
   async updateRoom(
@@ -1137,12 +1140,13 @@ export class ProjectRequestService {
       });
       if (a != null) room.area = a;
     }
+    const saved = await project.save();
     this.logActivity(id, userId, role, 'room.updated', {
       targetType: 'room',
       targetId: roomId,
       targetLabel: room.name,
     });
-    return project.save();
+    return saved;
   }
 
   async removeRoom(
@@ -1152,14 +1156,8 @@ export class ProjectRequestService {
   ): Promise<ProjectRequest> {
     const { project, role } = await this.findForViewer(id, userId);
     const removedRoom = (project.rooms ?? []).find((r) => r.id === roomId);
+    if (!removedRoom) throw new NotFoundException('Room not found');
     project.rooms = (project.rooms ?? []).filter((r) => r.id !== roomId);
-    if (removedRoom) {
-      this.logActivity(id, userId, role, 'room.removed', {
-        targetType: 'room',
-        targetId: roomId,
-        targetLabel: removedRoom.name,
-      });
-    }
     // Unlink everything that pointed at this space (it falls to whole-object).
     for (const sel of project.selections ?? []) {
       if (sel.roomId === roomId) sel.roomId = undefined;
@@ -1173,7 +1171,13 @@ export class ProjectRequestService {
     for (const d of project.documents ?? []) {
       if (d.roomId === roomId) d.roomId = undefined;
     }
-    return project.save();
+    const saved = await project.save();
+    this.logActivity(id, userId, role, 'room.removed', {
+      targetType: 'room',
+      targetId: roomId,
+      targetLabel: removedRoom.name,
+    });
+    return saved;
   }
 
   // === Scope / takeoff (bill of works) ===
@@ -1457,11 +1461,12 @@ export class ProjectRequestService {
       createdAt: new Date(),
     } as any);
     this.logProduct(project, 'added', dto.name);
+    const saved = await project.save();
     this.logActivity(id, userId, role, 'product.added', {
       targetType: 'product',
       targetLabel: dto.name,
     });
-    return project.save();
+    return saved;
   }
 
   async updateProduct(
@@ -1492,6 +1497,7 @@ export class ProjectRequestService {
       statusChanged ? dto.status : 'edited',
       product.name,
     );
+    const saved = await project.save();
     this.logActivity(
       id,
       userId,
@@ -1504,7 +1510,7 @@ export class ProjectRequestService {
         metadata: statusChanged ? { status: dto.status } : undefined,
       },
     );
-    return project.save();
+    return saved;
   }
 
   // Client signs off (or requests changes) on a schedule line item. Client-only
@@ -1521,13 +1527,14 @@ export class ProjectRequestService {
     product.approvalStatus = dto.status;
     product.approvedAt =
       dto.status === ApprovalStatus.APPROVED ? new Date() : undefined;
+    const saved = await project.save();
     this.logActivity(id, clientId, 'client', 'product.reviewed', {
       targetType: 'product',
       targetId: productId,
       targetLabel: product.name,
       metadata: { status: dto.status },
     });
-    return project.save();
+    return saved;
   }
 
   async removeProduct(
@@ -1539,13 +1546,14 @@ export class ProjectRequestService {
     const product = project.products.find((p) => p.id === productId);
     if (!product) throw new NotFoundException('Product not found');
     this.logProduct(project, 'removed', product.name);
+    project.products = project.products.filter((p) => p.id !== productId);
+    const saved = await project.save();
     this.logActivity(id, userId, role, 'product.removed', {
       targetType: 'product',
       targetId: productId,
       targetLabel: product.name,
     });
-    project.products = project.products.filter((p) => p.id !== productId);
-    return project.save();
+    return saved;
   }
 
   // Client edits top-level project settings (title, budget, dates, status,
@@ -1566,6 +1574,7 @@ export class ProjectRequestService {
       patch.estimatedEndDate = new Date(dto.estimatedEndDate);
     Object.assign(project, patch);
     const statusChanged = dto.status !== undefined && dto.status !== prevStatus;
+    const saved = await project.save();
     this.logActivity(
       id,
       clientId,
@@ -1575,7 +1584,7 @@ export class ProjectRequestService {
         ? { metadata: { from: prevStatus, to: dto.status } }
         : undefined,
     );
-    return project.save();
+    return saved;
   }
 
   // Soft-delete the whole project. Owner-only - editors (manage-granted pros)
@@ -1643,17 +1652,27 @@ export class ProjectRequestService {
 
   async updateStatus(
     id: string,
+    clientId: string,
     status: ProjectStatus,
   ): Promise<ProjectRequest> {
-    const request = await this.projectRequestModel
-      .findByIdAndUpdate(id, { status }, { new: true })
-      .exec();
-
-    if (!request) {
-      throw new NotFoundException('Project not found');
+    // findByIdAndUpdate skips schema enum validation, so a bogus status used
+    // to be persisted verbatim. Validate against the enum, gate on ownership
+    // (like updateProject), and journal the change through the same path.
+    if (!Object.values(ProjectStatus).includes(status)) {
+      throw new BadRequestException('Invalid project status');
     }
-
-    return request;
+    const project = await this.findOwned(id, clientId);
+    const prevStatus = project.status;
+    project.status = status;
+    const saved = await project.save();
+    if (status !== prevStatus) {
+      this.logActivity(id, clientId, 'client', 'project.status_changed', {
+        targetType: 'project',
+        targetLabel: project.title,
+        metadata: { from: prevStatus, to: status },
+      });
+    }
+    return saved;
   }
 
   async assignToPro(id: string, proId: string): Promise<ProjectRequest> {
@@ -1826,11 +1845,12 @@ export class ProjectRequestService {
       color: dto.color,
       order,
     });
+    const saved = await project.save();
     this.logActivity(id, clientId, 'client', 'step.added', {
       targetType: 'step',
       targetLabel: dto.name.trim(),
     });
-    return project.save();
+    return saved;
   }
 
   async updateStep(
@@ -1857,14 +1877,8 @@ export class ProjectRequestService {
   ): Promise<ProjectRequest> {
     const project = await this.findOwned(id, clientId);
     const removedStep = project.steps.find((s) => s.id === stepId);
+    if (!removedStep) throw new NotFoundException('Step not found');
     project.steps = project.steps.filter((s) => s.id !== stepId);
-    if (removedStep) {
-      this.logActivity(id, clientId, 'client', 'step.removed', {
-        targetType: 'step',
-        targetId: stepId,
-        targetLabel: removedStep.name,
-      });
-    }
     // Detach any engagements that pointed at this step so the data stays
     // consistent (the engagement falls back to its legacy phase).
     project.engagements.forEach((e) => {
@@ -1885,7 +1899,13 @@ export class ProjectRequestService {
       .forEach((s, i) => {
         s.order = i;
       });
-    return project.save();
+    const saved = await project.save();
+    this.logActivity(id, clientId, 'client', 'step.removed', {
+      targetType: 'step',
+      targetId: stepId,
+      targetLabel: removedStep.name,
+    });
+    return saved;
   }
 
   async reorderSteps(

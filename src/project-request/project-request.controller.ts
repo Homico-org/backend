@@ -108,10 +108,11 @@ export class ProjectRequestController {
 
   @Patch(':id/status')
   updateStatus(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Body('status') status: ProjectStatus,
   ) {
-    return this.projectRequestService.updateStatus(id, status);
+    return this.projectRequestService.updateStatus(id, user.userId, status);
   }
 
   // Client edits top-level project settings.
