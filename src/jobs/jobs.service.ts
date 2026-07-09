@@ -573,10 +573,10 @@ export class JobsService {
       [data, total] = await Promise.all([
         this.jobModel
           .find(query)
-          .populate(
-            "clientId",
-            "name email avatar city accountType companyName",
-          )
+          // Public job board: never expose the client's contact (email/phone)
+          // in the listing. Contact is only revealed to the owner / hired pro
+          // on the job detail (see findJobById).
+          .populate("clientId", "name avatar city accountType companyName")
           .sort(sortOption)
           .skip(skip)
           .limit(limit)
@@ -620,6 +620,18 @@ export class JobsService {
     // Don't count view if viewer is the job owner
     const isOwner =
       userId && job.clientId && (job.clientId as any)._id.toString() === userId;
+
+    // Client contact (email/phone) is private: only the job owner and the
+    // hired pro may see it (the pro's "you've been hired" banner shows the
+    // phone CTA). Everyone else — anonymous visitors, other pros, other
+    // clients — gets the job WITHOUT the client's contact details.
+    const jobHiredProId = (job as any).hiredProId?.toString();
+    const canSeeClientContact =
+      !!isOwner || (!!userId && !!jobHiredProId && jobHiredProId === userId);
+    if (!canSeeClientContact && job.clientId) {
+      delete (job.clientId as any).email;
+      delete (job.clientId as any).phone;
+    }
 
     if (!isOwner) {
       // Try to record unique view
