@@ -138,6 +138,11 @@ export class AuthService {
     }
     const user = await this.usersService.create({
       ...createUserDto,
+      // SECURITY: never let a public registration self-assign a privileged
+      // role. Only client/pro are selectable here; anything else (notably
+      // `admin`, which the DTO enum still lists for internal use) falls back
+      // to client. Admins are provisioned out-of-band, never via /auth/register.
+      role: createUserDto.role === UserRole.PRO ? UserRole.PRO : UserRole.CLIENT,
       isPhoneVerified,
     });
 
