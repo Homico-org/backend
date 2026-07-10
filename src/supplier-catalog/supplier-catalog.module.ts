@@ -13,6 +13,10 @@ import {
   WooCommerceStoreAdapter,
   WooCommerceAdapterConfig,
 } from './adapters/woocommerce-store.adapter';
+import {
+  GenericFeedAdapter,
+  GenericFeedAdapterConfig,
+} from './adapters/generic-feed.adapter';
 import { DominoScraperAdapter } from './adapters/domino-scraper.adapter';
 import { HeadlessBrowserService } from './adapters/headless-browser.service';
 import {
@@ -168,6 +172,24 @@ const WOO_CONFIGS: WooCommerceAdapterConfig[] = [
   { supplierKey: 'contempo', baseUrl: 'https://contempo.ge' },
 ];
 
+// === Partner JSON feeds/APIs (cooperating shops that give us an endpoint). ===
+// One GenericFeedAdapter, per-shop config with a field map. Add a shop here the
+// moment they send a sample of their product feed - no new adapter class.
+//   TODO(kasco): activate once the owner sends the endpoint + field names.
+//   Example shape (fill from his real sample):
+//   {
+//     supplierKey: 'kasco',
+//     baseUrl: 'https://kasco.ge',
+//     endpoint: '/api/products?page={page}',
+//     itemsPath: 'data',            // '' if the response is a bare array
+//     fieldMap: {
+//       externalId: 'id', name: 'title', price: 'price',
+//       stock: 'quantity', images: 'images', category: 'category',
+//       url: 'url',
+//     },
+//   },
+const FEED_CONFIGS: GenericFeedAdapterConfig[] = [];
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -193,6 +215,7 @@ const WOO_CONFIGS: WooCommerceAdapterConfig[] = [
         legoroom,
         ...CSCART_CONFIGS.map((c) => new CsCartScraperAdapter(c)),
         ...WOO_CONFIGS.map((c) => new WooCommerceStoreAdapter(c)),
+        ...FEED_CONFIGS.map((c) => new GenericFeedAdapter(c)),
         ...HEADLESS_CONFIGS.map((c) => new HeadlessHeuristicAdapter(c, headless)),
         domino,
       ],
