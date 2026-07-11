@@ -49,10 +49,17 @@ export interface GenericFeedAdapterConfig {
   baseUrl: string;
   /**
    * Page URL template. `{page}` is substituted per page. Can be absolute or
-   * relative to baseUrl. E.g. '/api/products?page={page}&limit=100'.
+   * relative to baseUrl. E.g. '/api/products?page={page}&limit=100'. For a CSV
+   * feed this is usually a single file URL (no `{page}`).
    */
   endpoint: string;
-  /** Dot-path to the array of items in the response. Empty = response IS the array. */
+  /**
+   * Feed format. 'json' (default) parses a JSON response; 'csv' fetches a CSV
+   * export, treats the header row as keys, and applies the same `fieldMap`
+   * (dot-paths are just column names). CSV feeds are fetched as a single file.
+   */
+  format?: 'json' | 'csv';
+  /** Dot-path to the array of items in a JSON response. Empty = response IS the array. */
   itemsPath?: string;
   fieldMap: FeedFieldMap;
   /** Price is already in minor units (tetri)? Default false (major units, ×100). */
@@ -87,6 +94,7 @@ export class GenericFeedAdapter implements SupplierAdapter {
       supplierKey: config.supplierKey,
       baseUrl: config.baseUrl.replace(/\/$/, ''),
       endpoint: config.endpoint,
+      format: config.format ?? 'json',
       itemsPath: config.itemsPath ?? '',
       fieldMap: config.fieldMap,
       priceInMinor: config.priceInMinor ?? false,
@@ -110,6 +118,8 @@ export class GenericFeedAdapter implements SupplierAdapter {
         if (normalized) yield normalized;
       }
 
+      // A CSV feed is a single file - never paginate past the first fetch.
+      if (this.cfg.format === 'csv') break;
       if (items.length < this.cfg.perPage) break; // last page
       await this.delay(this.cfg.requestDelayMs);
     }
@@ -217,10 +227,93 @@ export class GenericFeedAdapter implements SupplierAdapter {
   }
 
   private async fetchItems(url: string): Promise<Json[] | null> {
+    if (this.cfg.format === 'csv') {
+      const text = await this.fetchText(url);
+      return text == null ? null : this.parseCsv(text);
+    }
     const data = await this.fetchJson(url);
     if (data == null) return null;
     const root = this.cfg.itemsPath ? this.get(data, this.cfg.itemsPath) : data;
     return Array.isArray(root) ? (root as Json[]) : null;
+  }
+
+  /** Parse a CSV export into row objects keyed by the header row. */
+  private parseCsv(text: string): Json[] {
+    const rows = this.csvRows(text);
+    if (rows.length < 2) return [];
+    const headers = rows[0].map((h) => h.trim());
+    return rows.slice(1).map((cells) => {
+      const obj: Json = {};
+      headers.forEach((h, i) => {
+        obj[h] = cells[i] ?? '';
+      });
+      return obj;
+    });
+  }
+
+  /**
+   * RFC-4180-ish CSV splitter: handles quoted fields with embedded commas,
+   * escaped double-quotes (""), and newlines inside quotes. Comma-delimited.
+   */
+  private csvRows(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let inQuotes = false;
+    const s = text.replace(/\r\n?/g, '\n');
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (s[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field);
+        field = '';
+      } else if (c === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    // Drop fully-empty trailing rows.
+    return rows.filter((r) => !(r.length === 1 && r[0] === ''));
+  }
+
+  private async fetchText(url: string): Promise<string | null> {
+    try {
+      const headers: Record<string, string> = { 'User-Agent': this.USER_AGENT };
+      if (this.cfg.authHeader) {
+        headers[this.cfg.authHeader.name] = this.cfg.authHeader.value;
+      }
+      const res = await fetch(url, { headers, redirect: 'follow' });
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 404) return null;
+        throw new Error(`status ${res.status}`);
+      }
+      return await res.text();
+    } catch (err) {
+      this.logger.warn(
+        `${this.supplierKey}: fetch ${url} failed: ${(err as Error).message}`,
+      );
+      return null;
+    }
   }
 
   private async fetchJson(url: string): Promise<unknown> {
