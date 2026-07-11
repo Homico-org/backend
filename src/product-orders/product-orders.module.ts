@@ -9,6 +9,10 @@ import {
   SupplierProduct,
   SupplierProductSchema,
 } from '../supplier-catalog/schemas/supplier-product.schema';
+import {
+  Supplier,
+  SupplierSchema,
+} from '../supplier-catalog/schemas/supplier.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailService } from '../verification/services/email.service';
 
@@ -22,6 +26,7 @@ import { EmailService } from '../verification/services/email.service';
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },
       { name: SupplierProduct.name, schema: SupplierProductSchema },
+      { name: Supplier.name, schema: SupplierSchema },
     ]),
     NotificationsModule,
   ],

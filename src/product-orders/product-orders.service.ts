@@ -16,6 +16,7 @@ import { EmailService } from '../verification/services/email.service';
 import { User } from '../users/schemas/user.schema';
 import { UserRole } from '../users/schemas/user.schema';
 import { SupplierProduct } from '../supplier-catalog/schemas/supplier-product.schema';
+import { Supplier } from '../supplier-catalog/schemas/supplier.schema';
 import { Order, OrderItem, OrderStatus } from './schemas/order.schema';
 import {
   CreateOrderDto,
@@ -55,6 +56,7 @@ export class ProductOrdersService {
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(SupplierProduct.name)
     private readonly productModel: Model<SupplierProduct>,
+    @InjectModel(Supplier.name) private readonly supplierModel: Model<Supplier>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly paymentsService: PaymentsService,
     private readonly notifications: NotificationsService,
@@ -516,6 +518,64 @@ export class ProductOrdersService {
   async getOrderAdmin(id: string) {
     const order = await this.load(id);
     return order.toObject();
+  }
+
+  /**
+   * Orders a seller needs to fulfil. Homico is merchant of record and ops runs
+   * delivery, so this is a read-only "what to prepare" view: only real (paid+)
+   * orders that contain the caller's products, each narrowed to that seller's
+   * own line items + their subtotal. No customer PII - ops owns delivery.
+   */
+  async listShopOrders(
+    ownerUserId: string,
+    filters: { status?: string; page?: string },
+  ) {
+    const shop = await this.supplierModel
+      .findOne({
+        ownerUserId: new Types.ObjectId(ownerUserId),
+        sourceType: 'manual',
+      })
+      .lean();
+    if (!shop) throw new NotFoundException('NO_SHOP');
+
+    const page = Math.max(1, parseInt(filters.page ?? '1', 10) || 1);
+    const limit = 30;
+    const query: Record<string, unknown> = {
+      'items.supplierKey': shop.key,
+      // Carts that never got paid aren't real orders to a seller.
+      status: { $nin: ['awaiting_payment', 'payment_failed'] },
+    };
+    if (filters.status) query.status = filters.status;
+
+    const [orders, total] = await Promise.all([
+      this.orderModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.orderModel.countDocuments(query),
+    ]);
+
+    const items = orders.map((o) => {
+      const mine = (o.items || []).filter((i) => i.supplierKey === shop.key);
+      const shopSubtotalMinor = mine.reduce(
+        (s, i) => s + i.lineTotalMinor,
+        0,
+      );
+      return {
+        _id: o._id,
+        orderNumber: o.orderNumber,
+        status: o.status,
+        createdAt: (o as unknown as { createdAt: Date }).createdAt,
+        currency: o.currency,
+        items: mine,
+        itemCount: mine.reduce((n, i) => n + i.qty, 0),
+        shopSubtotalMinor,
+      };
+    });
+
+    return { items, total, page, limit, hasMore: page * limit < total };
   }
 
   async updateStatus(
