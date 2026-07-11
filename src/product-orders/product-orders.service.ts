@@ -310,6 +310,35 @@ export class ProductOrdersService {
     } catch (err) {
       this.logger.warn(`order confirmation email failed: ${(err as Error).message}`);
     }
+    // Decrement stock for self-serve shop products (those tracking stockQty).
+    // Scraped/feed products leave stockQty undefined and are skipped - their
+    // stock is owned by the external source's sync, not our orders.
+    await this.decrementStock(order);
+  }
+
+  /**
+   * Draw down `stockQty` for each ordered line that tracks it, flipping
+   * `inStock` false at zero. Best-effort + per-item guarded so one bad line
+   * never blocks the others or the order.
+   */
+  private async decrementStock(order: Order): Promise<void> {
+    for (const item of order.items) {
+      if (!item.supplierProductId) continue;
+      try {
+        const product = await this.productModel
+          .findById(item.supplierProductId)
+          .select('stockQty');
+        if (!product || product.stockQty == null) continue; // untracked - skip
+        const next = Math.max(0, product.stockQty - (item.qty || 0));
+        product.stockQty = next;
+        product.inStock = next > 0;
+        await product.save();
+      } catch (err) {
+        this.logger.warn(
+          `stock decrement failed for ${item.supplierProductId}: ${(err as Error).message}`,
+        );
+      }
+    }
   }
 
   // === Customer reads ===

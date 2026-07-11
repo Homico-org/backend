@@ -90,7 +90,7 @@ export class SupplierProduct extends Document {
   })
   priceHistory: { priceMinor: number; at: Date }[];
 
-  @Prop({ type: String, enum: ['scrape', 'feed'], default: 'scrape' })
+  @Prop({ type: String, enum: ['scrape', 'feed', 'manual'], default: 'scrape' })
   sourceType: SupplierSourceType;
 
   /** Freeform attributes (color, size, m²/box) for future filtering. */

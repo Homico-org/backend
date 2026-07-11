@@ -1,12 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
-import { Supplier } from './schemas/supplier.schema';
+import { Supplier, SupplierStatus } from './schemas/supplier.schema';
 import {
   SupplierProduct,
   SupplierProductDoc,
 } from './schemas/supplier-product.schema';
 import { SearchProductsDto } from './dto/search-products.dto';
+import { CreateShopDto, SellerProductDto } from './dto/seller-shop.dto';
 
 export interface ProductSearchResult {
   items: SupplierProductDoc[];
@@ -45,7 +50,18 @@ export class SupplierCatalogService {
 
     const filter: FilterQuery<SupplierProduct> = { isAvailable: true };
 
-    if (dto.supplierKey) filter.supplierKey = dto.supplierKey;
+    // Hide products from shops still pending moderation / suspended. No-op while
+    // there are no self-serve shops (legacy suppliers have no `status`).
+    const hidden = await this.hiddenSupplierKeys();
+    if (dto.supplierKey) {
+      // A specific hidden shop must return nothing.
+      if (hidden.includes(dto.supplierKey)) {
+        return { items: [], total: 0, page, limit, hasMore: false };
+      }
+      filter.supplierKey = dto.supplierKey;
+    } else if (hidden.length) {
+      filter.supplierKey = { $nin: hidden };
+    }
     if (dto.category) filter.category = dto.category;
     // 3-state stock: only `true` is "in stock"; undefined = unknown must NOT pass.
     if (dto.inStockOnly === 'true' || dto.inStockOnly === '1') {
@@ -109,10 +125,208 @@ export class SupplierCatalogService {
   /** Public-facing supplier list for filter UIs. */
   async listSuppliers() {
     return this.supplierModel
-      .find({ isActive: true })
+      .find({ isActive: true, status: { $nin: ['pending', 'suspended'] } })
       .select('key name productCount')
       .sort({ name: 1 })
       .lean();
+  }
+
+  /**
+   * Supplier keys that must NOT surface publicly (self-serve shops still pending
+   * moderation, or suspended). Legacy suppliers have no `status` and are visible.
+   * Empty today (no manual shops yet), so it's a no-op on the live catalog.
+   */
+  private async hiddenSupplierKeys(): Promise<string[]> {
+    const rows = await this.supplierModel
+      .find({ status: { $in: ['pending', 'suspended'] } })
+      .select('key')
+      .lean<{ key: string }[]>();
+    return rows.map((r) => r.key);
+  }
+
+  // === Self-serve seller portal (Phase B) - owner-scoped shop + product CRUD ===
+
+  /** The shop owned by this user (one per owner), or null. */
+  async getMyShop(ownerUserId: string) {
+    return this.supplierModel
+      .findOne({
+        ownerUserId: new Types.ObjectId(ownerUserId),
+        sourceType: 'manual',
+      })
+      .lean();
+  }
+
+  /** Create the caller's shop. Starts 'pending' (hidden until admin approves). */
+  async createMyShop(ownerUserId: string, dto: CreateShopDto) {
+    const owner = new Types.ObjectId(ownerUserId);
+    if (await this.supplierModel.exists({ ownerUserId: owner, sourceType: 'manual' })) {
+      throw new BadRequestException('SHOP_EXISTS');
+    }
+    const shop = await this.supplierModel.create({
+      key: await this.uniqueShopKey(dto.name),
+      name: dto.name.trim(),
+      baseUrl: dto.baseUrl?.trim() || 'https://homico.ge',
+      sourceType: 'manual',
+      status: 'pending',
+      isActive: true,
+      ownerUserId: owner,
+      logo: dto.logo,
+      legalName: dto.legalName,
+      taxId: dto.taxId,
+      payoutIban: dto.payoutIban,
+      deliveryFeeMinor: Math.round((dto.deliveryFee ?? 0) * 100),
+    });
+    return shop.toObject();
+  }
+
+  private async requireMyShop(ownerUserId: string) {
+    const shop = await this.supplierModel.findOne({
+      ownerUserId: new Types.ObjectId(ownerUserId),
+      sourceType: 'manual',
+    });
+    if (!shop) throw new NotFoundException('NO_SHOP');
+    return shop;
+  }
+
+  async listMyProducts(ownerUserId: string) {
+    const shop = await this.requireMyShop(ownerUserId);
+    return this.productModel
+      .find({ supplierKey: shop.key })
+      .sort({ createdAt: -1 })
+      .lean();
+  }
+
+  async addMyProduct(ownerUserId: string, dto: SellerProductDto) {
+    const shop = await this.requireMyShop(ownerUserId);
+    if (!dto.name?.trim()) throw new BadRequestException('name is required');
+    const doc = await this.productModel.create({
+      supplierKey: shop.key,
+      externalId: new Types.ObjectId().toString(),
+      // Manual products have no external page; link back to the Homico shop.
+      externalUrl: 'https://homico.ge/shop',
+      name: dto.name.trim(),
+      nameKa: dto.nameKa?.trim() || dto.name.trim(),
+      searchText: this.buildSearchText(dto),
+      priceMinor: Math.round((dto.price ?? 0) * 100),
+      currency: 'GEL',
+      imageUrl: dto.imageUrls?.[0],
+      imageUrls: dto.imageUrls ?? [],
+      category: dto.category,
+      categoryLabel: dto.categoryLabel ?? dto.category,
+      isAvailable: true,
+      stockQty: dto.stockQty,
+      inStock: dto.stockQty == null ? undefined : dto.stockQty > 0,
+      lastSeenAt: new Date(),
+      sourceType: 'manual',
+    });
+    return doc.toObject();
+  }
+
+  /** Bulk-create products from a parsed CSV/Excel upload. Skips blank rows. */
+  async bulkAddMyProducts(ownerUserId: string, rows: SellerProductDto[]) {
+    const shop = await this.requireMyShop(ownerUserId);
+    const valid = (rows || []).filter((r) => r?.name?.trim()).slice(0, 1000);
+    if (!valid.length) throw new BadRequestException('No valid rows to import');
+    const now = new Date();
+    const docs = valid.map((dto) => ({
+      supplierKey: shop.key,
+      externalId: new Types.ObjectId().toString(),
+      externalUrl: 'https://homico.ge/shop',
+      name: dto.name!.trim(),
+      nameKa: dto.nameKa?.trim() || dto.name!.trim(),
+      searchText: this.buildSearchText(dto),
+      priceMinor: Math.round((dto.price ?? 0) * 100),
+      currency: 'GEL',
+      imageUrl: dto.imageUrls?.[0],
+      imageUrls: dto.imageUrls ?? [],
+      category: dto.category,
+      categoryLabel: dto.categoryLabel ?? dto.category,
+      isAvailable: true,
+      stockQty: dto.stockQty,
+      inStock: dto.stockQty == null ? undefined : dto.stockQty > 0,
+      lastSeenAt: now,
+      sourceType: 'manual' as const,
+    }));
+    // ordered:false so one bad row doesn't abort the batch.
+    await this.productModel.insertMany(docs, { ordered: false });
+    return { created: docs.length };
+  }
+
+  async updateMyProduct(
+    ownerUserId: string,
+    productId: string,
+    dto: SellerProductDto,
+  ) {
+    const shop = await this.requireMyShop(ownerUserId);
+    const product = Types.ObjectId.isValid(productId)
+      ? await this.productModel.findById(productId)
+      : null;
+    if (!product || product.supplierKey !== shop.key) {
+      throw new NotFoundException('Product not found');
+    }
+    if (dto.name != null) product.name = dto.name.trim();
+    if (dto.nameKa != null) product.nameKa = dto.nameKa.trim();
+    if (dto.price != null) product.priceMinor = Math.round(dto.price * 100);
+    if (dto.category != null) {
+      product.category = dto.category;
+      product.categoryLabel = dto.categoryLabel ?? dto.category;
+    }
+    if (dto.imageUrls != null) {
+      product.imageUrls = dto.imageUrls;
+      product.imageUrl = dto.imageUrls[0];
+    }
+    if (dto.stockQty !== undefined) {
+      product.stockQty = dto.stockQty;
+      product.inStock = dto.stockQty == null ? undefined : dto.stockQty > 0;
+    }
+    product.searchText = this.buildSearchText({
+      name: product.name,
+      nameKa: product.nameKa,
+      category: product.category,
+      categoryLabel: product.categoryLabel,
+    });
+    await product.save();
+    return product.toObject();
+  }
+
+  async deleteMyProduct(ownerUserId: string, productId: string) {
+    const shop = await this.requireMyShop(ownerUserId);
+    const product = Types.ObjectId.isValid(productId)
+      ? await this.productModel.findById(productId).select('supplierKey')
+      : null;
+    if (!product || product.supplierKey !== shop.key) {
+      throw new NotFoundException('Product not found');
+    }
+    await this.productModel.deleteOne({ _id: product._id });
+    return { deleted: true };
+  }
+
+  private buildSearchText(p: {
+    name?: string;
+    nameKa?: string;
+    category?: string;
+    categoryLabel?: string;
+  }): string {
+    return [p.name, p.nameKa, p.categoryLabel, p.category]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+  }
+
+  /** ASCII, unique machine key from a (possibly Georgian) shop name. */
+  private async uniqueShopKey(name: string): Promise<string> {
+    const slug =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 24) || 'x';
+    const base = `shop-${slug}`;
+    let key = base;
+    for (let i = 2; await this.supplierModel.exists({ key }); i++) {
+      key = `${base}-${i}`;
+    }
+    return key;
   }
 
   /**
@@ -140,6 +354,28 @@ export class SupplierCatalogService {
   /** Admin: full supplier rows including sync status. */
   async listSuppliersAdmin() {
     return this.supplierModel.find().sort({ name: 1 }).lean();
+  }
+
+  /** Admin: self-serve shops (sourceType 'manual'), pending first for review. */
+  async listSellerShops() {
+    const order: Record<string, number> = { pending: 0, approved: 1, suspended: 2 };
+    const shops = await this.supplierModel
+      .find({ sourceType: 'manual' })
+      .lean();
+    return shops.sort(
+      (a, b) =>
+        (order[a.status] ?? 3) - (order[b.status] ?? 3) ||
+        a.name.localeCompare(b.name),
+    );
+  }
+
+  /** Admin: approve / suspend / re-pend a self-serve shop. */
+  async setShopStatus(key: string, status: SupplierStatus) {
+    const shop = await this.supplierModel.findOne({ key, sourceType: 'manual' });
+    if (!shop) throw new NotFoundException('Shop not found');
+    shop.status = status;
+    await shop.save();
+    return shop.toObject();
   }
 
   async getSupplierStatus(key: string) {

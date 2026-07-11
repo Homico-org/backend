@@ -66,22 +66,61 @@ attach real products to project steps.
 **Goal:** any shop can onboard itself, upload/manage products + stock in Homico,
 without us writing an adapter. This is how you go from 5 shops to 500.
 
-- **B1. Seller account type** (`role: 'shop'` / a Shop entity) + shop profile
-  (name, logo, legal details, payout bank account, delivery zones/fees).
-- **B2. Seller dashboard**: add/edit products (name ka/en/ru, price, stock,
-  images, category), bulk CSV import, low-stock alerts. Products flow into the
-  SAME `supplier_products` collection with `sourceType: 'manual'`.
-- **B3. Moderation**: admin approves new shops + flagged products (quality bar,
-  no prohibited items). Mirrors the pro-verification pattern already in place.
-- **B4. Inventory truth**: stock decremented on order, sync-back for shops that
-  ALSO have a feed. Overselling guard.
-- **B5. Per-shop analytics**: views, orders, revenue, payout statements.
+**The key insight (why B is small-ish):** the shop UI renders from the
+`supplier_products` collection and *doesn't care where a product came from*. A
+self-serve shop is just **a third product source** (`sourceType: 'manual'`) that
+writes to the same collection. The existing scrape/feed pipeline, the shop
+grid, cart, and `product-orders` all work unchanged. B is "a new write path +
+a dashboard," not a rebuild.
 
-**Exit criteria:** a shop with no tech team signs up, lists products, and sells -
-zero engineering per shop.
+### Data model changes (small, additive)
+
+- `Supplier.sourceType` enum: add **`'manual'`** (alongside `'scrape' | 'feed'`).
+- `Supplier`: add **`ownerUserId?: ObjectId`** (the logged-in shop owner; scoped
+  so an owner only manages their own supplier + products). Add
+  `status: 'pending' | 'approved' | 'suspended'` (default `pending`) and payout
+  fields (`bankAccount`, `legalName`, `taxId`), `deliveryZones`/`deliveryFee`.
+- User role: add **`SHOP`** to the Role enum (or reuse `COMPANY`).
+- `SupplierProduct` already has everything a manual product needs: `name`,
+  `nameKa`, `priceMinor`, `inStock`, **`stockQty`**, `imageUrls`, `category`,
+  `priceHistory`, upsert key `(supplierKey, externalId)`. Manual products just
+  set `externalId = shortId()` and are tagged by their supplier's `sourceType`.
+
+### Backend (extends supplier-catalog, no new module)
+
+- **B1. Shop signup + onboarding**: `POST /supplier-catalog/my-shop` creates a
+  `Supplier {ownerUserId, status: 'pending', sourceType: 'manual'}`. Owner fills
+  profile (name, logo, legal, payout bank, delivery zones/fees).
+- **B2. Seller product CRUD** (owner-guarded to their `supplierKey`):
+  `POST/PATCH/DELETE /supplier-catalog/my-shop/products`. Writes
+  `SupplierProduct` rows. **Bulk CSV import** endpoint (reuse the same
+  normalize→upsert path the adapters use).
+- **B3. Stock control**: owner edits `stockQty`/`inStock`. On a paid
+  `product_order`, **decrement `stockQty`** and flip `inStock=false` at 0
+  (oversell guard - reject/oversell-check at order time). Low-stock alert when
+  `stockQty <= threshold`.
+- **B4. Moderation**: shop stays `status: 'pending'` (hidden from the public
+  catalog) until an admin approves. New/edited products can be admin-flagged.
+  **Mirror the existing pro-verification flow** (same pattern, same admin UX).
+
+### Frontend (the real new build — the seller dashboard)
+
+- **B5. Shop onboarding wizard**: name, logo, legal details, payout account,
+  delivery zones → "pending approval" state.
+- **B6. Seller dashboard** (`/shop/manage` or `/seller`): product list with
+  add/edit (name ka/en/ru, price, `stockQty`, images, category), CSV import,
+  low-stock badges.
+- **B7. Orders + payouts**: incoming orders, mark shipped, payout statements
+  (extends the payout engine already built for pros).
+- **B8. Admin**: approve/suspend shops, review flagged products (add to the
+  existing admin surface).
+
+**Exit criteria:** a shop with no tech team signs up, is approved, lists
+products, manages its own stock, and sells - zero engineering per shop.
 
 > Build B only after A + a thin slice of C prove real orders exist. A seller
-> portal with no buyers is wasted work.
+> portal with no buyers is wasted work. Sequence: A1 (kasco live) → C1 (checkout
+> works) → **then** B.
 
 ---
 
