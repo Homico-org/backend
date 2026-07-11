@@ -300,6 +300,8 @@ export class ProductOrdersService {
     } catch (err) {
       this.logger.warn(`admin notify failed: ${(err as Error).message}`);
     }
+    // Notify self-serve sellers whose products are in this order.
+    await this.notifySellers(order);
     // Email the customer their confirmation.
     try {
       const user = await this.userModel
@@ -316,6 +318,51 @@ export class ProductOrdersService {
     // Scraped/feed products leave stockQty undefined and are skipped - their
     // stock is owned by the external source's sync, not our orders.
     await this.decrementStock(order);
+  }
+
+  /**
+   * Notify each self-serve seller whose products are in this order so they
+   * can prepare stock. Only manual shops with an owner get pinged (scraped /
+   * feed shops have no ownerUserId). Each seller sees the amount for THEIR
+   * items, not the whole order total. Best-effort - never blocks the order.
+   */
+  private async notifySellers(order: Order): Promise<void> {
+    try {
+      const keys = [...new Set(order.items.map((i) => i.supplierKey))];
+      if (!keys.length) return;
+      const shops = await this.supplierModel
+        .find({ key: { $in: keys }, sourceType: 'manual', ownerUserId: { $ne: null } })
+        .select('key ownerUserId')
+        .lean<{ key: string; ownerUserId: Types.ObjectId }[]>();
+      await Promise.all(
+        shops.map((shop) => {
+          const mineMinor = order.items
+            .filter((i) => i.supplierKey === shop.key)
+            .reduce((s, i) => s + i.lineTotalMinor, 0);
+          return this.notifications.notify(
+            String(shop.ownerUserId),
+            NotificationType.NEW_ORDER,
+            'New paid order',
+            `Order ${order.orderNumber} (${(mineMinor / 100).toFixed(0)} ₾) is ready to fulfil`,
+            {
+              link: `/shop/manage`,
+              referenceId: String(order._id),
+              referenceModel: 'Order',
+              i18n: {
+                titleKey: 'notifications.types.new_order.title',
+                messageKey: 'notifications.types.new_order.message',
+                params: {
+                  orderNumber: order.orderNumber,
+                  amount: (mineMinor / 100).toFixed(0),
+                },
+              },
+            },
+          );
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(`seller notify failed: ${(err as Error).message}`);
+    }
   }
 
   /**
