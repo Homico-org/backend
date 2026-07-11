@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsNumber,
   IsOptional,
@@ -86,6 +87,11 @@ export class SellerProductDto {
   @IsInt()
   @Min(0)
   stockQty?: number;
+
+  /** List / delist the product without deleting it (availability toggle). */
+  @IsOptional()
+  @IsBoolean()
+  isAvailable?: boolean;
 }
 
 /** Bulk product import (parsed client-side from CSV/Excel). */

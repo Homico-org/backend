@@ -279,6 +279,7 @@ export class SupplierCatalogService {
       product.stockQty = dto.stockQty;
       product.inStock = dto.stockQty == null ? undefined : dto.stockQty > 0;
     }
+    if (dto.isAvailable !== undefined) product.isAvailable = dto.isAvailable;
     product.searchText = this.buildSearchText({
       name: product.name,
       nameKa: product.nameKa,
