@@ -17,6 +17,7 @@ import {
   BulkImportDto,
   CreateShopDto,
   SellerProductDto,
+  UpdateShopDto,
 } from './dto/seller-shop.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -66,6 +67,12 @@ export class SupplierCatalogController {
   @UseGuards(JwtAuthGuard)
   createMyShop(@Req() req: AuthedReq, @Body() dto: CreateShopDto) {
     return this.catalogService.createMyShop(req.user.userId, dto);
+  }
+
+  @Patch('my-shop')
+  @UseGuards(JwtAuthGuard)
+  updateMyShop(@Req() req: AuthedReq, @Body() dto: UpdateShopDto) {
+    return this.catalogService.updateMyShop(req.user.userId, dto);
   }
 
   @Get('my-shop/products')

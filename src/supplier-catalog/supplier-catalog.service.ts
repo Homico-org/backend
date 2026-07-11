@@ -11,7 +11,11 @@ import {
   SupplierProductDoc,
 } from './schemas/supplier-product.schema';
 import { SearchProductsDto } from './dto/search-products.dto';
-import { CreateShopDto, SellerProductDto } from './dto/seller-shop.dto';
+import {
+  CreateShopDto,
+  SellerProductDto,
+  UpdateShopDto,
+} from './dto/seller-shop.dto';
 
 export interface ProductSearchResult {
   items: SupplierProductDoc[];
@@ -176,6 +180,25 @@ export class SupplierCatalogService {
       payoutIban: dto.payoutIban,
       deliveryFeeMinor: Math.round((dto.deliveryFee ?? 0) * 100),
     });
+    return shop.toObject();
+  }
+
+  /**
+   * Update the caller's shop profile (name, logo, legal + payout, delivery
+   * fee). Only touches keys present in the dto so a partial save never wipes
+   * existing values. Editing a live shop does not reset approval status.
+   */
+  async updateMyShop(ownerUserId: string, dto: UpdateShopDto) {
+    const shop = await this.requireMyShop(ownerUserId);
+    if ('name' in dto && dto.name?.trim()) shop.name = dto.name.trim();
+    if ('logo' in dto) shop.logo = dto.logo;
+    if ('legalName' in dto) shop.legalName = dto.legalName;
+    if ('taxId' in dto) shop.taxId = dto.taxId;
+    if ('payoutIban' in dto) shop.payoutIban = dto.payoutIban;
+    if ('deliveryFee' in dto) {
+      shop.deliveryFeeMinor = Math.round((dto.deliveryFee ?? 0) * 100);
+    }
+    await shop.save();
     return shop.toObject();
   }
 

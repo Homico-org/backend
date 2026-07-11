@@ -50,6 +50,39 @@ export class CreateShopDto {
   deliveryFee?: number;
 }
 
+/** Editing an existing shop profile - every field optional (partial save). */
+export class UpdateShopDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  logo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  legalName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  taxId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  payoutIban?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryFee?: number;
+}
+
 /** A seller creating or editing one of their own products. */
 export class SellerProductDto {
   @IsOptional()
