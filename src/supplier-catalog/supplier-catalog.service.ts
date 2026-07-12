@@ -242,7 +242,18 @@ export class SupplierCatalogService {
       lastSeenAt: new Date(),
       sourceType: 'manual',
     });
+    await this.refreshProductCount(shop.key);
     return doc.toObject();
+  }
+
+  /**
+   * Recompute a shop's cached `productCount` from its actual products. The
+   * public shops list reads this field, so it must be kept in sync on every
+   * add / import / delete or the shop shows a stale "0 products".
+   */
+  private async refreshProductCount(supplierKey: string): Promise<void> {
+    const count = await this.productModel.countDocuments({ supplierKey });
+    await this.supplierModel.updateOne({ key: supplierKey }, { $set: { productCount: count } });
   }
 
   /** Bulk-create products from a parsed CSV/Excel upload. Skips blank rows. */
@@ -272,6 +283,7 @@ export class SupplierCatalogService {
     }));
     // ordered:false so one bad row doesn't abort the batch.
     await this.productModel.insertMany(docs, { ordered: false });
+    await this.refreshProductCount(shop.key);
     return { created: docs.length };
   }
 
@@ -322,6 +334,7 @@ export class SupplierCatalogService {
       throw new NotFoundException('Product not found');
     }
     await this.productModel.deleteOne({ _id: product._id });
+    await this.refreshProductCount(shop.key);
     return { deleted: true };
   }
 
