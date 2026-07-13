@@ -18,6 +18,10 @@ import {
   GenericFeedAdapterConfig,
 } from './adapters/generic-feed.adapter';
 import { DominoScraperAdapter } from './adapters/domino-scraper.adapter';
+import {
+  StoreraScraperAdapter,
+  StoreraAdapterConfig,
+} from './adapters/storera-scraper.adapter';
 import { HeadlessBrowserService } from './adapters/headless-browser.service';
 import {
   HeadlessHeuristicAdapter,
@@ -162,6 +166,49 @@ const HEADLESS_CONFIGS: HeadlessAdapterConfig[] = [
   },
 ];
 
+// === Storera shops (server-rendered Bootstrap grid). One adapter, per-shop
+// config. kasco: whole shop for now (appliances + kitchenware); narrow the
+// seeds to renovation-only categories later if desired. ===
+const STORERA_CONFIGS: StoreraAdapterConfig[] = [
+  {
+    supplierKey: 'kasco',
+    baseUrl: 'https://kasco.storera.ge',
+    categorySeeds: [
+      'https://kasco.storera.ge/categories/Everything-for-the-kitchen',
+      'https://kasco.storera.ge/categories/ტაფა_ქვაბი_pan_pot',
+      'https://kasco.storera.ge/categories/baking-form_საცხობი-ფორმა',
+      'https://kasco.storera.ge/categories/Kitchen-trifle_სამზარეულოს-წვრილმანი',
+      'https://kasco.storera.ge/categories/ყავის-მოსამზადებელი_Coffee-maker',
+      'https://kasco.storera.ge/categories/დანა-ჩანგალი_cutlery',
+      'https://kasco.storera.ge/categories/ხელის-საშრობი_Hand-dryer',
+      'https://kasco.storera.ge/categories/დანა_knife',
+      'https://kasco.storera.ge/categories/ჭურჭელი_dishes',
+      'https://kasco.storera.ge/categories/Hob',
+      'https://kasco.storera.ge/categories/Air-humidifier',
+      'https://kasco.storera.ge/categories/Heater',
+      'https://kasco.storera.ge/categories/Hood',
+      'https://kasco.storera.ge/categories/electric-heater',
+      'https://kasco.storera.ge/categories/induction-cooker',
+      'https://kasco.storera.ge/categories/electric-oven',
+      'https://kasco.storera.ge/categories/Bathroom-fan',
+      'https://kasco.storera.ge/categories/Air-conditioner',
+      'https://kasco.storera.ge/categories/Refrigerator',
+      'https://kasco.storera.ge/categories/microwave-oven',
+      'https://kasco.storera.ge/categories/Insect-killer',
+      'https://kasco.storera.ge/categories/Ice-cream-machine',
+      'https://kasco.storera.ge/categories/Moisture-trap',
+      'https://kasco.storera.ge/categories/sink',
+      'https://kasco.storera.ge/categories/washing-machine',
+      'https://kasco.storera.ge/categories/Water-mixer',
+      'https://kasco.storera.ge/categories/Gate-motor',
+      'https://kasco.storera.ge/categories/Infrared-heater',
+      'https://kasco.storera.ge/categories/Household-appliances',
+      'https://kasco.storera.ge/categories/წყლის-სასმელი-შადრევნები',
+      'https://kasco.storera.ge/categories/Olives-from-Greece',
+    ],
+  },
+];
+
 // === WooCommerce shops (Store API JSON). One adapter, per-shop config. ===
 const WOO_CONFIGS: WooCommerceAdapterConfig[] = [
   { supplierKey: 'mosaics', baseUrl: 'https://mosaics.ge' },
@@ -214,6 +261,7 @@ const FEED_CONFIGS: GenericFeedAdapterConfig[] = [];
       ) => [
         legoroom,
         ...CSCART_CONFIGS.map((c) => new CsCartScraperAdapter(c)),
+        ...STORERA_CONFIGS.map((c) => new StoreraScraperAdapter(c)),
         ...WOO_CONFIGS.map((c) => new WooCommerceStoreAdapter(c)),
         ...FEED_CONFIGS.map((c) => new GenericFeedAdapter(c)),
         ...HEADLESS_CONFIGS.map((c) => new HeadlessHeuristicAdapter(c, headless)),

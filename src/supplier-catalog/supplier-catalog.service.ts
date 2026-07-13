@@ -442,6 +442,7 @@ export class SupplierCatalogService {
       { key: 'classica', name: 'Classica', baseUrl: 'https://classica.com.ge', sourceType: 'scrape' as const, isActive: true },
       { key: 'ashleyhome', name: 'Ashley Home', baseUrl: 'https://ashleyhome.ge', sourceType: 'scrape' as const, isActive: true },
       { key: 'thermocenter', name: 'Thermocenter', baseUrl: 'https://thermocenter.ge', sourceType: 'scrape' as const, isActive: true },
+      { key: 'kasco', name: 'Kasco', baseUrl: 'https://kasco.storera.ge', sourceType: 'scrape' as const, isActive: true },
       // WooCommerce Store API (JSON, real stock) - shared adapter
       { key: 'mosaics', name: 'Mosaics', baseUrl: 'https://mosaics.ge', sourceType: 'feed' as const, isActive: true },
       { key: 'vitra', name: 'VitrA', baseUrl: 'https://vitra.com.ge', sourceType: 'feed' as const, isActive: true },
