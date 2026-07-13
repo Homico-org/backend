@@ -111,6 +111,13 @@ export class AdminController {
     });
   }
 
+  @Get('view-summary')
+  @ApiOperation({ summary: 'At-a-glance open totals (rolling 24h) for phone and profile' })
+  @ApiResponse({ status: 200, description: 'Per-type totals, unique pros, and last-hour counts' })
+  getViewSummary() {
+    return this.adminService.getViewSummary();
+  }
+
   @Get('jobs')
   @ApiOperation({ summary: 'Get all jobs with pagination and filters' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })

@@ -1899,9 +1899,24 @@ export class UsersService {
           // 3=rest (computed in the pipeline below). This way ALL partners
           // rotate among themselves, all badged among themselves, etc. — no
           // single pro stays pinned #1 just because they cumulate flags.
+          //
+          // `hasVisiblePortfolio` sits BETWEEN tier and the random shuffle so
+          // that within a mixed tier (a partner/badged tier holds both
+          // photo-having and empty profiles) the pros with real project photos
+          // rotate at the top and the empty-card pros rotate below - otherwise
+          // a badged-but-no-portfolio pro could randomly land in the #1 slot
+          // and lead the whole page with a blank card. Portfolio pros still
+          // shuffle among themselves, so it's fair within the group.
           sortObj = {
             tierRank: 1,
+            hasVisiblePortfolio: -1,
             rnd: 1,
+            // Final tiebreaker: `rnd` is a hash and two docs in the same
+            // tier/portfolio group can collide, making $sort unstable across the
+            // separate per-page sorts - a pro could duplicate onto two pages or
+            // be skipped. `_id` guarantees a total order (matches every other
+            // sort branch, see the comment above about consistent pagination).
+            _id: -1,
           };
         } else {
           // "recommended" - portfolio-having pros at the top of each
@@ -2673,15 +2688,27 @@ export class UsersService {
   ): void {
     const { Types } = require("mongoose");
     if (!Types.ObjectId.isValid(proId)) return;
-    this.viewLogModel
-      .create({
-        proId,
-        type,
-        viewerId: actor?.id && Types.ObjectId.isValid(actor.id) ? actor.id : null,
-        viewerName: actor?.name || null,
-        ip,
-      })
-      .catch(() => {});
+    const viewerId =
+      actor?.id && Types.ObjectId.isValid(actor.id) ? actor.id : null;
+
+    const write = (viewerName: string | null) =>
+      this.viewLogModel
+        .create({ proId, type, viewerId, viewerName, ip })
+        .catch(() => {});
+
+    // Snapshot the viewer's current name so the audit trail survives later
+    // renames/deletes. The JWT payload carries no name, so look it up once when
+    // logged in. All best-effort - a miss just logs the open without a name.
+    if (viewerId && !actor?.name) {
+      this.userModel
+        .findById(viewerId)
+        .select("name")
+        .lean()
+        .then((u: any) => write(u?.name ?? null))
+        .catch(() => write(null));
+    } else {
+      write(actor?.name ?? null);
+    }
   }
 
   // Count how many unique visitors revealed a pro's phone number. Deduped by IP
