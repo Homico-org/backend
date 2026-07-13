@@ -79,7 +79,7 @@ export class SupplierCatalogService {
       // the "ship now" engine; Atlas Search is the documented scale path.
       const tokens = q.split(/\s+/).filter(Boolean).slice(0, 6);
       filter.$and = tokens.map((tok) => ({
-        searchText: { $regex: `(^|[\\s-])${this.escapeRegex(tok.toLowerCase())}`, $options: 'i' },
+        searchText: { $regex: `(^|[\\s_-])${this.escapeRegex(tok.toLowerCase())}`, $options: 'i' },
       }));
     }
 
@@ -123,6 +123,12 @@ export class SupplierCatalogService {
       ? await this.productModel.findById(id).lean<SupplierProductDoc>()
       : null;
     if (!product) throw new NotFoundException('Product not found');
+    // Don't leak products from shops still pending moderation / suspended
+    // (searchProducts hides them too, so direct-by-id must be consistent).
+    const hidden = await this.hiddenSupplierKeys();
+    if (hidden.includes(product.supplierKey)) {
+      throw new NotFoundException('Product not found');
+    }
     return product;
   }
 
@@ -252,7 +258,13 @@ export class SupplierCatalogService {
    * add / import / delete or the shop shows a stale "0 products".
    */
   private async refreshProductCount(supplierKey: string): Promise<void> {
-    const count = await this.productModel.countDocuments({ supplierKey });
+    // Count AVAILABLE products only, to match how scraped/feed shops report
+    // productCount (supplier-sync counts isAvailable:true) and what the public
+    // catalog actually shows - a delisted item must not inflate the badge.
+    const count = await this.productModel.countDocuments({
+      supplierKey,
+      isAvailable: true,
+    });
     await this.supplierModel.updateOne({ key: supplierKey }, { $set: { productCount: count } });
   }
 
@@ -322,6 +334,9 @@ export class SupplierCatalogService {
       categoryLabel: product.categoryLabel,
     });
     await product.save();
+    // A delist/relist (isAvailable) changes the available count the public
+    // "N products" badge shows, so keep it in sync here too.
+    await this.refreshProductCount(shop.key);
     return product.toObject();
   }
 

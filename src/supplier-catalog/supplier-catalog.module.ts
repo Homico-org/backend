@@ -222,11 +222,12 @@ const WOO_CONFIGS: WooCommerceAdapterConfig[] = [
 // === Partner JSON feeds/APIs (cooperating shops that give us an endpoint). ===
 // One GenericFeedAdapter, per-shop config with a field map. Add a shop here the
 // moment they send a sample of their product feed - no new adapter class.
-//   TODO(kasco): activate once the owner sends the endpoint + field names.
-//   Example shape (fill from his real sample):
+// NB: kasco is already live as a StoreraScraperAdapter (STORERA_CONFIGS above);
+// only move it here if the owner later gives us a real JSON feed endpoint.
+//   Example shape (fill from the shop's real sample):
 //   {
-//     supplierKey: 'kasco',
-//     baseUrl: 'https://kasco.ge',
+//     supplierKey: 'example-shop',
+//     baseUrl: 'https://example.ge',
 //     endpoint: '/api/products?page={page}',
 //     itemsPath: 'data',            // '' if the response is a bare array
 //     fieldMap: {

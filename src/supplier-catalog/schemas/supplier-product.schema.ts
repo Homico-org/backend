@@ -115,7 +115,8 @@ SupplierProductSchema.index(
   { unique: true },
 );
 SupplierProductSchema.index({ supplierKey: 1, isAvailable: 1 });
-SupplierProductSchema.index({ category: 1 });
+// `category` is already indexed via @Prop({ index: true }); no explicit index()
+// here to avoid a duplicate-index warning.
 SupplierProductSchema.index({ priceMinor: 1 });
 // Text index kept as a forward-compatible seam. v1 search uses regex because
 // Mongo $text has no Georgian analyzer and won't do substring matches.

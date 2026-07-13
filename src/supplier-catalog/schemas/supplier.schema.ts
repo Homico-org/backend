@@ -123,5 +123,5 @@ export class Supplier extends Document {
 }
 
 export const SupplierSchema = SchemaFactory.createForClass(Supplier);
-
-SupplierSchema.index({ key: 1 }, { unique: true });
+// `key` is already declared unique via @Prop({ unique: true }); no explicit
+// index() here to avoid a duplicate-index warning.
