@@ -1,4 +1,4 @@
-import { IsMongoId, IsNumber, IsString, IsOptional, IsArray, Min, Max } from 'class-validator';
+import { IsBoolean, IsMongoId, IsNumber, IsString, IsOptional, IsArray, Min, Max } from 'class-validator';
 
 export class CreateReviewDto {
   // Legacy field - kept for backwards compatibility
@@ -27,4 +27,8 @@ export class CreateReviewDto {
   @IsString({ each: true })
   @IsOptional()
   photos?: string[];
+
+  @IsBoolean()
+  @IsOptional()
+  isAnonymous?: boolean;
 }

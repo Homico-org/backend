@@ -13,6 +13,7 @@ import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { CreateBookingReviewDto } from './dto/create-booking-review.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -50,12 +51,15 @@ export class ReviewController {
   }
 
   @Get('pro/:proId')
+  @UseGuards(OptionalJwtAuthGuard)
   findByPro(
+    @CurrentUser() user: any,
     @Param('proId') proId: string,
     @Query('limit') limit?: number,
     @Query('skip') skip?: number,
   ) {
-    return this.reviewService.findByPro(proId, limit, skip);
+    // Only admins see the reviewer identity behind an anonymous review.
+    return this.reviewService.findByPro(proId, limit, skip, user?.role === UserRole.ADMIN);
   }
 
   @Get('my-reviews')
@@ -100,8 +104,9 @@ export class ReviewController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.reviewService.findOne(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  findOne(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.reviewService.findOne(id, user?.role === UserRole.ADMIN);
   }
 
   @Post('external/direct/:proId')
@@ -116,6 +121,7 @@ export class ReviewController {
       rating: number;
       text?: string;
       phone?: string; // For clients who need to verify
+      isAnonymous?: boolean;
     },
   ) {
     return this.reviewService.submitDirectExternalReview(proId, user.userId, data);

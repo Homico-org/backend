@@ -174,14 +174,37 @@ export class ReviewService {
     return review;
   }
 
-  async findByPro(proId: string, limit = 20, skip = 0): Promise<Review[]> {
-    return this.reviewModel
+  /**
+   * Strip identifying fields the requester isn't allowed to see. Phone/email are
+   * never public (only admin). An anonymous review additionally hides the
+   * reviewer's name + avatar from everyone but admin, so the pro can't tell who
+   * left it - the real clientId stays in the DB for admin/moderation.
+   */
+  private redactReview(review: any, isAdmin: boolean): any {
+    if (isAdmin) return review;
+    delete review.externalClientPhone;
+    delete review.externalClientEmail;
+    if (review.isAnonymous) {
+      review.clientId = null;
+      review.externalClientName = undefined;
+    }
+    return review;
+  }
+
+  async findByPro(
+    proId: string,
+    limit = 20,
+    skip = 0,
+    isAdmin = false,
+  ): Promise<Review[]> {
+    const reviews = await this.reviewModel
       .find({ proId: new Types.ObjectId(proId) })
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip)
       .populate('clientId', '_id name avatar')
-      .exec();
+      .lean();
+    return reviews.map((r) => this.redactReview(r, isAdmin));
   }
 
   async findByClient(clientId: string): Promise<Review[]> {
@@ -192,18 +215,18 @@ export class ReviewService {
       .exec();
   }
 
-  async findOne(id: string): Promise<Review> {
+  async findOne(id: string, isAdmin = false): Promise<Review> {
     const review = await this.reviewModel
       .findById(id)
       .populate('clientId', '_id name avatar')
       .populate('proId')
-      .exec();
+      .lean();
 
     if (!review) {
       throw new NotFoundException('Review not found');
     }
 
-    return review;
+    return this.redactReview(review, isAdmin);
   }
 
   // ============== EXTERNAL REVIEWS ==============
@@ -295,6 +318,7 @@ export class ReviewService {
       rating: number;
       text?: string;
       phone?: string; // For clients who need to verify their phone
+      isAnonymous?: boolean;
     },
   ): Promise<Review> {
     // Monthly limit: authenticated users can submit max 5 external reviews per month
@@ -371,7 +395,7 @@ export class ReviewService {
       externalClientPhone: verifiedPhone,
       isVerified: isPhoneVerified,
       externalVerifiedAt: isPhoneVerified ? new Date() : undefined,
-      isAnonymous: false,
+      isAnonymous: data.isAnonymous || false,
     });
 
     await review.save();
@@ -380,12 +404,14 @@ export class ReviewService {
     const weight = isPhoneVerified ? 1 : 0.7;
     await this.usersService.updateRating(proId, data.rating, weight);
 
-    // Notify the pro
+    // Notify the pro - keep the reviewer's name out of it for anonymous reviews
+    // so the pro can't learn who reviewed them from the notification either.
+    const reviewerLabel = data.isAnonymous ? 'Someone' : reviewer.name;
     await this.notificationsService.notify(
       proId,
       NotificationType.NEW_REVIEW,
       'New review received!',
-      `${reviewer.name} left you a ${data.rating}-star review`,
+      `${reviewerLabel} left you a ${data.rating}-star review`,
       {
         link: `/professionals/${proId}#reviews`,
         referenceId: review._id.toString(),
@@ -393,7 +419,7 @@ export class ReviewService {
         i18n: {
           titleKey: 'notifications.types.new_review.title',
           messageKey: 'notifications.types.new_review.message',
-          params: { clientName: reviewer.name, rating: data.rating },
+          params: { clientName: reviewerLabel, rating: data.rating },
         },
       },
     );
