@@ -179,7 +179,7 @@ export class AdminService {
     const { type, page, limit } = options;
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.viewLogModel
         .find({ type })
         .sort({ createdAt: -1 })
@@ -191,6 +191,24 @@ export class AdminService {
       this.viewLogModel.countDocuments({ type }),
     ]);
 
+    // Normalize populated refs to a flat { id, name, avatar, uid } shape. Lean
+    // docs expose `_id` (not the `id` virtual), which the admin UI links on -
+    // without this the profile links resolve to /professionals/undefined.
+    const ref = (r: any) =>
+      r && r._id
+        ? { id: String(r._id), name: r.name, avatar: r.avatar, uid: r.uid }
+        : null;
+
+    const items = rows.map((r: any) => ({
+      id: String(r._id),
+      proId: ref(r.proId),
+      viewerId: ref(r.viewerId),
+      // Fall back to the live viewer name when no snapshot was captured.
+      viewerName: r.viewerName ?? r.viewerId?.name ?? null,
+      ip: r.ip,
+      createdAt: r.createdAt,
+    }));
+
     return {
       items,
       total,
@@ -198,6 +216,29 @@ export class AdminService {
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  // At-a-glance totals for the view-tracking dashboard. Rows auto-expire after
+  // 24h (TTL index), so every count here is a rolling last-24h figure. Computes
+  // both phone and profile in one round-trip so the header renders in one call.
+  async getViewSummary() {
+    const lastHour = new Date(Date.now() - 60 * 60 * 1000);
+
+    const summaryFor = async (type: ProfileViewType) => {
+      const [total, distinct, lastHourCount] = await Promise.all([
+        this.viewLogModel.countDocuments({ type }),
+        this.viewLogModel.distinct("proId", { type }),
+        this.viewLogModel.countDocuments({ type, createdAt: { $gte: lastHour } }),
+      ]);
+      return { total, uniquePros: distinct.length, lastHour: lastHourCount };
+    };
+
+    const [phone, profile] = await Promise.all([
+      summaryFor(ProfileViewType.PHONE),
+      summaryFor(ProfileViewType.PROFILE),
+    ]);
+
+    return { phone, profile };
   }
 
   // ============== BOOKINGS OVERSIGHT ==============

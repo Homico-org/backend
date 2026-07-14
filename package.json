@@ -22,7 +22,8 @@
     "test:cov": "jest --coverage",
     "seed": "node dist/seed/seed.js",
     "seed:dev": "ts-node -r tsconfig-paths/register scripts/seed-dev.ts",
-    "flitt:selftest": "ts-node -r tsconfig-paths/register src/scripts/flitt-selftest.ts"
+    "flitt:selftest": "ts-node -r tsconfig-paths/register src/scripts/flitt-selftest.ts",
+    "buyloop:selftest": "PAYMENT_PROVIDER=mock ts-node -r tsconfig-paths/register src/scripts/prove-buy-loop.ts"
   },
   "dependencies": {
     "@amplitude/analytics-node": "^1.5.57",

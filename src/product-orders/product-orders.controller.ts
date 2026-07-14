@@ -41,6 +41,18 @@ export class ProductOrdersController {
     return this.ordersService.listMyOrders(user.userId);
   }
 
+  // === Seller (owns a shop) - read-only "what to prepare" view ===
+  // Declared before ':id' so 'my-shop' isn't captured as an order id.
+  @Get('my-shop')
+  @UseGuards(JwtAuthGuard)
+  listShopOrders(
+    @CurrentUser() user: { userId: string },
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+  ) {
+    return this.ordersService.listShopOrders(user.userId, { status, page });
+  }
+
   // Admin routes are declared before ':id' so 'admin' isn't captured as an id.
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)

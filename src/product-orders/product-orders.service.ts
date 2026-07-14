@@ -16,6 +16,7 @@ import { EmailService } from '../verification/services/email.service';
 import { User } from '../users/schemas/user.schema';
 import { UserRole } from '../users/schemas/user.schema';
 import { SupplierProduct } from '../supplier-catalog/schemas/supplier-product.schema';
+import { Supplier } from '../supplier-catalog/schemas/supplier.schema';
 import { Order, OrderItem, OrderStatus } from './schemas/order.schema';
 import {
   CreateOrderDto,
@@ -55,6 +56,7 @@ export class ProductOrdersService {
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(SupplierProduct.name)
     private readonly productModel: Model<SupplierProduct>,
+    @InjectModel(Supplier.name) private readonly supplierModel: Model<Supplier>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly paymentsService: PaymentsService,
     private readonly notifications: NotificationsService,
@@ -298,6 +300,8 @@ export class ProductOrdersService {
     } catch (err) {
       this.logger.warn(`admin notify failed: ${(err as Error).message}`);
     }
+    // Notify self-serve sellers whose products are in this order.
+    await this.notifySellers(order);
     // Email the customer their confirmation.
     try {
       const user = await this.userModel
@@ -309,6 +313,80 @@ export class ProductOrdersService {
       }
     } catch (err) {
       this.logger.warn(`order confirmation email failed: ${(err as Error).message}`);
+    }
+    // Decrement stock for self-serve shop products (those tracking stockQty).
+    // Scraped/feed products leave stockQty undefined and are skipped - their
+    // stock is owned by the external source's sync, not our orders.
+    await this.decrementStock(order);
+  }
+
+  /**
+   * Notify each self-serve seller whose products are in this order so they
+   * can prepare stock. Only manual shops with an owner get pinged (scraped /
+   * feed shops have no ownerUserId). Each seller sees the amount for THEIR
+   * items, not the whole order total. Best-effort - never blocks the order.
+   */
+  private async notifySellers(order: Order): Promise<void> {
+    try {
+      const keys = [...new Set(order.items.map((i) => i.supplierKey))];
+      if (!keys.length) return;
+      const shops = await this.supplierModel
+        .find({ key: { $in: keys }, sourceType: 'manual', ownerUserId: { $ne: null } })
+        .select('key ownerUserId')
+        .lean<{ key: string; ownerUserId: Types.ObjectId }[]>();
+      await Promise.all(
+        shops.map((shop) => {
+          const mineMinor = order.items
+            .filter((i) => i.supplierKey === shop.key)
+            .reduce((s, i) => s + i.lineTotalMinor, 0);
+          return this.notifications.notify(
+            String(shop.ownerUserId),
+            NotificationType.NEW_ORDER,
+            'New paid order',
+            `Order ${order.orderNumber} (${(mineMinor / 100).toFixed(0)} ₾) is ready to fulfil`,
+            {
+              link: `/shop/manage`,
+              referenceId: String(order._id),
+              referenceModel: 'Order',
+              i18n: {
+                titleKey: 'notifications.types.new_order.title',
+                messageKey: 'notifications.types.new_order.message',
+                params: {
+                  orderNumber: order.orderNumber,
+                  amount: (mineMinor / 100).toFixed(0),
+                },
+              },
+            },
+          );
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(`seller notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Draw down `stockQty` for each ordered line that tracks it, flipping
+   * `inStock` false at zero. Best-effort + per-item guarded so one bad line
+   * never blocks the others or the order.
+   */
+  private async decrementStock(order: Order): Promise<void> {
+    for (const item of order.items) {
+      if (!item.supplierProductId) continue;
+      try {
+        const product = await this.productModel
+          .findById(item.supplierProductId)
+          .select('stockQty');
+        if (!product || product.stockQty == null) continue; // untracked - skip
+        const next = Math.max(0, product.stockQty - (item.qty || 0));
+        product.stockQty = next;
+        product.inStock = next > 0;
+        await product.save();
+      } catch (err) {
+        this.logger.warn(
+          `stock decrement failed for ${item.supplierProductId}: ${(err as Error).message}`,
+        );
+      }
     }
   }
 
@@ -487,6 +565,64 @@ export class ProductOrdersService {
   async getOrderAdmin(id: string) {
     const order = await this.load(id);
     return order.toObject();
+  }
+
+  /**
+   * Orders a seller needs to fulfil. Homico is merchant of record and ops runs
+   * delivery, so this is a read-only "what to prepare" view: only real (paid+)
+   * orders that contain the caller's products, each narrowed to that seller's
+   * own line items + their subtotal. No customer PII - ops owns delivery.
+   */
+  async listShopOrders(
+    ownerUserId: string,
+    filters: { status?: string; page?: string },
+  ) {
+    const shop = await this.supplierModel
+      .findOne({
+        ownerUserId: new Types.ObjectId(ownerUserId),
+        sourceType: 'manual',
+      })
+      .lean();
+    if (!shop) throw new NotFoundException('NO_SHOP');
+
+    const page = Math.max(1, parseInt(filters.page ?? '1', 10) || 1);
+    const limit = 30;
+    const query: Record<string, unknown> = {
+      'items.supplierKey': shop.key,
+      // Carts that never got paid aren't real orders to a seller.
+      status: { $nin: ['awaiting_payment', 'payment_failed'] },
+    };
+    if (filters.status) query.status = filters.status;
+
+    const [orders, total] = await Promise.all([
+      this.orderModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.orderModel.countDocuments(query),
+    ]);
+
+    const items = orders.map((o) => {
+      const mine = (o.items || []).filter((i) => i.supplierKey === shop.key);
+      const shopSubtotalMinor = mine.reduce(
+        (s, i) => s + i.lineTotalMinor,
+        0,
+      );
+      return {
+        _id: o._id,
+        orderNumber: o.orderNumber,
+        status: o.status,
+        createdAt: (o as unknown as { createdAt: Date }).createdAt,
+        currency: o.currency,
+        items: mine,
+        itemCount: mine.reduce((n, i) => n + i.qty, 0),
+        shopSubtotalMinor,
+      };
+    });
+
+    return { items, total, page, limit, hasMore: page * limit < total };
   }
 
   async updateStatus(

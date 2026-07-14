@@ -169,8 +169,8 @@ export class PaymentsService {
   > = {
     GE: {
       basic: { monthly: 29, yearly: 290 },
-      pro: { monthly: 100, yearly: 1000 },
-      elite: { monthly: 250, yearly: 2500 },
+      pro: { monthly: 25, yearly: 250 },
+      elite: { monthly: 50, yearly: 500 },
     },
     IL: {
       basic: { monthly: 39, yearly: 390 },
