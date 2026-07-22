@@ -121,6 +121,19 @@ export class AuthService {
     return { access_token, refresh_token };
   }
 
+  /**
+   * Issue a fresh session for an already-resolved user, WITHOUT a password
+   * check. Used by flows where identity is proven by another single-use secret
+   * (e.g. the assisted-job link, whose admin-generated token authorizes the
+   * phone it was created for). Returns the same shape as login/register.
+   */
+  issueSessionForUser(user: any) {
+    return {
+      ...this.generateTokens(user),
+      user: this.buildUserResponse(user),
+    };
+  }
+
   async register(
     createUserDto: CreateUserDto,
     requestMeta?: { ip?: string; userAgent?: string },
