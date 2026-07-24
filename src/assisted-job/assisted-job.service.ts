@@ -91,11 +91,30 @@ export class AssistedJobService {
       clientName: r.clientName,
       clientPhone: r.clientPhone,
       category: r.category,
+      // Let the admin re-copy the client link from the list.
+      clientPath: `/assisted-job/${r.token}`,
       createdAt: (r as { createdAt?: Date }).createdAt,
       expiresAt: r.expiresAt,
       approvedAt: r.approvedAt,
       createdJobId: r.createdJobId?.toString(),
     }));
+  }
+
+  // ── Admin: cancel a pending draft (kills the link) ──
+  async cancel(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Request not found.');
+    }
+    const draft = await this.model.findById(id).exec();
+    if (!draft) throw new NotFoundException('Request not found.');
+    if (draft.status === AssistedJobStatus.APPROVED) {
+      throw new BadRequestException('This request was already approved.');
+    }
+    if (draft.status !== AssistedJobStatus.CANCELLED) {
+      draft.status = AssistedJobStatus.CANCELLED;
+      await draft.save();
+    }
+    return { id: draft._id.toString(), status: draft.status };
   }
 
   // ── Public: fetch a draft by token (client preview) ──

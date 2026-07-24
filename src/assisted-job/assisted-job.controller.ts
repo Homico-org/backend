@@ -39,6 +39,13 @@ export class AssistedJobController {
     return this.service.list();
   }
 
+  @Post(':id/cancel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  cancel(@Param('id') id: string) {
+    return this.service.cancel(id);
+  }
+
   // ── Public (client opens the shared link before signing in) ──
   @Get(':token')
   getByToken(@Param('token') token: string) {
