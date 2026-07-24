@@ -594,10 +594,13 @@ export class AdminService {
     const query: FilterQuery<User> = {};
 
     if (search) {
+      // Escape regex metacharacters so a search like "+995" or "O'Brien("
+      // matches literally instead of throwing an invalid-regex 500.
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
+        { name: { $regex: safe, $options: "i" } },
+        { email: { $regex: safe, $options: "i" } },
+        { phone: { $regex: safe, $options: "i" } },
       ];
     }
 

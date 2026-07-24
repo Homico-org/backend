@@ -292,6 +292,10 @@ export class AssistedJobService {
       images: dto.images ?? draft.images ?? [],
       media: (draft.videos ?? []).map((url) => ({ type: 'video', url })),
       services,
+      // Mirror the normal post-job flow so pro browse/matching (which filters on
+      // skills OR category) reaches this job under every selected trade, not just
+      // the primary category.
+      skills: services.map((s) => s.key).filter(Boolean),
       jobType: 'marketplace',
     };
     // Only attach propertyType when present (it's an enum-validated field).
