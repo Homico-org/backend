@@ -48,9 +48,15 @@ export class AssistedJobController {
   }
 
   // ── Public (client opens the shared link before signing in) ──
+  // Optional auth: if the viewer is already signed in as the client, the
+  // preview says so (viewerIsClient) and the page skips the password step.
   @Get(':token')
-  getByToken(@Param('token') token: string) {
-    return this.service.getByToken(token);
+  @UseGuards(OptionalJwtAuthGuard)
+  getByToken(
+    @Param('token') token: string,
+    @CurrentUser() user?: { userId?: string },
+  ) {
+    return this.service.getByToken(token, user?.userId);
   }
 
   // Optional auth: if the viewer is already signed in as the draft's client,

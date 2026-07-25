@@ -124,7 +124,8 @@ export class AssistedJobService {
   }
 
   // ── Public: fetch a draft by token (client preview) ──
-  async getByToken(token: string) {
+  // authUserId is set when the viewer is signed in (OptionalJwtAuthGuard).
+  async getByToken(token: string, authUserId?: string) {
     const draft = await this.loadOpenDraft(token);
     const existing = await this.usersService.findByEmailOrPhone(
       draft.clientPhone,
@@ -149,12 +150,18 @@ export class AssistedJobService {
       videos: draft.videos,
       expiresAt: draft.expiresAt,
       // The client-facing page adapts its auth step:
+      //  - viewer already signed in AS this client -> nothing to enter
       //  - no account           -> "create a password"
       //  - account w/ password   -> "enter your password"
       //  - account w/o password  -> nothing to enter (phone-OTP / Google signup);
       //    the link authorizes and optionally lets them set a password.
       existingUser: !!existing,
       hasPassword: !!(existing && (existing as { password?: string }).password),
+      // Computed by id (robust), matching approve()'s own skip-password check.
+      viewerIsClient:
+        !!existing &&
+        !!authUserId &&
+        String((existing as { _id: unknown })._id) === authUserId,
     };
   }
 
@@ -339,10 +346,10 @@ export class AssistedJobService {
     };
     // Only attach propertyType when present (it's an enum-validated field).
     if (draft.propertyType) jobData.propertyType = draft.propertyType;
-    // NB: invitedPros are intentionally NOT set here. createJob pre-populates
-    // job.invitedPros and then calls invitePros, which dedupes against that same
-    // list and no-ops (so no invite notification is ever sent). We instead invite
-    // them via a separate invitePros call AFTER creation (see approve()).
+    // NB: invitedPros are intentionally NOT set here. If passed, createJob would
+    // pre-write them onto the job and then call invitePros, which dedupes against
+    // that same list and sends NO notification. We invite them via a separate
+    // invitePros call AFTER creation instead (see approve()), so they get notified.
 
     return jobData;
   }
