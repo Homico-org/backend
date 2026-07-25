@@ -11,6 +11,7 @@ import { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { AssistedJobService } from './assisted-job.service';
@@ -52,15 +53,20 @@ export class AssistedJobController {
     return this.service.getByToken(token);
   }
 
+  // Optional auth: if the viewer is already signed in as the draft's client,
+  // we skip the password step (see the service).
   @Post(':token/approve')
+  @UseGuards(OptionalJwtAuthGuard)
   approve(
     @Param('token') token: string,
     @Body() dto: ApproveAssistedJobDto,
     @Req() req: Request,
+    @CurrentUser() user?: { userId?: string },
   ) {
     return this.service.approve(token, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
+      authUserId: user?.userId,
     });
   }
 }

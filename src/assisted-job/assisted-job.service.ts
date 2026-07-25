@@ -20,7 +20,12 @@ import { ApproveAssistedJobDto } from './dto/approve-assisted-job.dto';
 
 const LINK_TTL_DAYS = 7;
 
-type RequestMeta = { ip?: string; userAgent?: string };
+type RequestMeta = {
+  ip?: string;
+  userAgent?: string;
+  // Set when the viewer is authenticated (OptionalJwtAuthGuard on approve).
+  authUserId?: string;
+};
 
 function toNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -65,6 +70,7 @@ export class AssistedJobService {
       coordinates: dto.coordinates,
       images: dto.images ?? [],
       videos: dto.videos ?? [],
+      invitedPros: dto.invitedPros ?? [],
       expiresAt,
     });
 
@@ -178,7 +184,15 @@ export class AssistedJobService {
       );
 
       let session: { access_token: string; refresh_token: string; user: { id: unknown } };
-      if (!existing) {
+      const viewerIsClient =
+        !!existing &&
+        !!meta.authUserId &&
+        String((existing as { _id: unknown })._id) === meta.authUserId;
+
+      if (viewerIsClient) {
+        // Already signed in as this exact client → no password needed.
+        session = this.authService.issueSessionForUser(existing);
+      } else if (!existing) {
         // Brand-new client → create the account with the chosen password.
         if (!dto.password) {
           throw new BadRequestException('A password is required.');
@@ -198,10 +212,19 @@ export class AssistedJobService {
         if (!dto.password) {
           throw new BadRequestException('A password is required.');
         }
-        session = await this.authService.login(
-          { identifier: draft.clientPhone, password: dto.password },
-          meta,
-        );
+        try {
+          session = await this.authService.login(
+            { identifier: draft.clientPhone, password: dto.password },
+            meta,
+          );
+        } catch {
+          // login throws 401; on this PUBLIC endpoint a 401 would trip the web
+          // client's global "session expired" handler and log the viewer out.
+          // Surface a wrong-password as a plain 400 instead.
+          throw new BadRequestException(
+            'Incorrect password. Please try again.',
+          );
+        }
       } else {
         // Existing account with NO password (phone-OTP / Google signup): the
         // single-use link is the proof of identity, so sign them in. We do NOT
@@ -214,6 +237,22 @@ export class AssistedJobService {
       const clientId = String(session.user.id);
       const jobData = this.buildJobData(draft, dto);
       const job = await this.jobsService.createJob(clientId, jobData as never);
+
+      // Invite the admin-chosen pros AFTER creation so invitePros sees them as
+      // new (the job was created with an empty invitedPros list) and actually
+      // sends the invitation notification + SMS. Best-effort: a failure here
+      // must not undo the approval / job creation.
+      if (draft.invitedPros?.length) {
+        try {
+          await this.jobsService.invitePros(
+            job._id.toString(),
+            clientId,
+            draft.invitedPros,
+          );
+        } catch {
+          // swallow — job is created; the pros just miss the direct invite.
+        }
+      }
 
       draft.createdJobId = job._id as Types.ObjectId;
       draft.clientUserId = new Types.ObjectId(clientId);
@@ -300,6 +339,10 @@ export class AssistedJobService {
     };
     // Only attach propertyType when present (it's an enum-validated field).
     if (draft.propertyType) jobData.propertyType = draft.propertyType;
+    // NB: invitedPros are intentionally NOT set here. createJob pre-populates
+    // job.invitedPros and then calls invitePros, which dedupes against that same
+    // list and no-ops (so no invite notification is ever sent). We instead invite
+    // them via a separate invitePros call AFTER creation (see approve()).
 
     return jobData;
   }

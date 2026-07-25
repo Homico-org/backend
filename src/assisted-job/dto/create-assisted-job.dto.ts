@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsMongoId,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -89,4 +90,10 @@ export class CreateAssistedJobDto {
   @IsArray()
   @IsString({ each: true })
   videos?: string[];
+
+  // Optional: pro user IDs to invite directly (in addition to the marketplace).
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  invitedPros?: string[];
 }

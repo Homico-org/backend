@@ -84,6 +84,11 @@ export class AssistedJob extends Document {
   @Prop({ type: [String], default: [] })
   videos: string[];
 
+  // Pros the admin chose to invite directly, on top of the open marketplace.
+  // Passed to createJob at approval time (which notifies them).
+  @Prop({ type: [String], default: [] })
+  invitedPros: string[];
+
   // ── Lifecycle ──
   @Prop({ required: true })
   expiresAt: Date;
