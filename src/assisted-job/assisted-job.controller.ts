@@ -17,6 +17,7 @@ import { UserRole } from '../users/schemas/user.schema';
 import { AssistedJobService } from './assisted-job.service';
 import { CreateAssistedJobDto } from './dto/create-assisted-job.dto';
 import { ApproveAssistedJobDto } from './dto/approve-assisted-job.dto';
+import { SendAssistedJobLinkDto } from './dto/send-assisted-job-link.dto';
 
 @Controller('assisted-jobs')
 export class AssistedJobController {
@@ -45,6 +46,13 @@ export class AssistedJobController {
   @Roles(UserRole.ADMIN)
   cancel(@Param('id') id: string) {
     return this.service.cancel(id);
+  }
+
+  @Post(':id/send')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  send(@Param('id') id: string, @Body() dto: SendAssistedJobLinkDto) {
+    return this.service.sendLink(id, dto.channel);
   }
 
   // ── Public (client opens the shared link before signing in) ──

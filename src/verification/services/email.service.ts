@@ -210,6 +210,66 @@ export class EmailService {
   }
 
   /**
+   * Send an admin-prepared "assisted job" link so the client can review and
+   * confirm their request. Logs (no send) when SendGrid isn't configured.
+   */
+  async sendAssistedJobLink(
+    email: string,
+    clientName: string,
+    url: string,
+  ): Promise<boolean> {
+    const fromEmail =
+      this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+      'noreply@homico.ge';
+    const appName = 'Homico';
+    const name = clientName || 'there';
+
+    if (!this.isConfigured) {
+      this.logger.log(`[DEV MODE] Assisted-job link email for ${email}: ${url}`);
+      return true;
+    }
+
+    try {
+      await sgMail.send({
+        to: email,
+        from: { email: fromEmail, name: appName },
+        subject: 'Your Homico request is ready to confirm',
+        text: `Hi ${name},\n\nWe prepared a service request for you. Review and confirm it here:\n${url}\n\n${appName}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <h1 style="color: #EF4E24; margin: 0;">${appName}</h1>
+            </div>
+            <div style="background-color: #f8fafc; border-radius: 12px; padding: 28px;">
+              <h2 style="color: #1e293b; margin: 0 0 8px;">Hi ${name},</h2>
+              <p style="color: #64748b; margin: 0 0 20px;">
+                We prepared a service request for you. Review the details and
+                confirm it in one tap.
+              </p>
+              <div style="text-align: center;">
+                <a href="${url}" style="background-color: #EF4E24; color: #fff; text-decoration: none; font-weight: bold; padding: 14px 28px; border-radius: 8px; display: inline-block;">
+                  Review &amp; confirm
+                </a>
+              </div>
+              <p style="color: #94a3b8; margin-top: 20px; font-size: 12px; word-break: break-all;">
+                ${url}
+              </p>
+            </div>
+          </div>
+        `,
+      });
+      this.logger.log(`Assisted-job link email sent to ${email}`);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send assisted-job link email to ${email}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Email-based password reset. Currently unused (the live password
    * reset flow is phone-based via SMS), but kept here so a future
    * "Forgot password? send email instead" surface can drop in

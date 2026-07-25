@@ -11,6 +11,8 @@ import { AuthService } from '../auth/auth.service';
 import { JobsService } from '../jobs/jobs.service';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/schemas/user.schema';
+import { SmsService } from '../verification/services/sms.service';
+import { EmailService } from '../verification/services/email.service';
 import {
   AssistedJob,
   AssistedJobStatus,
@@ -41,7 +43,14 @@ export class AssistedJobService {
     private readonly jobsService: JobsService,
     private readonly usersService: UsersService,
     private readonly authService: AuthService,
+    private readonly smsService: SmsService,
+    private readonly emailService: EmailService,
   ) {}
+
+  private clientUrl(token: string): string {
+    const base = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return `${base}/assisted-job/${token}`;
+  }
 
   // ── Admin: create a draft + share link ──
   async create(adminId: string, dto: CreateAssistedJobDto) {
@@ -96,6 +105,7 @@ export class AssistedJobService {
       status: r.status,
       clientName: r.clientName,
       clientPhone: r.clientPhone,
+      clientEmail: r.clientEmail,
       category: r.category,
       // Let the admin re-copy the client link from the list.
       clientPath: `/assisted-job/${r.token}`,
@@ -121,6 +131,43 @@ export class AssistedJobService {
       await draft.save();
     }
     return { id: draft._id.toString(), status: draft.status };
+  }
+
+  // ── Admin: send the link to the client (SMS or email) ──
+  async sendLink(id: string, channel: 'sms' | 'email') {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Request not found.');
+    }
+    const draft = await this.model.findById(id).exec();
+    if (!draft) throw new NotFoundException('Request not found.');
+    if (draft.status !== AssistedJobStatus.PENDING) {
+      throw new BadRequestException('This link is no longer active.');
+    }
+
+    const url = this.clientUrl(draft.token);
+
+    if (channel === 'sms') {
+      const res = await this.smsService.sendNotificationSms(
+        draft.clientPhone,
+        `Homico: your service request is ready. Review & confirm: ${url}`,
+      );
+      if (!res.success) {
+        throw new BadRequestException(res.error || 'Could not send the SMS.');
+      }
+      return { success: true, channel };
+    }
+
+    // email
+    if (!draft.clientEmail) {
+      throw new BadRequestException('No email address on file for this client.');
+    }
+    const ok = await this.emailService.sendAssistedJobLink(
+      draft.clientEmail,
+      draft.clientName,
+      url,
+    );
+    if (!ok) throw new BadRequestException('Could not send the email.');
+    return { success: true, channel };
   }
 
   // ── Public: fetch a draft by token (client preview) ──
