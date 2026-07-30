@@ -239,15 +239,24 @@ export class AuthService {
     dto: PhoneLoginDto,
     requestMeta?: { ip?: string; userAgent?: string },
   ) {
-    // Verify OTP
+    // Resolve the account BEFORE verifying the OTP. A brand-new client needs a
+    // name, and the signup UI collects it in a second step: it first calls
+    // phoneLogin without a name, gets "name required", then re-calls with the
+    // name and the SAME code. If we consumed the OTP on that first (name-less)
+    // call, the retry would fail with "invalid code" and signup would be
+    // impossible — so bail for the missing name first, leaving the OTP intact.
+    const existing = await this.usersService.findByPhone(dto.phone);
+
+    if (!existing && !dto.name) {
+      throw new BadRequestException("Name is required for new users");
+    }
+
+    // Verify OTP (consumes it). Only reached once we can actually complete.
     await this.verificationService.verifyOtp({
       identifier: dto.phone,
       code: dto.code,
       type: OtpType.PHONE,
     });
-
-    // Find existing user by phone
-    const existing = await this.usersService.findByPhone(dto.phone);
 
     if (existing) {
       await this.usersService.updateLastLogin(existing._id.toString());
@@ -270,11 +279,7 @@ export class AuthService {
       };
     }
 
-    // New user — name is required
-    if (!dto.name) {
-      throw new BadRequestException("Name is required for new users");
-    }
-
+    // New user (name already validated above, before the OTP was consumed).
     // Generate UID
     const lastUser = await this.userModel
       .findOne({ uid: { $exists: true } })
