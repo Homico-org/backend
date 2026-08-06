@@ -183,8 +183,13 @@ export class ProjectTracking extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   proId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Proposal', required: true })
-  proposalId: Types.ObjectId;
+  // Optional: direct-request hires create a tracking record without a proposal
+  // (acceptDirectRequest). Making this required threw a ValidationError → 500,
+  // stranding the job IN_PROGRESS with no workspace. Only marketplace hires
+  // (finalizeHire) set it, and the one place that reads it (project-request)
+  // does so null-safely, so optional is safe.
+  @Prop({ type: Types.ObjectId, ref: 'Proposal', required: false })
+  proposalId?: Types.ObjectId;
 
   // Current stage
   @Prop({
