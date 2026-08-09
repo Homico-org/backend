@@ -2395,7 +2395,18 @@ export class UsersService {
       },
       // Drop the temporary lookup array - keeps the response payload tight.
       // (`rnd`/`tierRank` are kept here so $sort can use them, dropped after.)
-      { $project: { linkedPortfolio: 0, password: 0 } },
+      // Public pro list: never expose account PII. The aggregation returns plain
+      // objects (no schema toJSON), so these must be projected out at the source.
+      {
+        $project: {
+          linkedPortfolio: 0,
+          password: 0,
+          email: 0,
+          pendingEmail: 0,
+          googleId: 0,
+          pushTokens: 0,
+        },
+      },
       { $sort: sortObj },
       { $skip: fetchSkip },
       { $limit: fetchLimit },

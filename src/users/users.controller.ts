@@ -750,12 +750,28 @@ export class UsersController {
   @ApiOperation({ summary: "Get pro user by ID or UID" })
   @ApiResponse({ status: 200, description: "Pro user profile" })
   @ApiResponse({ status: 404, description: "Pro not found" })
-  findProById(@Param("id") id: string, @Req() req: any) {
+  async findProById(@Param("id") id: string, @Req() req: any) {
     const ip = getClientIp(req);
     const actor = req.user
       ? { id: req.user.userId, name: req.user.name }
       : undefined;
-    return this.usersService.findProById(id, ip, actor);
+    const pro = await this.usersService.findProById(id, ip, actor);
+    // Public endpoint: strip account PII for everyone except the pro viewing
+    // their own profile. Strip from the schema's toJSON output so the response
+    // shape (id normalization, pricing, premiumSource removal) is preserved.
+    const proJson =
+      typeof (pro as any)?.toJSON === "function"
+        ? (pro as any).toJSON()
+        : { ...(pro as any) };
+    const viewerId = req.user?.userId;
+    const isOwner = !!viewerId && String(proJson?.id) === String(viewerId);
+    if (!isOwner) {
+      delete proJson.email;
+      delete proJson.pendingEmail;
+      delete proJson.googleId;
+      delete proJson.pushTokens;
+    }
+    return proJson;
   }
 
   @Post("pros/:id/phone-view")
