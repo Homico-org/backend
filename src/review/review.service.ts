@@ -218,8 +218,11 @@ export class ReviewService {
   async findOne(id: string, isAdmin = false): Promise<Review> {
     const review = await this.reviewModel
       .findById(id)
+      // Public endpoint (anonymous-reachable) + .lean() bypasses the User toJSON,
+      // so strip account/security fields explicitly — an unselected populate here
+      // leaked the pro's full doc (incl. password hash) to anonymous callers.
       .populate('clientId', '_id name avatar')
-      .populate('proId')
+      .populate('proId', '-password -email -pendingEmail -googleId -pushTokens')
       .lean();
 
     if (!review) {

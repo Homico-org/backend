@@ -763,6 +763,15 @@ UserSchema.set("toJSON", {
     // paid) on public/self serialization. The admin list reads via .lean()
     // (which bypasses toJSON), so it still sees premiumSource.
     delete ret.premiumSource;
+    // Account-internal / security fields must never appear on ANY serialized
+    // user — public, self, or a populated sub-doc (reviews, jobs, offers,
+    // conversations, project tracking, etc.). Historically only premiumSource
+    // was stripped, so unselected .populate(userRef) leaked these everywhere.
+    // NOTE: .lean() queries bypass toJSON — those paths must .select() explicitly.
+    delete ret.password;
+    delete ret.pushTokens;
+    delete ret.googleId;
+    delete ret.pendingEmail;
     const normalized = normalizePricingModel(
       ret.pricingModel,
       ret.basePrice,
