@@ -438,6 +438,24 @@ export class UsersController {
     return this.usersService.addServiceAddress(user.userId, dto);
   }
 
+  // NOTE: the static `addresses/default` route MUST be declared before the
+  // `addresses/:id` param routes - otherwise Express matches "default" as an
+  // :id and this handler becomes unreachable (set-default silently no-ops).
+  @Patch("addresses/default")
+  @ApiOperation({ summary: "Set default service address" })
+  @ApiBearerAuth("JWT-auth")
+  @ApiResponse({ status: 200, description: "Default address updated" })
+  @UseGuards(JwtAuthGuard)
+  async setDefaultServiceAddress(
+    @CurrentUser() user: any,
+    @Body() dto: SetDefaultAddressDto,
+  ) {
+    return this.usersService.setDefaultServiceAddress(
+      user.userId,
+      dto.addressId,
+    );
+  }
+
   @Patch("addresses/:id")
   @ApiOperation({ summary: "Update a service address" })
   @ApiBearerAuth("JWT-auth")
@@ -462,21 +480,6 @@ export class UsersController {
   ) {
     await this.usersService.deleteServiceAddress(user.userId, addressId);
     return { message: "Address deleted successfully" };
-  }
-
-  @Patch("addresses/default")
-  @ApiOperation({ summary: "Set default service address" })
-  @ApiBearerAuth("JWT-auth")
-  @ApiResponse({ status: 200, description: "Default address updated" })
-  @UseGuards(JwtAuthGuard)
-  async setDefaultServiceAddress(
-    @CurrentUser() user: any,
-    @Body() dto: SetDefaultAddressDto,
-  ) {
-    return this.usersService.setDefaultServiceAddress(
-      user.userId,
-      dto.addressId,
-    );
   }
 
   // ============== NOTIFICATION PREFERENCES ==============
