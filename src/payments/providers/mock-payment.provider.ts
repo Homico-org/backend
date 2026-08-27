@@ -68,8 +68,14 @@ export class MockPaymentProvider implements PaymentProvider {
     // bounce straight to the caller's returnUrl, whose reconcile-on-return path
     // finalizes exactly as the webhook would. Previously these all pointed at
     // `/bookings/undefined/pay/mock-confirm`, so the payment flow never opened.
+    // Cleaning bookings (mobile) are pay-first: no booking row exists yet, so
+    // there's no id for the web mock-confirm page and the mobile in-app browser
+    // needs an absolute URL. The intent already auto-succeeded, so bounce to the
+    // caller's returnUrl - the reconcile-on-return path finalizes it. The web
+    // booking flow (real bookingId) still gets the interactive mock-confirm page.
     const redirectUrl =
-      params.metadata.entityType === "booking"
+      params.metadata.entityType === "booking" &&
+      params.metadata.kind !== "cleaning_booking"
         ? `/bookings/${params.metadata.bookingId ?? "unknown"}/pay/mock-confirm?intent=${intentId}`
         : params.returnUrl;
 

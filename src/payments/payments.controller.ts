@@ -143,6 +143,37 @@ export class PaymentsController {
     );
   }
 
+  @Post("booking/checkout")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Start a payment for a cleaning booking" })
+  async bookingCheckout(
+    @Req() req: { user: { userId: string } },
+    @Body()
+    body: {
+      hours: number;
+      extras?: string[];
+      frequency?: string;
+      cleaningType?: string;
+      amount?: number;
+      description?: string;
+      reference?: string;
+      country?: string;
+      locale?: string;
+    },
+  ) {
+    return this.paymentsService.createBookingIntent(req.user.userId, {
+      hours: body.hours,
+      extras: body.extras,
+      frequency: body.frequency,
+      cleaningType: body.cleaningType,
+      amount: body.amount,
+      description: body.description,
+      reference: body.reference,
+      country: body.country,
+      locale: body.locale,
+    });
+  }
+
   @Post("premium/preview")
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Preview the premium price after a promo code" })

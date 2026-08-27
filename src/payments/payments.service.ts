@@ -26,6 +26,11 @@ import { PaymentProviderName } from "./providers/payment-provider.interface";
 import { NotificationsService } from "../notifications/notifications.service";
 import { NotificationType } from "../notifications/schemas/notification.schema";
 import { EmailService } from "../verification/services/email.service";
+import {
+  computeBookingPrice,
+  MIN_HOURS,
+  MAX_HOURS,
+} from "./cleaning-pricing";
 
 /**
  * Orchestration layer between Homico's domain (bookings/projects) and the
@@ -47,6 +52,21 @@ import { EmailService } from "../verification/services/email.service";
  */
 
 const PLATFORM_FEE_RATE = 0.05;
+
+/**
+ * Platform charges: money goes to Homico, not into escrow for a pro. Premium
+ * grants a subscription; product_order and cancellation_fee are reconciled by
+ * their owning module's sync-on-read.
+ */
+const NON_ESCROW_ENTITY_TYPES: PaymentEntityType[] = [
+  "premium",
+  "product_order",
+  "cancellation_fee",
+  // Cleaning bookings are instant-book: no cleaner is assigned at payment
+  // time, so there is no payee to escrow to. Homico collects the charge and
+  // pays the assigned cleaner out later (manual, Phase 1).
+  "booking",
+];
 
 export interface CreateIntentForEntityParams {
   entityType: PaymentEntityType;
@@ -367,6 +387,93 @@ export class PaymentsService {
       returnUrl: `${appUrl}/pro/premium/return?tier=${tier}`,
       cancelUrl: `${appUrl}/pro/premium`,
       metadata: { tier, period, kind: "premium", promoCode: appliedCode },
+    });
+  }
+
+  /**
+   * Start a payment for a cleaning booking. Unlike a project milestone, a
+   * cleaning booking is instant-book: no cleaner is assigned at payment time,
+   * so there is no payee to escrow to. It is a platform charge (like premium)
+   * - Homico collects up front and pays the assigned cleaner out later, which
+   * is why "booking" lives in NON_ESCROW_ENTITY_TYPES.
+   *
+   * The booking row is created only after payment succeeds, so this runs
+   * before any booking exists: entityId is a caller-supplied reference for
+   * tracing, not a real booking id.
+   *
+   * The charged amount is computed server-side from the booking spec (hours,
+   * extras, frequency) via the shared cleaning-pricing config - the client's
+   * own estimate is only cross-checked and logged, never trusted, so a tampered
+   * request can't pay less than the real price.
+   */
+  async createBookingIntent(
+    userId: string,
+    input: {
+      hours: number;
+      extras?: string[];
+      frequency?: string;
+      cleaningType?: string;
+      amount?: number;
+      description?: string;
+      reference?: string;
+      country?: string;
+      locale?: string;
+    },
+  ): Promise<CreateIntentForEntityResult> {
+    const hours = Number(input.hours);
+    if (!Number.isInteger(hours) || hours < MIN_HOURS || hours > MAX_HOURS) {
+      throw new BadRequestException(
+        `hours must be an integer between ${MIN_HOURS} and ${MAX_HOURS}`,
+      );
+    }
+    const extras = Array.isArray(input.extras)
+      ? input.extras.filter((k): k is string => typeof k === "string")
+      : [];
+    const frequency = input.frequency || "oneTime";
+
+    // Server is the source of truth for the price. The client sends its own
+    // estimate for the UI; we recompute and charge our number.
+    const amount = computeBookingPrice(hours, extras, frequency);
+    if (amount <= 0) {
+      throw new BadRequestException("amount must be > 0");
+    }
+    if (
+      typeof input.amount === "number" &&
+      Math.abs(input.amount - amount) > 0.5
+    ) {
+      this.logger.warn(
+        `Booking price mismatch for user ${userId}: client=${input.amount} server=${amount} ` +
+          `(hours=${hours}, frequency=${frequency}, extras=${extras.join(",") || "none"})`,
+      );
+    }
+
+    const { currency } = this.resolveMarket(input.country);
+    const amountMinor = Math.round(amount * 100);
+    const entityId = (input.reference || `booking:${userId}`).slice(0, 120);
+    const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    // The return page is opened in the mobile's in-app browser, which has no
+    // app locale context, so carry the language on the URL.
+    const lang = ["en", "ka", "ru"].includes(input.locale || "")
+      ? (input.locale as string)
+      : "ka";
+    return this.createIntentForEntity({
+      entityType: "booking",
+      entityId,
+      amountMinor,
+      currency,
+      description: input.description?.trim() || "Homico cleaning",
+      payerUserId: userId,
+      // Platform charge - no cleaner assigned yet. Self-reference satisfies the
+      // Payment schema; "booking" is non-escrow so no escrow is created.
+      payeeUserId: userId,
+      returnUrl: `${appUrl}/booking/return?lang=${lang}`,
+      cancelUrl: `${appUrl}/booking`,
+      metadata: {
+        kind: "cleaning_booking",
+        hours: String(hours),
+        frequency,
+        extras: extras.join(",") || "none",
+      },
     });
   }
 
@@ -835,12 +942,9 @@ export class PaymentsService {
         { new: true },
       );
       if (claimed) {
-        // Premium and product_order are platform charges (no pro payee / escrow).
-        // Premium grants the subscription; product_order is handled by the orders
-        // module's own syncPaymentStatus. Everything else holds money in escrow.
         if (claimed.entityType === "premium") {
           await this.grantPremium(claimed);
-        } else if (claimed.entityType !== "product_order") {
+        } else if (!NON_ESCROW_ENTITY_TYPES.includes(claimed.entityType)) {
           await this.createEscrow(claimed);
         }
         this.logger.log(`Webhook processed: ${decoded.intentId} -> succeeded`);
@@ -911,10 +1015,9 @@ export class PaymentsService {
         { new: true },
       );
       if (claimed) {
-        // premium + product_order are platform charges (no escrow).
         if (claimed.entityType === "premium") {
           await this.grantPremium(claimed);
-        } else if (claimed.entityType !== "product_order") {
+        } else if (!NON_ESCROW_ENTITY_TYPES.includes(claimed.entityType)) {
           await this.createEscrow(claimed);
         }
         return claimed.toObject() as PaymentDoc;
