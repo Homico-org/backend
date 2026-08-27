@@ -14,6 +14,7 @@ import { MessageModule } from './message/message.module';
 import { OfferModule } from './offer/offer.module';
 import { ReviewModule } from './review/review.module';
 import { JobsModule } from './jobs/jobs.module';
+import { BookingSeriesModule } from './booking-series/booking-series.module';
 import { AssistedJobModule } from './assisted-job/assisted-job.module';
 
 import { VerificationModule } from './verification/verification.module';
@@ -125,6 +126,7 @@ import { APP_GUARD } from '@nestjs/core';
     OfferModule,
     ReviewModule,
     JobsModule,
+    BookingSeriesModule,
     AssistedJobModule,
     VerificationModule,
     CategoriesModule,

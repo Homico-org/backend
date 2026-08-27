@@ -279,6 +279,13 @@ export class User extends Document {
   @Prop()
   pendingEmail: string;
 
+  // UI language, refreshed by the mobile app every time it registers a push
+  // token. Push banners are rendered by the OS from what the server sends,
+  // so this is the only way to localize them - the in-app feed localizes
+  // client-side and does not need it.
+  @Prop({ type: String, enum: ["en", "ka", "ru"] })
+  locale: string;
+
   // Notification preferences
   @Prop({ type: Object, default: null })
   notificationPreferences: {

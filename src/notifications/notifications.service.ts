@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Notification, NotificationType } from './schemas/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NotificationsGateway } from './notifications.gateway';
+import { ExpoPushService } from './expo-push.service';
 
 @Injectable()
 export class NotificationsService {
@@ -11,6 +12,7 @@ export class NotificationsService {
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
     @Inject(forwardRef(() => NotificationsGateway))
     private notificationsGateway: NotificationsGateway,
+    private expoPushService: ExpoPushService,
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
@@ -197,6 +199,30 @@ export class NotificationsService {
     } catch (error) {
       console.error('[Notifications] Failed to push real-time notification:', error);
     }
+
+    // Deliver to the user's devices too. The socket above only reaches an app
+    // that is open right now; this is what reaches a backgrounded or killed
+    // app. Fire-and-forget - sendToUser swallows its own failures.
+    void this.expoPushService.sendToUser(userId, {
+      title,
+      body: message,
+      type,
+      titleKey: options?.i18n?.titleKey,
+      messageKey: options?.i18n?.messageKey,
+      i18nParams: options?.i18n?.params,
+      data: {
+        notificationId: String(notification._id),
+        link: options?.link,
+        referenceId: options?.referenceId,
+        // The OS renders title/body as sent, so the banner itself is the
+        // English fallback. These let the app show localized copy once it is
+        // opened from the tap, and are what a future server-side
+        // localization pass would key off.
+        titleKey: options?.i18n?.titleKey,
+        messageKey: options?.i18n?.messageKey,
+        i18nParams: options?.i18n?.params,
+      },
+    });
 
     return notification;
   }

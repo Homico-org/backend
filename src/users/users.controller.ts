@@ -130,9 +130,16 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async registerPushToken(
     @CurrentUser() user: { userId: string },
-    @Body() body: { token: string; platform: string },
+    @Body() body: { token: string; platform: string; locale?: string },
   ) {
-    await this.usersService.savePushToken(user.userId, body.token, body.platform || "web");
+    // The app re-registers on every launch, so this doubles as the freshest
+    // signal of which language to render push banners in.
+    await this.usersService.savePushToken(
+      user.userId,
+      body.token,
+      body.platform || "web",
+      body.locale,
+    );
     return { success: true };
   }
 

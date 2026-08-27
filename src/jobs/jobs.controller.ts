@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
+import { CancelJobDto } from './dto/cancel-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { CreateJobCommentDto, UpdateJobCommentDto, MarkInterestingDto } from './dto/job-comment.dto';
@@ -601,13 +602,72 @@ export class JobsController {
     return this.jobsService.invitePros(jobId, user.userId, body.proIds);
   }
 
+  @Get(':id/cancellation-preview')
+  @ApiOperation({
+    summary: 'What cancelling this job right now would cost the client',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async previewCancellation(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.jobsService.previewCancellation(id, user.userId);
+  }
+
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel a job' })
   @ApiBearerAuth('JWT-auth')
   @ApiResponse({ status: 200, description: 'Job cancelled successfully' })
   @UseGuards(JwtAuthGuard)
-  async cancelJob(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.jobsService.cancelJob(id, user.userId);
+  async cancelJob(
+    @Param('id') id: string,
+    @Body() body: CancelJobDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.jobsService.cancelJob(id, user.userId, body?.reason);
+  }
+
+  // ---- Cancellation fee: the assigned cleaner decides ----------------------
+
+  @Get('cancellation-fees/pending')
+  @ApiOperation({ summary: 'Cancellations awaiting my fee decision (pro)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async pendingCancellationFees(@CurrentUser() user: any) {
+    return this.jobsService.listPendingCancellationFees(user.userId);
+  }
+
+  @Get('cancellation-fees/decided')
+  @ApiOperation({
+    summary: 'Fees I already decided, with payment state refreshed (pro)',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async decidedCancellationFees(@CurrentUser() user: any) {
+    return this.jobsService.listDecidedCancellationFees(user.userId);
+  }
+
+  @Post(':id/cancellation-fee/waive')
+  @ApiOperation({ summary: 'Waive the cancellation fee (pro)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async waiveCancellationFee(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.jobsService.waiveCancellationFee(id, user.userId);
+  }
+
+  @Post(':id/cancellation-fee/charge')
+  @ApiOperation({ summary: 'Confirm the cancellation fee and bill it (pro)' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  async chargeCancellationFee(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.jobsService.chargeCancellationFee(id, user.userId);
   }
 
   // ============== DYNAMIC ROUTES LAST (with :id/:jobId wildcards) ==============

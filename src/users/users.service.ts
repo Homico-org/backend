@@ -378,7 +378,12 @@ export class UsersService {
     return result?.disputeStrikes ?? 0;
   }
 
-  async savePushToken(userId: string, token: string, platform: string): Promise<void> {
+  async savePushToken(
+    userId: string,
+    token: string,
+    platform: string,
+    locale?: string,
+  ): Promise<void> {
     // Remove existing token if present (prevent duplicates), then add
     await this.userModel.updateOne(
       { _id: userId },
@@ -392,6 +397,11 @@ export class UsersService {
         $push: {
           pushTokens: { token, platform, updatedAt: new Date() },
         },
+        // Push banners are rendered by the OS from server-sent text, so the
+        // user's language has to live server-side to localize them.
+        ...(locale && ["en", "ka", "ru"].includes(locale)
+          ? { $set: { locale } }
+          : {}),
       },
     );
   }

@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
+import { CancellationFeeStatus } from "../cancellation-policy";
 
 export enum JobStatus {
   OPEN = "open",
@@ -254,6 +255,53 @@ export class Job extends Document {
   @Prop({ type: Date })
   expiresAt: Date;
 
+  // --- Recurring bookings -------------------------------------------------
+  // Set on visits generated from a BookingSeries. One-time bookings leave both
+  // unset, so every existing query keeps working untouched.
+  @Prop({ type: Types.ObjectId, ref: "BookingSeries", index: true })
+  seriesId: Types.ObjectId;
+
+  /** 0-based position of this visit within its series. */
+  @Prop({ type: Number })
+  occurrenceIndex: number;
+
+  // --- Cancellation -------------------------------------------------------
+  @Prop({
+    type: {
+      cancelledAt: { type: Date },
+      cancelledBy: { type: Types.ObjectId, ref: "User" },
+      reason: { type: String },
+      hoursNotice: { type: Number },
+      tier: { type: String },
+      rate: { type: Number },
+      feeAmount: { type: Number, default: 0 },
+      feeStatus: {
+        type: String,
+        enum: Object.values(CancellationFeeStatus),
+        default: CancellationFeeStatus.NONE,
+      },
+      decidedByProId: { type: Types.ObjectId, ref: "User" },
+      decidedAt: { type: Date },
+      paymentId: { type: String },
+      /** Whether this cancellation ended the whole series, not just one visit. */
+      cancelledSeries: { type: Boolean, default: false },
+    },
+  })
+  cancellation: {
+    cancelledAt?: Date;
+    cancelledBy?: Types.ObjectId;
+    reason?: string;
+    hoursNotice?: number;
+    tier?: string;
+    rate?: number;
+    feeAmount?: number;
+    feeStatus?: CancellationFeeStatus;
+    decidedByProId?: Types.ObjectId;
+    decidedAt?: Date;
+    paymentId?: string;
+    cancelledSeries?: boolean;
+  };
+
   @Prop({ type: [String], default: [] })
   images: string[];
 
@@ -335,6 +383,11 @@ JobSchema.index({ location: 1, status: 1 });
 JobSchema.index({ hiredProId: 1 });
 JobSchema.index({ jobType: 1, status: 1 });
 JobSchema.index({ expiresAt: 1 }, { sparse: true });
+JobSchema.index({ seriesId: 1, scheduledDate: 1 }, { sparse: true });
+JobSchema.index(
+  { hiredProId: 1, "cancellation.feeStatus": 1 },
+  { sparse: true },
+);
 // Compound index for the marketplace listing query
 // (`/jobs?country=XX&status=open`).
 JobSchema.index({ country: 1, status: 1, createdAt: -1 });

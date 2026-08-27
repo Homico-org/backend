@@ -33,7 +33,13 @@ export type EscrowStatus =
 export class Escrow extends Document {
   @Prop({
     required: true,
-    enum: ["booking", "project_milestone", "premium", "product_order"],
+    enum: [
+      "booking",
+      "project_milestone",
+      "premium",
+      "product_order",
+      "cancellation_fee",
+    ],
     index: true,
   })
   entityType: PaymentEntityType;

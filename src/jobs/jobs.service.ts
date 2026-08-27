@@ -49,6 +49,12 @@ import {
   JobView,
 } from "./schemas/job.schema";
 import {
+  assessCancellation,
+  CancellationAssessment,
+  CancellationFeeStatus,
+  parseScheduledStart,
+} from "./cancellation-policy";
+import {
   ProjectStage,
   ProjectTracking,
 } from "./schemas/project-tracking.schema";
@@ -2535,7 +2541,239 @@ export class JobsService {
     return { declined: true, allDeclined };
   }
 
-  async cancelJob(jobId: string, clientId: string): Promise<Job> {
+  /**
+   * What the client would be charged for cancelling this job right now.
+   * Read-only - the app calls this to show the fee before confirming.
+   */
+  async previewCancellation(
+    jobId: string,
+    clientId: string,
+  ): Promise<CancellationAssessment & { canCancel: boolean; visitPrice: number }> {
+    const job = await this.jobModel
+      .findOne({
+        _id: new Types.ObjectId(jobId),
+        clientId: new Types.ObjectId(clientId),
+      })
+      .select("status scheduledDate scheduledSlot budgetAmount")
+      .lean();
+
+    if (!job) throw new NotFoundException("Job not found");
+
+    const terminal = [
+      JobStatus.COMPLETED,
+      JobStatus.CANCELLED,
+      JobStatus.EXPIRED,
+    ].includes(job.status as JobStatus);
+
+    const visitPrice = job.budgetAmount ?? 0;
+    const assessment = assessCancellation(
+      visitPrice,
+      parseScheduledStart(job.scheduledDate, job.scheduledSlot),
+    );
+
+    return { ...assessment, visitPrice, canCancel: !terminal };
+  }
+
+  /**
+   * Reconcile a charged fee against its payment.
+   *
+   * Payments cannot call back into Jobs (that would be a circular module
+   * dependency), so like product-orders this syncs on read: whoever looks at
+   * the fee pulls the payment's current state and settles the record.
+   */
+  async syncCancellationFeePayment(jobId: string): Promise<void> {
+    const job = await this.jobModel.findById(jobId);
+    if (!job?.cancellation?.paymentId) return;
+    if (job.cancellation.feeStatus !== CancellationFeeStatus.CHARGED) return;
+
+    const payment = await this.paymentsService.findLatestPaymentForEntity(
+      "cancellation_fee",
+      jobId,
+    );
+    if (!payment) return;
+
+    if (payment.status === "succeeded") {
+      job.cancellation.feeStatus = CancellationFeeStatus.PAID;
+    } else if (payment.status === "failed" || payment.status === "cancelled") {
+      job.cancellation.feeStatus = CancellationFeeStatus.FAILED;
+    } else {
+      return; // still pending - nothing to settle
+    }
+
+    await job.save();
+  }
+
+  /**
+   * Fees this cleaner has already decided on, newest first, with their
+   * payment state refreshed. This is where a charged fee becomes visibly
+   * paid or failed.
+   */
+  async listDecidedCancellationFees(proUserId: string): Promise<unknown[]> {
+    const decided = await this.jobModel
+      .find({
+        hiredProId: new Types.ObjectId(proUserId),
+        "cancellation.feeStatus": {
+          $in: [
+            CancellationFeeStatus.CHARGED,
+            CancellationFeeStatus.PAID,
+            CancellationFeeStatus.FAILED,
+            CancellationFeeStatus.WAIVED,
+          ],
+        },
+      })
+      .sort({ "cancellation.decidedAt": -1 })
+      .limit(20)
+      .select("title scheduledDate scheduledSlot budgetAmount cancellation")
+      .lean();
+
+    // Refresh anything still sitting at "charged" before returning.
+    await Promise.all(
+      decided
+        .filter(
+          (j: any) =>
+            j.cancellation?.feeStatus === CancellationFeeStatus.CHARGED,
+        )
+        .map((j: any) =>
+          this.syncCancellationFeePayment(String(j._id)).catch((err) =>
+            console.error("[syncCancellationFeePayment]", err),
+          ),
+        ),
+    );
+
+    return this.jobModel
+      .find({ _id: { $in: decided.map((j: any) => j._id) } })
+      .sort({ "cancellation.decidedAt": -1 })
+      .select("title scheduledDate scheduledSlot budgetAmount cancellation")
+      .lean();
+  }
+
+  /**
+   * Cancellations awaiting this cleaner's fee decision, newest first.
+   */
+  async listPendingCancellationFees(proUserId: string): Promise<unknown[]> {
+    return this.jobModel
+      .find({
+        hiredProId: new Types.ObjectId(proUserId),
+        "cancellation.feeStatus": CancellationFeeStatus.PENDING,
+      })
+      .sort({ "cancellation.cancelledAt": -1 })
+      .lean();
+  }
+
+  private async loadFeeDecisionJob(
+    jobId: string,
+    proUserId: string,
+  ): Promise<Job> {
+    const job = await this.jobModel.findById(jobId);
+    if (!job) throw new NotFoundException("Job not found");
+
+    if (job.hiredProId?.toString() !== proUserId) {
+      throw new ForbiddenException(
+        "Only the assigned cleaner can decide this cancellation fee",
+      );
+    }
+    if (job.cancellation?.feeStatus !== CancellationFeeStatus.PENDING) {
+      throw new BadRequestException(
+        "There is no pending cancellation fee on this booking",
+      );
+    }
+    return job;
+  }
+
+  /** The cleaner lets the client off - no charge. */
+  async waiveCancellationFee(jobId: string, proUserId: string): Promise<Job> {
+    const job = await this.loadFeeDecisionJob(jobId, proUserId);
+
+    job.cancellation.feeStatus = CancellationFeeStatus.WAIVED;
+    job.cancellation.decidedByProId = new Types.ObjectId(proUserId);
+    job.cancellation.decidedAt = new Date();
+    const saved = await job.save();
+
+    try {
+      await this.notificationsService.notify(
+        job.clientId.toString(),
+        NotificationType.JOB_CANCELLED,
+        "Cancellation fee waived",
+        `Your cleaner waived the cancellation fee for "${job.title}"`,
+        {
+          referenceId: jobId,
+          referenceModel: "Job",
+          i18n: {
+            titleKey: "notifications.types.cancellation_fee_waived.title",
+            messageKey: "notifications.types.cancellation_fee_waived.message",
+            params: { jobTitle: job.title },
+          },
+        },
+      );
+    } catch (err) {
+      console.error("[waiveCancellationFee] notify failed:", err);
+    }
+
+    return saved;
+  }
+
+  /**
+   * The cleaner confirms the fee. Creates a Flitt payment intent for the
+   * client; the returned redirect URL is where they settle it.
+   */
+  async chargeCancellationFee(
+    jobId: string,
+    proUserId: string,
+  ): Promise<{ job: Job; paymentRedirectUrl?: string }> {
+    const job = await this.loadFeeDecisionJob(jobId, proUserId);
+
+    const feeAmount = job.cancellation.feeAmount ?? 0;
+    if (feeAmount <= 0) {
+      throw new BadRequestException("This cancellation carries no fee");
+    }
+
+    const appUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const intent = await this.paymentsService.createIntentForEntity({
+      entityType: "cancellation_fee",
+      entityId: jobId,
+      amountMinor: Math.round(feeAmount * 100),
+      currency: "GEL",
+      description: `Homico cancellation fee: ${job.title}`,
+      payerUserId: job.clientId.toString(),
+      payeeUserId: proUserId,
+      returnUrl: `${appUrl}/bookings/${jobId}/fee/return`,
+      cancelUrl: `${appUrl}/bookings/${jobId}/fee/cancelled`,
+    });
+
+    job.cancellation.feeStatus = CancellationFeeStatus.CHARGED;
+    job.cancellation.decidedByProId = new Types.ObjectId(proUserId);
+    job.cancellation.decidedAt = new Date();
+    job.cancellation.paymentId = intent.paymentId;
+    const saved = await job.save();
+
+    try {
+      await this.notificationsService.notify(
+        job.clientId.toString(),
+        NotificationType.JOB_CANCELLED,
+        "Cancellation fee charged",
+        `A ${feeAmount} GEL cancellation fee applies to "${job.title}"`,
+        {
+          referenceId: jobId,
+          referenceModel: "Job",
+          i18n: {
+            titleKey: "notifications.types.cancellation_fee_charged.title",
+            messageKey: "notifications.types.cancellation_fee_charged.message",
+            params: { jobTitle: job.title, amount: String(feeAmount) },
+          },
+        },
+      );
+    } catch (err) {
+      console.error("[chargeCancellationFee] notify failed:", err);
+    }
+
+    return { job: saved, paymentRedirectUrl: intent.redirectUrl };
+  }
+
+  async cancelJob(
+    jobId: string,
+    clientId: string,
+    reason?: string,
+  ): Promise<Job> {
     const job = await this.jobModel.findOne({
       _id: new Types.ObjectId(jobId),
       clientId: new Types.ObjectId(clientId),
@@ -2545,6 +2783,9 @@ export class JobsService {
       throw new NotFoundException("Job not found");
     }
 
+    // Cancelling is always allowed while the job is live. What used to be a
+    // hard block once the pro was en route is now priced by the cancellation
+    // policy instead, and the cleaner decides whether to actually charge it.
     if (
       [JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.EXPIRED].includes(
         job.status as JobStatus,
@@ -2553,27 +2794,28 @@ export class JobsService {
       throw new BadRequestException("This order cannot be cancelled");
     }
 
-    if (job.status === JobStatus.IN_PROGRESS) {
-      const project = await this.projectTrackingModel.findOne({
-        jobId: new Types.ObjectId(jobId),
-      });
-      if (project) {
-        const nonCancellableStages = [
-          ProjectStage.EN_ROUTE,
-          ProjectStage.STARTED,
-          ProjectStage.IN_PROGRESS,
-          ProjectStage.REVIEW,
-          ProjectStage.COMPLETED,
-        ];
-        if (nonCancellableStages.includes(project.currentStage)) {
-          throw new BadRequestException(
-            "Cannot cancel - professional is already on the way",
-          );
-        }
-      }
-    }
+    const assessment = assessCancellation(
+      job.budgetAmount ?? 0,
+      parseScheduledStart(job.scheduledDate, job.scheduledSlot),
+    );
 
     job.status = JobStatus.CANCELLED;
+    job.cancellation = {
+      cancelledAt: new Date(),
+      cancelledBy: new Types.ObjectId(clientId),
+      reason,
+      hoursNotice: Number.isFinite(assessment.hoursNotice)
+        ? Math.round(assessment.hoursNotice * 10) / 10
+        : undefined,
+      tier: assessment.tier,
+      rate: assessment.rate,
+      feeAmount: assessment.feeAmount,
+      // A fee only becomes a decision when there is a cleaner to make it.
+      feeStatus:
+        assessment.feeAmount > 0 && job.hiredProId
+          ? CancellationFeeStatus.PENDING
+          : CancellationFeeStatus.NONE,
+    };
     const savedJob = await job.save();
 
     // Refund the held hire escrow. Cancellation is only allowed at the HIRED
