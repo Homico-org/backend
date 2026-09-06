@@ -21,6 +21,11 @@ import { EmailService } from "./services/email.service";
 import { OtpChannelType, SmsService } from "./services/sms.service";
 import { resolveUserLocale, type SupportedLocale } from "../common/countries";
 
+// How long a phone OTP stays valid. Kept generous on purpose: UBill SMS
+// delivery to Georgian numbers is frequently minutes-late, and an expired
+// code surfaces to the user as an unexplained rejection.
+const PHONE_OTP_TTL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class VerificationService {
   private readonly logger = new Logger(VerificationService.name);
@@ -48,10 +53,15 @@ export class VerificationService {
   ): Promise<{ message: string; expiresIn: number; channel?: string }> {
     const { identifier, type, channel, locale: requestedLocale } = sendOtpDto;
 
-    // Check rate limiting - max 3 OTPs per identifier in 10 minutes
+    // Check rate limiting - max 3 OTPs per identifier in 10 minutes.
+    // Only real sends count: a successful verifyOtp writes a "VERIFIED"
+    // marker into the same collection, so counting those made every
+    // completed login burn two slots and locked the user out of resending
+    // after a single retry.
     const recentOtps = await this.otpModel.countDocuments({
       identifier,
       type,
+      code: { $ne: "VERIFIED" },
       createdAt: { $gte: new Date(Date.now() - 10 * 60 * 1000) },
     });
 
@@ -99,7 +109,10 @@ export class VerificationService {
         identifier,
         code: result.provider === "prelude" ? "PRELUDE_VERIFY" : code,
         type,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+        // 10 minutes: UBill SMS delivery regularly takes several minutes,
+        // and a code that lands after its own window is indistinguishable
+        // from a wrong one for the user.
+        expiresAt: new Date(Date.now() + PHONE_OTP_TTL_MS),
         channel: otpChannel,
       });
       await otp.save();
@@ -112,7 +125,7 @@ export class VerificationService {
 
       return {
         message: `Verification code sent via ${channelLabel}`,
-        expiresIn: 300, // 5 minutes
+        expiresIn: PHONE_OTP_TTL_MS / 1000,
         channel: otpChannel,
       };
     }
@@ -243,7 +256,62 @@ export class VerificationService {
         return { verified: true };
       }
 
-      throw new BadRequestException("Invalid verification code");
+      // Every failure below used to collapse into a single "Invalid
+      // verification code", which made a genuinely wrong digit, an expired
+      // code and a code superseded by a resend indistinguishable - both for
+      // the user and for us reading the logs. Work out which one it is.
+      const lastReal = await this.otpModel
+        .findOne({
+          identifier,
+          type,
+          code: { $nin: ["PRELUDE_VERIFY", "VERIFIED"] },
+        })
+        .sort({ createdAt: -1 });
+
+      // The code the user typed does exist, but that record was already
+      // consumed or invalidated by a newer send. Almost always: they read an
+      // older SMS, or a duplicate verify request beat this one.
+      const stale = await this.otpModel
+        .findOne({ identifier, type, code, isUsed: true })
+        .sort({ createdAt: -1 });
+
+      if (stale) {
+        this.logger.warn(
+          `OTP rejected for ${identifier}: superseded/already-used code`,
+        );
+        throw new BadRequestException({
+          statusCode: 400,
+          error: "Bad Request",
+          code: "otp_superseded",
+          message:
+            "This code is no longer valid. Please use the latest code we sent.",
+        });
+      }
+
+      if (!otp) {
+        this.logger.warn(
+          `OTP rejected for ${identifier}: no active code (expired or never sent)`,
+        );
+        throw new BadRequestException({
+          statusCode: 400,
+          error: "Bad Request",
+          code: "otp_expired",
+          message:
+            "Verification code expired. Please request a new one.",
+        });
+      }
+
+      this.logger.warn(
+        `OTP rejected for ${identifier}: wrong code (active code issued ${
+          lastReal?.get("createdAt") ?? "unknown"
+        })`,
+      );
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "Bad Request",
+        code: "otp_invalid",
+        message: "Invalid verification code",
+      });
     }
 
     // For email, use our stored OTP

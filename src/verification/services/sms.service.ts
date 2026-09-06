@@ -144,10 +144,17 @@ export class SmsService {
       const ubillNumber = this.formatPhoneForUbill(phoneNumber);
       this.logger.log(`Sending OTP via UBill ${channel} to ${ubillNumber} (original: ${phoneNumber})`);
 
+      // iOS only offers the code in the QuickType bar (and Android only
+      // autofills it) when it can recognise the message as a verification
+      // code - its parser keys off words like "code", which it does not
+      // detect in Georgian. Leading with `Homico code: 1234` makes the
+      // suggestion appear while the Georgian label keeps the SMS readable.
+      // Georgian text is billed as UCS-2 (70 chars per segment), so this
+      // stays deliberately short to remain a single SMS.
       const requestBody = {
         brandID: this.ubillBrandId,
         numbers: [ubillNumber],
-        text: `თქვენი Homico დამადასტურებელი კოდია: ${code}`,
+        text: `Homico code: ${code} - დამადასტურებელი კოდი`,
         stopList: false,
       };
 

@@ -248,7 +248,14 @@ export class AuthService {
     const existing = await this.usersService.findByPhone(dto.phone);
 
     if (!existing && !dto.name) {
-      throw new BadRequestException("Name is required for new users");
+      // Machine-readable code so the client does not have to substring-match
+      // the English message to tell "we need a name" apart from a real error.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: "Bad Request",
+        code: "name_required",
+        message: "Name is required for new users",
+      });
     }
 
     // Verify OTP (consumes it). Only reached once we can actually complete.
